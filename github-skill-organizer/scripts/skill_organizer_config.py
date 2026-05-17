@@ -4,7 +4,7 @@ title: Skill Organizer Configuration Loader
 name: github-skill-organizer
 description: Loads and validates .env and sync.config.json. GITHUB_TOKEN and GITHUB_OWNER are borrowed from dependency skill github-restful-api-connector.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
