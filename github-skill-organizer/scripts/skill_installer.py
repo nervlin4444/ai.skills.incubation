@@ -2,9 +2,9 @@
 ---
 title: Skill Installer
 name: github-skill-organizer
-description: Installs new skill files from DOWNLOAD_FOLDER into the correct USER_SKILLS_FOLDER directory. Derives target path from frontmatter file_mapping.github_path. Validates github_repository format strictly.
+description: Installs new skill files from DOWNLOAD_FOLDER into USER_SKILLS_FOLDER. After successful installation, moves the source file to ~/Downloads/skills_moved/ to prevent reprocessing.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
@@ -34,6 +34,16 @@ except ImportError:
 class SkillInstaller:
     def __init__(self):
         self.cfg = load_config()
+        # Archive directory: ~/Downloads/skills_moved/ (auto-create)
+        self.archive_dir = self._get_archive_dir()
+
+    def _get_archive_dir(self):
+        """Determine archive directory based on DOWNLOAD_FOLDER location."""
+        download_path = Path(self.cfg.download_folder)
+        # Default: sibling of download folder, or ~/Downloads/skills_moved
+        archive = download_path.parent / "skills_moved"
+        archive.mkdir(parents=True, exist_ok=True)
+        return archive
 
     def _validate_github_repository(self, frontmatter, source_file):
         """
@@ -74,7 +84,7 @@ class SkillInstaller:
     def install_file(self, file_info):
         """
         file_info: dict from local_scanner
-        Returns: {"status": "installed"|"unclassified"|"rejected"|"error", "target_path": str, "backup": str|null}
+        Returns: {"status": "installed"|"unclassified"|"rejected"|"error", "target_path": str, "backup": str|null, "archived_to": str|null}
         """
         frontmatter = file_info.get("frontmatter", {})
         if not frontmatter or "name" not in frontmatter:
@@ -94,7 +104,10 @@ class SkillInstaller:
 
         if isinstance(file_mapping, dict) and "github_path" in file_mapping:
             github_path = file_mapping["github_path"]
-            rel_path = self._derive_local_path_from_github_path(github_path, skill_name)
+            # Extract repo name from github_repository (e.g., "ai.skills.incubation" from "nervlin4444/ai.skills.incubation")
+            github_repo = frontmatter.get("github_repository", "")
+            repo_name = github_repo.split("/")[-1] if "/" in github_repo else None
+            rel_path = self._derive_local_path_from_github_path(github_path, skill_name, repo_name)
         elif isinstance(file_mapping, list) and len(file_mapping) > 0:
             github_path = None
             for mapping in file_mapping:
@@ -102,7 +115,10 @@ class SkillInstaller:
                     github_path = mapping["github_path"]
                     break
             if github_path:
-                rel_path = self._derive_local_path_from_github_path(github_path, skill_name)
+                # Extract repo name from github_repository
+                github_repo = frontmatter.get("github_repository", "")
+                repo_name = github_repo.split("/")[-1] if "/" in github_repo else None
+                rel_path = self._derive_local_path_from_github_path(github_path, skill_name, repo_name)
             else:
                 rel_path = Path(file_info["path"]).name
         else:
@@ -130,27 +146,44 @@ class SkillInstaller:
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
+        # ARCHIVE: Move source file to skills_moved/ after successful install
+        archived_to = None
+        try:
+            source_path = Path(file_info["path"])
+            if source_path.exists():
+                # Create subdir structure in archive to avoid filename collisions
+                archive_subdir = self.archive_dir / skill_name
+                archive_subdir.mkdir(parents=True, exist_ok=True)
+                ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+                archive_name = f"{source_path.stem}.{ts}{source_path.suffix}"
+                archived_to = archive_subdir / archive_name
+                shutil.move(str(source_path), str(archived_to))
+                print(f"[ARCHIVE] Moved {source_path.name} -> {archived_to}")
+        except Exception as e:
+            print(f"[WARN] Failed to archive {file_info.get('path', 'unknown')}: {e}")
+
         return {
             "status": "installed",
             "skill_name": skill_name,
             "target_path": str(target_path),
             "backup": str(backup) if backup else None,
+            "archived_to": str(archived_to) if archived_to else None,
             "derived_from": "frontmatter" if file_mapping else "fallback",
         }
 
-    def _derive_local_path_from_github_path(self, github_path, skill_name):
+    def _derive_local_path_from_github_path(self, github_path, skill_name, repo_name=None):
         """
         github_path examples:
           - "github-skill-organizer/scripts/sync_engine.py"
           - "/github-skill-organizer/scripts/sync_engine.py"
-          - "ai.skills.incubation/github-skill-organizer/scripts/sync_engine.py"
-        Derives local relative path by removing skill-name prefix.
+          - "ai.skill.automation/github-skill-organizer/scripts/sync_engine.py"
+        Derives local relative path by removing repository and skill-name prefixes.
         """
         path = github_path.lstrip("/")
         parts = path.split("/")
 
-        # Remove repo prefix if present
-        if len(parts) >= 2 and parts[0] == self.cfg.main_repo:
+        # Remove repository prefix if provided and matches the first component
+        if repo_name and len(parts) >= 1 and parts[0] == repo_name:
             parts = parts[1:]
 
         # Remove skill-name prefix if it is the first component
@@ -196,7 +229,7 @@ if __name__ == "__main__":
             "original_name": "SKILL (1).md",
             "frontmatter": {
                 "name": "test-skill",
-                "github_repository": "nervlin4444/test-skill",
+                "github_repository": "nervlin4444/ai.skills.incubation",
                 "file_mapping": {
                     "github_path": "test-skill/SKILL.md",
                     "local_path": "{baseDir}/SKILL.md"
@@ -208,7 +241,7 @@ if __name__ == "__main__":
             "original_name": "bad.md",
             "frontmatter": {
                 "name": "bad-skill",
-                "github_repository": "invalid-format"
+                "github_repository": "invalid-format",
                 "file_mapping": {}
             }
         },
