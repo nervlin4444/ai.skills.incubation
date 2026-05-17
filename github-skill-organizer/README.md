@@ -3,7 +3,7 @@ title: GitHub Skill Organizer - Human Overview
 name: github-skill-organizer
 description: Human-readable project overview, architecture guide, and design rationale. Authentication borrowed from github-restful-api-connector.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
@@ -64,11 +64,11 @@ file_mapping:
 
 每個 skill 檔案的 frontmatter 中，`github_repository` **必須**符合 `owner/repo` 格式：
 
-    github_repository: "nervlin4444/ai.skills.devops"
+    github_repository: "nervlin4444/ai.skills.incubation"
 
 以下格式一律**報錯並拒絕處理**：
 - `github-skill-organizer`（缺少 owner）
-- `ai.skill.*`（缺少 repo/skill-name）
+- `ai.skill.automation`（缺少 repo/skill-name）
 - 空白或缺失
 
 找不到有效 `github_repository` 的檔案會被記錄到 `logs/rejected/` 並停止處理。
