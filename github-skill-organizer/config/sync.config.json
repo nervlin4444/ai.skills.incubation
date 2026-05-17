@@ -1,22 +1,6 @@
 {
-  "_meta": {
-    "title": "Sync Engine Configuration",
-    "name": "github-skill-organizer",
-    "description": "Synchronization rules, version bump policies, upload gate checks, and workstation defaults for the github-skill-organizer daemon.",
-    "version": "1.0.0",
-    "github_repository": "nervlin4444/ai.skills.incubation",
-    "target_branch": "main",
-    "auth_config": {
-      "provider": "github",
-      "auth_method": "personal_access_token",
-      "token_env_var": "GITHUB_TOKEN",
-      "env_file_path": "{baseDir}/../github-restful-api-connector/.env"
-    },
-    "file_mapping": {
-      "local_path": "{baseDir}/config/sync.config.json",
-      "github_path": "github-skill-organizer/config/sync.config.json"
-    }
-  },
+  "version": "1.0.0",
+  "skill_name": "github-skill-organizer",
   "workstation_defaults": {
     "linux": {
       "download_folder": "~/Downloads/skills-inbox",
@@ -48,11 +32,7 @@
   "version_bump_rules": {
     "patch": {
       "max_files": 3,
-      "forbidden_patterns": [
-        "SKILL.md",
-        "config/",
-        "requirements.txt"
-      ],
+      "forbidden_patterns": ["SKILL.md", "config/", "requirements.txt"],
       "description": "Typo fixes, path corrections, minor frontmatter updates"
     },
     "minor": {
@@ -66,12 +46,7 @@
     "check_frontmatter": true,
     "check_semver": true,
     "check_hardcoded_paths": true,
-    "hardcoded_path_patterns": [
-      "/home/",
-      "C:\\\\",
-      "D:\\\\",
-      "/Users/"
-    ]
+    "hardcoded_path_patterns": ["/home/", "C:\\", "D:\\", "/Users/"]
   },
   "commit_message_template": "[{bump_type}] {skill_name} v{new_version} by {agent_name}({model}) - {summary}"
 }
