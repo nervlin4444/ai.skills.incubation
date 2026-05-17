@@ -3,7 +3,7 @@ title: GitHub Skill Organizer - LLM Execution Directive
 name: github-skill-organizer
 description: Background daemon for bi-directional skill sync. Authentication borrowed from github-restful-api-connector. Strict frontmatter validation enforced. THIS FILE IS FOR LLM AGENTS ONLY.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
@@ -18,7 +18,7 @@ file_mapping:
 # [LLM ONLY] EXECUTION DIRECTIVE
 
 ## 1. ROLE DEFINITION
-You are the execution agent for github-skill-organizer. Your sole purpose is to maintain a background synchronization daemon.
+You are the execution agent for github-skill-organizer. Your sole purpose is to maintain a background synchronization daemon that bridges local skill directories and GitHub repositories.
 
 ## 2. AUTHENTICATION POLICY
 This skill does NOT hold GITHUB_TOKEN or GITHUB_OWNER. All authentication is borrowed from the dependency skill github-restful-api-connector.
@@ -69,7 +69,7 @@ Every skill file MUST have a valid github_repository in frontmatter. Format: "ow
 
 Invalid formats that MUST be rejected:
 - "github-skill-organizer" (missing owner)
-- "ai.skill.*" (missing repo)
+- "ai.skill.automation" (missing repo)
 - "" or null (missing entirely)
 
 On rejection: log to logs/rejected/, skip file, continue processing other files.
@@ -84,7 +84,50 @@ Before ANY upload to GitHub, sync_engine.py MUST verify:
 
 If ANY check fails, ABORT upload and log to logs/rejected/.
 
-## 8. WEB FETCHER (DEFERRED MODULE)
+## 8. CRITICAL: github_repo_sync.py INVOCATION RULE
+When calling github-restful-api-connector/scripts/github_repo_sync.py to upload files, you MUST follow these EXACT rules:
+
+### 8.1 Parameter Rules
+| Parameter | Required | Value Rule | Common Mistake |
+|---|---|---|---|
+| --repo-name | YES | ONLY the repository name, e.g. "github-skill-organizer" | NEVER pass "owner/repo" like "nervlin4444/github-skill-organizer" |
+| --local-dir | YES | Absolute path to the skill directory on local machine | |
+| --repo-base-path | YES | The subdirectory path inside the repo, usually same as skill name | |
+| --force | Optional | Add this flag to overwrite existing files | |
+
+### 8.2 Owner Resolution
+The owner (GITHUB_OWNER) is ALWAYS read from github-restful-api-connector/.env by the script itself.
+You MUST NOT pass owner in --repo-name.
+
+### 8.3 Example Correct Invocation
+    python3 /path/to/github-restful-api-connector/scripts/github_repo_sync.py
+        --repo-name github-skill-organizer
+        --local-dir /home/user/skills/github-skill-organizer
+        --repo-base-path github-skill-organizer
+        --force
+
+### 8.4 Example WRONG Invocation (NEVER DO THIS)
+    # WRONG: passing owner/repo in --repo-name
+    python3 ... --repo-name nervlin4444/github-skill-organizer
+
+    # WRONG: passing full path with owner
+    python3 ... --repo-name ai.skills.incubation/github-skill-organizer
+
+### 8.5 Why This Matters
+github_repo_sync.py creates the repository if it does not exist.
+If you pass "nervlin4444/github-skill-organizer" as --repo-name, the script will create a repo literally named "nervlin4444-github-skill-organizer".
+This is a PERMANENT mistake that pollutes the GitHub account with wrong repositories.
+
+### 8.6 sync_engine.py Safety
+sync_engine.py MUST extract repo name from frontmatter github_repository before calling github_repo_sync.py:
+
+    # CORRECT: extract only repo name
+    owner_repo = frontmatter["github_repository"]  # "nervlin4444/ai.skills.incubation"
+    parts = owner_repo.split("/")
+    repo_name = parts[-1]  # "ai.skills.incubation"
+    # Pass repo_name to --repo-name
+
+## 9. WEB FETCHER (DEFERRED MODULE)
 The web_fetcher.py module is DISABLED by default. Enable ONLY when:
 - User explicitly requests --enable-web-fetch
 - A playwright-compatible skill is detected in USER_SKILLS_FOLDER
@@ -92,22 +135,23 @@ The web_fetcher.py module is DISABLED by default. Enable ONLY when:
 
 If enabled, it runs as a SEPARATE thread in the daemon, fetching web content to DOWNLOAD_FOLDER before the main scanner processes them.
 
-## 9. ERROR HANDLING
+## 10. ERROR HANDLING
 - All exceptions MUST be caught and logged. Daemon MUST NOT crash.
 - If GitHub API returns 401/403, pause sync for 5 minutes and retry once.
 - If dependency skill import fails, daemon enters DEGRADED mode (local-only operations).
 
-## 10. SHUTDOWN
+## 11. SHUTDOWN
 On receiving SIGTERM or user command --stop, write final timestamp to state/last_run.json, remove PID file, and exit cleanly.
 
-## 11. PROHIBITED ACTIONS
+## 12. PROHIBITED ACTIONS
 - NEVER modify github-restful-api-connector skill files.
 - NEVER create new skills autonomously.
 - NEVER use LLM API calls inside the daemon loop (token conservation rule).
 - NEVER upload files with NEEDS_APPROVAL status.
 - NEVER store GITHUB_TOKEN or GITHUB_OWNER in local .env or state files.
+- NEVER pass owner/repo format to --repo-name when calling github_repo_sync.py.
 
-## 12. STATE FILES
+## 13. STATE FILES
 The daemon maintains these state files (JSON):
 - state/last_run.json: Timestamp of last successful scan
 - state/pending_uploads.json: Queue of approved patch-level changes
