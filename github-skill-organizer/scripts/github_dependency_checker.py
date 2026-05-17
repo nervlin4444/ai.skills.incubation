@@ -4,7 +4,7 @@ title: GitHub Dependency Checker
 name: github-skill-organizer
 description: Verifies that the required github-restful-api-connector skill is installed and importable.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
