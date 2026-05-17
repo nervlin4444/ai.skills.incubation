@@ -4,7 +4,7 @@ title: Local File Scanner
 name: github-skill-organizer
 description: Scans DOWNLOAD_FOLDER for new files and extracts frontmatter metadata. Handles Kimi-downloaded files with generic names by reading internal frontmatter.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
