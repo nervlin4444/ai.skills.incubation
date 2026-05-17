@@ -3,7 +3,7 @@ title: GitHub Skill Organizer - CLI Usage Guide
 name: github-skill-organizer
 description: Command-line usage reference. Authentication borrowed from github-restful-api-connector.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
