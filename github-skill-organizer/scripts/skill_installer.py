@@ -1,0 +1,223 @@
+"""
+---
+title: Skill Installer
+name: github-skill-organizer
+description: Installs new skill files from DOWNLOAD_FOLDER into the correct USER_SKILLS_FOLDER directory. Derives target path from frontmatter file_mapping.github_path. Validates github_repository format strictly.
+version: 1.0.0
+github_repository: ai.skills.incubation/github-skill-organizer
+target_branch: main
+auth_config:
+  provider: github
+  auth_method: personal_access_token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: ../.env
+file_mapping:
+  local_path: "{baseDir}/scripts/skill_installer.py"
+  github_path: "github-skill-organizer/scripts/skill_installer.py"
+---
+"""
+
+import sys
+import shutil
+import json
+import re
+from pathlib import Path
+from datetime import datetime
+
+try:
+    from skill_organizer_config import load_config
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.absolute()))
+    from skill_organizer_config import load_config
+
+
+class SkillInstaller:
+    def __init__(self):
+        self.cfg = load_config()
+
+    def _validate_github_repository(self, frontmatter, source_file):
+        """
+        Strict validation: github_repository must be "owner/repo" format.
+        Returns: {"valid": bool, "owner": str|null, "repo": str|null, "error": str|null}
+        """
+        repo_field = frontmatter.get("github_repository", "") if frontmatter else ""
+        if not repo_field:
+            return {
+                "valid": False,
+                "owner": None,
+                "repo": None,
+                "error": "Missing github_repository in frontmatter: " + str(source_file),
+            }
+
+        repo_field = repo_field.strip().strip("/")
+        parts = repo_field.split("/")
+
+        if len(parts) != 2:
+            return {
+                "valid": False,
+                "owner": None,
+                "repo": None,
+                "error": "Invalid github_repository format in " + str(source_file) + ". Must be owner/repo.",
+            }
+
+        owner, repo = parts[0], parts[1]
+        if not owner or not repo:
+            return {
+                "valid": False,
+                "owner": None,
+                "repo": None,
+                "error": "Empty owner or repo in github_repository in " + str(source_file),
+            }
+
+        return {"valid": True, "owner": owner, "repo": repo, "error": None}
+
+    def install_file(self, file_info):
+        """
+        file_info: dict from local_scanner
+        Returns: {"status": "installed"|"unclassified"|"rejected"|"error", "target_path": str, "backup": str|null}
+        """
+        frontmatter = file_info.get("frontmatter", {})
+        if not frontmatter or "name" not in frontmatter:
+            return {"status": "unclassified", "reason": "Missing name in frontmatter"}
+
+        # Strict validation: github_repository must be present and valid
+        validation = self._validate_github_repository(frontmatter, file_info.get("path", "unknown"))
+        if not validation["valid"]:
+            self._log_rejected_install(file_info, validation["error"])
+            return {"status": "rejected", "reason": validation["error"]}
+
+        skill_name = frontmatter["name"]
+        skill_dir = Path(self.cfg.user_skills_folder) / skill_name
+
+        # Determine target path from file_mapping or fallback to filename
+        file_mapping = frontmatter.get("file_mapping", {})
+
+        if isinstance(file_mapping, dict) and "github_path" in file_mapping:
+            github_path = file_mapping["github_path"]
+            rel_path = self._derive_local_path_from_github_path(github_path, skill_name)
+        elif isinstance(file_mapping, list) and len(file_mapping) > 0:
+            github_path = None
+            for mapping in file_mapping:
+                if isinstance(mapping, dict) and "github_path" in mapping:
+                    github_path = mapping["github_path"]
+                    break
+            if github_path:
+                rel_path = self._derive_local_path_from_github_path(github_path, skill_name)
+            else:
+                rel_path = Path(file_info["path"]).name
+        else:
+            rel_path = Path(file_info["path"]).name
+
+        # Clean up downloaded filename artifacts
+        rel_path = self._clean_downloaded_filename(str(rel_path))
+
+        target_path = skill_dir / rel_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Backup existing
+        backup = None
+        if target_path.exists():
+            backup_dir = skill_dir / ".backups"
+            backup_dir.mkdir(exist_ok=True)
+            ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            backup_name = f"{target_path.name}.{ts}.bak"
+            backup = backup_dir / backup_name
+            shutil.copy2(target_path, backup)
+
+        # Copy new file
+        try:
+            shutil.copy2(file_info["path"], target_path)
+        except Exception as e:
+            return {"status": "error", "reason": str(e)}
+
+        return {
+            "status": "installed",
+            "skill_name": skill_name,
+            "target_path": str(target_path),
+            "backup": str(backup) if backup else None,
+            "derived_from": "frontmatter" if file_mapping else "fallback",
+        }
+
+    def _derive_local_path_from_github_path(self, github_path, skill_name):
+        """
+        github_path examples:
+          - "github-skill-organizer/scripts/sync_engine.py"
+          - "/github-skill-organizer/scripts/sync_engine.py"
+          - "ai.skills.incubation/github-skill-organizer/scripts/sync_engine.py"
+        Derives local relative path by removing skill-name prefix.
+        """
+        path = github_path.lstrip("/")
+        parts = path.split("/")
+
+        # Remove repo prefix if present
+        if len(parts) >= 2 and parts[0] == self.cfg.main_repo:
+            parts = parts[1:]
+
+        # Remove skill-name prefix if it is the first component
+        if parts and parts[0] == skill_name:
+            parts = parts[1:]
+
+        return "/".join(parts) if parts else Path(github_path).name
+
+    def _clean_downloaded_filename(self, filename):
+        """Remove browser download artifacts like (1), (2), etc."""
+        cleaned = re.sub(r'\s*\(\d+\)\s*(?=\.[^.]+$)', "", filename)
+        cleaned = re.sub(r'\s*\(\d+\)$', "", cleaned)
+        return cleaned
+
+    def _log_rejected_install(self, file_info, reason):
+        """Log rejected installation due to invalid frontmatter."""
+        rejected_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "rejected"
+        rejected_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        log_file = rejected_dir / f"install_rejected_{ts}.json"
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "original_name": file_info.get("original_name", "unknown"),
+                "path": file_info.get("path", "unknown"),
+                "frontmatter": file_info.get("frontmatter", {}),
+                "reason": reason,
+                "timestamp": datetime.utcnow().isoformat(),
+            }, f, indent=2, ensure_ascii=False)
+
+    def install_batch(self, file_infos):
+        results = []
+        for fi in file_infos:
+            result = self.install_file(fi)
+            results.append(result)
+        return results
+
+
+if __name__ == "__main__":
+    installer = SkillInstaller()
+    test_cases = [
+        {
+            "path": "/tmp/downloads/SKILL (1).md",
+            "original_name": "SKILL (1).md",
+            "frontmatter": {
+                "name": "test-skill",
+                "github_repository": "nervlin4444/test-skill",
+                "file_mapping": {
+                    "github_path": "test-skill/SKILL.md",
+                    "local_path": "{baseDir}/SKILL.md"
+                }
+            }
+        },
+        {
+            "path": "/tmp/downloads/bad.md",
+            "original_name": "bad.md",
+            "frontmatter": {
+                "name": "bad-skill",
+                "github_repository": "invalid-format"
+                "file_mapping": {}
+            }
+        },
+        {
+            "path": "/tmp/downloads/unknown.md",
+            "original_name": "unknown.md",
+            "frontmatter": None
+        }
+    ]
+    for tc in test_cases:
+        print(f"\nInput: {tc['original_name']}")
+        print(json.dumps(installer.install_file(tc), indent=2, ensure_ascii=False))
