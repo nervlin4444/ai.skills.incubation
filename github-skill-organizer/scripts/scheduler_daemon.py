@@ -4,7 +4,7 @@ title: Scheduler Daemon
 name: github-skill-organizer
 description: Background daemon that runs every 60 seconds to scan, classify, install, and sync skill files. Includes file logging.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
