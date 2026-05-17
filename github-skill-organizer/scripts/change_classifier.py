@@ -4,7 +4,7 @@ title: Change Classifier
 name: github-skill-organizer
 description: Determines version bump type (patch/minor/major) and approval requirements based on deterministic rules.
 version: 1.0.0
-github_repository: ai.skills.incubation/github-skill-organizer
+github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
   provider: github
@@ -93,7 +93,7 @@ class ChangeClassifier:
         if skill_md.exists():
             try:
                 content = skill_md.read_text(encoding="utf-8", errors="ignore")
-                match = re.search('version:\s*['"]?([\d.]+)['"]?', content)
+                match = re.search(r'version:\s*[\'"]?([\d.]+)[\'"]?', content)
                 if match:
                     return match.group(1)
             except Exception:
