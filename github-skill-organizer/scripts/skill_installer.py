@@ -2,8 +2,8 @@
 ---
 title: Skill Installer
 name: github-skill-organizer
-description: Installs new skill files from DOWNLOAD_FOLDER into USER_SKILLS_FOLDER. After successful installation, moves the source file to ~/Downloads/skills_moved/ to prevent reprocessing.
-version: 1.0.0
+description: Installs new skill files from DOWNLOAD_FOLDER into USER_SKILLS_FOLDER. All scanned files are MOVED out of download folder regardless of install status: identical -> .identical/, skipped -> .skipped/, rejected -> .rejected/, unclassified -> .unclassified/. Only newer AND different files are actually installed.
+version: 1.0.3
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -21,6 +21,7 @@ import sys
 import shutil
 import json
 import re
+import hashlib
 from pathlib import Path
 from datetime import datetime
 
@@ -32,82 +33,116 @@ except ImportError:
 
 
 class SkillInstaller:
+    """
+    Installs skill files from DOWNLOAD_FOLDER to USER_SKILLS_FOLDER.
+    CRITICAL RULE: Every file scanned by local_scanner.py MUST be moved
+    out of DOWNLOAD_FOLDER, regardless of install outcome.
+
+    Archive destinations:
+      - installed    -> skills_moved/{skill_name}/
+      - identical    -> skills_moved/.identical/
+      - skipped      -> skills_moved/.skipped/
+      - rejected     -> skills_moved/.rejected/
+      - unclassified -> skills_moved/.unclassified/
+    """
+
     def __init__(self):
         self.cfg = load_config()
-        # Archive directory: ~/Downloads/skills_moved/ (auto-create)
         self.archive_dir = self._get_archive_dir()
 
     def _get_archive_dir(self):
-        """Determine archive directory based on DOWNLOAD_FOLDER location."""
         download_path = Path(self.cfg.download_folder)
-        # Default: sibling of download folder, or ~/Downloads/skills_moved
         archive = download_path.parent / "skills_moved"
         archive.mkdir(parents=True, exist_ok=True)
         return archive
 
     def _validate_github_repository(self, frontmatter, source_file):
-        """
-        Strict validation: github_repository must be "owner/repo" format.
-        Returns: {"valid": bool, "owner": str|null, "repo": str|null, "error": str|null}
-        """
         repo_field = frontmatter.get("github_repository", "") if frontmatter else ""
         if not repo_field:
             return {
-                "valid": False,
-                "owner": None,
-                "repo": None,
+                "valid": False, "owner": None, "repo": None,
                 "error": "Missing github_repository in frontmatter: " + str(source_file),
             }
-
         repo_field = repo_field.strip().strip("/")
         parts = repo_field.split("/")
-
         if len(parts) != 2:
             return {
-                "valid": False,
-                "owner": None,
-                "repo": None,
+                "valid": False, "owner": None, "repo": None,
                 "error": "Invalid github_repository format in " + str(source_file) + ". Must be owner/repo.",
             }
-
         owner, repo = parts[0], parts[1]
         if not owner or not repo:
             return {
-                "valid": False,
-                "owner": None,
-                "repo": None,
+                "valid": False, "owner": None, "repo": None,
                 "error": "Empty owner or repo in github_repository in " + str(source_file),
             }
-
         return {"valid": True, "owner": owner, "repo": repo, "error": None}
+
+    def _file_hash(self, file_path: Path) -> str:
+        try:
+            return hashlib.sha256(file_path.read_bytes()).hexdigest()
+        except Exception:
+            return ""
+
+    def _archive_file(self, source_path: Path, subdir_name: str, reason: str = "") -> str:
+        """
+        Move a file from download folder to skills_moved/{subdir_name}/.
+        Returns the archived path.
+        """
+        try:
+            archive_subdir = self.archive_dir / subdir_name
+            archive_subdir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            archive_name = f"{source_path.stem}.{ts}{source_path.suffix}"
+            archived_to = archive_subdir / archive_name
+            shutil.move(str(source_path), str(archived_to))
+            if reason:
+                print(f"[ARCHIVE] {source_path.name} -> {archived_to} ({reason})")
+            else:
+                print(f"[ARCHIVE] {source_path.name} -> {archived_to}")
+            return str(archived_to)
+        except Exception as e:
+            print(f"[WARN] Failed to archive {source_path}: {e}")
+            return ""
 
     def install_file(self, file_info):
         """
         file_info: dict from local_scanner
-        Returns: {"status": "installed"|"unclassified"|"rejected"|"error", "target_path": str, "backup": str|null, "archived_to": str|null}
-        """
-        frontmatter = file_info.get("frontmatter", {})
-        if not frontmatter or "name" not in frontmatter:
-            return {"status": "unclassified", "reason": "Missing name in frontmatter"}
+        Returns: {"status": "installed"|"identical"|"skipped"|"rejected"|"unclassified"|"error", ...}
 
-        # Strict validation: github_repository must be present and valid
+        ALL outcomes move the source file out of download folder.
+        """
+        source_path = Path(file_info["path"])
+        frontmatter = file_info.get("frontmatter", {})
+
+        # === OUTCOME: Unclassified (no frontmatter or no name) ===
+        if not frontmatter or "name" not in frontmatter:
+            archived_to = self._archive_file(source_path, ".unclassified", "no frontmatter/name")
+            return {
+                "status": "unclassified",
+                "reason": "Missing name in frontmatter",
+                "archived_to": archived_to,
+            }
+
+        # === OUTCOME: Rejected (invalid github_repository) ===
         validation = self._validate_github_repository(frontmatter, file_info.get("path", "unknown"))
         if not validation["valid"]:
             self._log_rejected_install(file_info, validation["error"])
-            return {"status": "rejected", "reason": validation["error"]}
+            archived_to = self._archive_file(source_path, ".rejected", validation["error"])
+            return {
+                "status": "rejected",
+                "reason": validation["error"],
+                "archived_to": archived_to,
+            }
 
         skill_name = frontmatter["name"]
         skill_dir = Path(self.cfg.user_skills_folder) / skill_name
 
-        # Determine target path from file_mapping or fallback to filename
+        # Determine target path
         file_mapping = frontmatter.get("file_mapping", {})
-
         if isinstance(file_mapping, dict) and "github_path" in file_mapping:
             github_path = file_mapping["github_path"]
-            # Extract repo name from github_repository (e.g., "ai.skills.incubation" from "nervlin4444/ai.skills.incubation")
-            github_repo = frontmatter.get("github_repository", "")
-            repo_name = github_repo.split("/")[-1] if "/" in github_repo else None
-            rel_path = self._derive_local_path_from_github_path(github_path, skill_name, repo_name)
+            rel_path = self._derive_local_path_from_github_path(github_path, skill_name)
         elif isinstance(file_mapping, list) and len(file_mapping) > 0:
             github_path = None
             for mapping in file_mapping:
@@ -115,22 +150,45 @@ class SkillInstaller:
                     github_path = mapping["github_path"]
                     break
             if github_path:
-                # Extract repo name from github_repository
-                github_repo = frontmatter.get("github_repository", "")
-                repo_name = github_repo.split("/")[-1] if "/" in github_repo else None
-                rel_path = self._derive_local_path_from_github_path(github_path, skill_name, repo_name)
+                rel_path = self._derive_local_path_from_github_path(github_path, skill_name)
             else:
                 rel_path = Path(file_info["path"]).name
         else:
             rel_path = Path(file_info["path"]).name
 
-        # Clean up downloaded filename artifacts
         rel_path = self._clean_downloaded_filename(str(rel_path))
-
         target_path = skill_dir / rel_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Backup existing
+        # === OUTCOME: Identical (content same, target exists) ===
+        if target_path.exists():
+            source_hash = self._file_hash(source_path)
+            target_hash = self._file_hash(target_path)
+            if source_hash and target_hash and source_hash == target_hash:
+                archived_to = self._archive_file(source_path, ".identical", f"same as {target_path.name}")
+                return {
+                    "status": "identical",
+                    "skill_name": skill_name,
+                    "target_path": str(target_path),
+                    "reason": "Content identical, no update needed",
+                    "archived_to": archived_to,
+                }
+
+        # === OUTCOME: Skipped (target is newer or same age) ===
+        if target_path.exists():
+            source_mtime = source_path.stat().st_mtime
+            target_mtime = target_path.stat().st_mtime
+            if target_mtime >= source_mtime:
+                archived_to = self._archive_file(source_path, ".skipped", f"target newer: {target_path.name}")
+                return {
+                    "status": "skipped",
+                    "skill_name": skill_name,
+                    "target_path": str(target_path),
+                    "reason": f"Target file is newer or same age (target: {target_mtime}, source: {source_mtime})",
+                    "archived_to": archived_to,
+                }
+
+        # === OUTCOME: Installed (source is newer AND content differs) ===
         backup = None
         if target_path.exists():
             backup_dir = skill_dir / ".backups"
@@ -140,66 +198,36 @@ class SkillInstaller:
             backup = backup_dir / backup_name
             shutil.copy2(target_path, backup)
 
-        # Copy new file
         try:
             shutil.copy2(file_info["path"], target_path)
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
-        # ARCHIVE: Move source file to skills_moved/ after successful install
-        archived_to = None
-        try:
-            source_path = Path(file_info["path"])
-            if source_path.exists():
-                # Create subdir structure in archive to avoid filename collisions
-                archive_subdir = self.archive_dir / skill_name
-                archive_subdir.mkdir(parents=True, exist_ok=True)
-                ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-                archive_name = f"{source_path.stem}.{ts}{source_path.suffix}"
-                archived_to = archive_subdir / archive_name
-                shutil.move(str(source_path), str(archived_to))
-                print(f"[ARCHIVE] Moved {source_path.name} -> {archived_to}")
-        except Exception as e:
-            print(f"[WARN] Failed to archive {file_info.get('path', 'unknown')}: {e}")
+        # Archive source file after successful install
+        archived_to = self._archive_file(source_path, skill_name, "installed")
 
         return {
             "status": "installed",
             "skill_name": skill_name,
             "target_path": str(target_path),
             "backup": str(backup) if backup else None,
-            "archived_to": str(archived_to) if archived_to else None,
+            "archived_to": archived_to,
             "derived_from": "frontmatter" if file_mapping else "fallback",
         }
 
-    def _derive_local_path_from_github_path(self, github_path, skill_name, repo_name=None):
-        """
-        github_path examples:
-          - "github-skill-organizer/scripts/sync_engine.py"
-          - "/github-skill-organizer/scripts/sync_engine.py"
-          - "ai.skill.automation/github-skill-organizer/scripts/sync_engine.py"
-        Derives local relative path by removing repository and skill-name prefixes.
-        """
+    def _derive_local_path_from_github_path(self, github_path, skill_name):
         path = github_path.lstrip("/")
         parts = path.split("/")
-
-        # Remove repository prefix if provided and matches the first component
-        if repo_name and len(parts) >= 1 and parts[0] == repo_name:
-            parts = parts[1:]
-
-        # Remove skill-name prefix if it is the first component
         if parts and parts[0] == skill_name:
             parts = parts[1:]
-
         return "/".join(parts) if parts else Path(github_path).name
 
     def _clean_downloaded_filename(self, filename):
-        """Remove browser download artifacts like (1), (2), etc."""
         cleaned = re.sub(r'\s*\(\d+\)\s*(?=\.[^.]+$)', "", filename)
         cleaned = re.sub(r'\s*\(\d+\)$', "", cleaned)
         return cleaned
 
     def _log_rejected_install(self, file_info, reason):
-        """Log rejected installation due to invalid frontmatter."""
         rejected_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "rejected"
         rejected_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -223,34 +251,9 @@ class SkillInstaller:
 
 if __name__ == "__main__":
     installer = SkillInstaller()
-    test_cases = [
-        {
-            "path": "/tmp/downloads/SKILL (1).md",
-            "original_name": "SKILL (1).md",
-            "frontmatter": {
-                "name": "test-skill",
-                "github_repository": "nervlin4444/ai.skills.incubation",
-                "file_mapping": {
-                    "github_path": "test-skill/SKILL.md",
-                    "local_path": "{baseDir}/SKILL.md"
-                }
-            }
-        },
-        {
-            "path": "/tmp/downloads/bad.md",
-            "original_name": "bad.md",
-            "frontmatter": {
-                "name": "bad-skill",
-                "github_repository": "invalid-format",
-                "file_mapping": {}
-            }
-        },
-        {
-            "path": "/tmp/downloads/unknown.md",
-            "original_name": "unknown.md",
-            "frontmatter": None
-        }
-    ]
-    for tc in test_cases:
-        print(f"\nInput: {tc['original_name']}")
-        print(json.dumps(installer.install_file(tc), indent=2, ensure_ascii=False))
+    print(json.dumps({
+        "status": "ready",
+        "archive_dir": str(installer.archive_dir),
+        "user_skills_folder": str(installer.cfg.user_skills_folder),
+        "download_folder": str(installer.cfg.download_folder),
+    }, indent=2, ensure_ascii=False))
