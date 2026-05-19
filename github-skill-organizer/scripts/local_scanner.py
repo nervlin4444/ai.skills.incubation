@@ -3,7 +3,7 @@
 title: Local File Scanner
 name: github-skill-organizer
 description: Scans DOWNLOAD_FOLDER for new files. Auto-extracts .zip archives under 100KB, forces current timestamp on extracted files to ensure immediate processing in the same daemon cycle. Renames processed .zip to .zip.moved. v1.0.5 fixes timezone-aware datetime comparisons.
-version: 1.0.6
+version: 1.0.5
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
