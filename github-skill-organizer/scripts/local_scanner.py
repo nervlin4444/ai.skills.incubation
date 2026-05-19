@@ -2,8 +2,8 @@
 ---
 title: Local File Scanner
 name: github-skill-organizer
-description: Scans DOWNLOAD_FOLDER for new files and extracts frontmatter metadata. Handles Kimi-downloaded files with generic names by reading internal frontmatter.
-version: 1.0.0
+description: Scans DOWNLOAD_FOLDER for new files. Auto-extracts .zip archives under 100KB, forces current timestamp on extracted files to ensure immediate processing in the same daemon cycle. Renames processed .zip to .zip.moved.
+version: 1.0.3
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -21,6 +21,7 @@ import os
 import sys
 import json
 import re
+import zipfile
 from pathlib import Path
 from datetime import datetime
 
@@ -32,6 +33,15 @@ except ImportError:
 
 
 class LocalScanner:
+    """
+    Scans DOWNLOAD_FOLDER for new skill files.
+    Auto-extracts .zip archives <= 100KB, forces current timestamp on extracted
+    files so they are processed in the SAME daemon cycle (no wait for next round).
+    Renames processed .zip to .zip.moved to prevent reprocessing.
+    """
+
+    ZIP_SIZE_LIMIT = 100 * 1024  # 100 KB
+
     def __init__(self):
         self.cfg = load_config()
         self.download_path = Path(self.cfg.download_folder)
@@ -52,17 +62,97 @@ class LocalScanner:
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump({"last_run_timestamp": dt.isoformat()}, f, ensure_ascii=False)
 
+    def _extract_zip(self, zip_path: Path) -> list:
+        """
+        Extract a .zip file into a subdirectory.
+        Forces current timestamp on ALL extracted files so they are picked up
+        in the SAME scan cycle (no need to wait for next daemon round).
+        Renames the original .zip to .zip.moved.
+        Returns list of extracted file paths.
+        """
+        extracted_files = []
+        extract_dir = zip_path.parent / zip_path.stem
+        now = datetime.utcnow().timestamp()
+
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                # Safety: check total extracted size (zip bomb protection)
+                total_size = sum(info.file_size for info in zf.infolist())
+                if total_size > self.ZIP_SIZE_LIMIT * 5:
+                    print(f"[ZIP SKIP] {zip_path.name}: total content {total_size} bytes exceeds safety limit")
+                    return extracted_files
+
+                zf.extractall(path=extract_dir)
+
+                # CRITICAL: Force current timestamp on ALL extracted files
+                # so they are recognized as "new" in the SAME scan cycle
+                for member in zf.namelist():
+                    member_path = extract_dir / member
+                    if member_path.is_file():
+                        os.utime(member_path, (now, now))
+                        extracted_files.append(member_path)
+
+            # Rename original zip to .zip.moved (prevents daemon reprocessing)
+            moved_path = zip_path.with_suffix('.zip.moved')
+            zip_path.rename(moved_path)
+            print(f"[ZIP EXTRACT] {zip_path.name} -> {extract_dir} ({len(extracted_files)} files, timestamp forced)")
+            print(f"[ZIP ARCHIVE] Original renamed to {moved_path.name}")
+
+        except zipfile.BadZipFile:
+            print(f"[ZIP ERROR] {zip_path.name}: Bad zip file")
+        except Exception as e:
+            print(f"[ZIP ERROR] {zip_path.name}: {e}")
+
+        return extracted_files
+
     def scan(self):
+        """
+        Scan DOWNLOAD_FOLDER for new files.
+        Auto-extracts .zip archives <= 100KB before processing.
+        Skips .zip.moved files (already processed).
+        """
         last_run = self.get_last_run_time()
         new_files = []
 
         if not self.download_path.exists():
             return new_files
 
+        # Phase 1: Handle .zip files first (extract them)
+        for zip_file in self.download_path.rglob("*.zip"):
+            if not zip_file.is_file():
+                continue
+            if zip_file.name.startswith("."):
+                continue
+
+            file_size = zip_file.stat().st_size
+            if file_size > self.ZIP_SIZE_LIMIT:
+                print(f"[ZIP SKIP] {zip_file.name}: {file_size} bytes > {self.ZIP_SIZE_LIMIT} bytes limit")
+                continue
+
+            extracted = self._extract_zip(zip_file)
+            for extracted_path in extracted:
+                # Because we forced timestamp to now, these WILL be picked up
+                meta = self._extract_frontmatter(extracted_path)
+                new_files.append({
+                    "path": str(extracted_path),
+                    "relative_path": str(extracted_path.relative_to(self.download_path)),
+                    "original_name": extracted_path.name,
+                    "mtime": datetime.utcnow().isoformat(),
+                    "frontmatter": meta,
+                    "classified": meta is not None and "name" in meta,
+                    "source": "zip_extracted",
+                    "zip_source": zip_file.name,
+                })
+
+        # Phase 2: Scan regular files (non-zip, non-.moved)
         for file_path in self.download_path.rglob("*"):
             if not file_path.is_file():
                 continue
             if file_path.name.startswith("."):
+                continue
+            if file_path.suffix == ".zip":
+                continue
+            if file_path.suffix == ".moved" and file_path.stem.endswith(".zip"):
                 continue
 
             mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
@@ -75,6 +165,7 @@ class LocalScanner:
                     "mtime": mtime.isoformat(),
                     "frontmatter": meta,
                     "classified": meta is not None and "name" in meta,
+                    "source": "direct",
                 })
 
         return new_files
@@ -86,19 +177,16 @@ class LocalScanner:
         except Exception:
             return None
 
-        # For .md files: look for --- ... ---
         if file_path.suffix == ".md" and content.startswith("---"):
             end = content.find("---", 3)
             if end != -1:
                 return self._parse_simple_yaml(content[3:end])
 
-        # For .py files: look for """ --- ... --- """
         if file_path.suffix == ".py":
-            match = re.search('"""\s*---\s*(.*?)\s*---\s*"""', content, re.DOTALL)
+            match = re.search(r'"""\s*---\s*(.*?)\s*---\s*"""', content, re.DOTALL)
             if match:
                 return self._parse_simple_yaml(match.group(1))
 
-        # For .json files: look for _meta field
         if file_path.suffix == ".json":
             try:
                 data = json.loads(content)
@@ -120,7 +208,7 @@ class LocalScanner:
             if not line or line.startswith("#"):
                 continue
 
-            match = re.match('^(\s*)([\w_]+):\s*(.*)$', line)
+            match = re.match(r'^(\s*)([\w_]+):\s*(.*)$', line)
             if match:
                 indent, key, value = match.groups()
                 indent_level = len(indent)
