@@ -2,8 +2,8 @@
 ---
 title: Sync Engine
 name: github-skill-organizer
-description: Handles bi-directional sync between local skills and GitHub. Includes upload gate, download sync, SHA-based comparison, and reverse download to arbitrary local directories.
-version: 1.0.2
+description: Handles bi-directional sync between local skills and GitHub. Includes upload gate, download sync, SHA-based comparison, and reverse download to arbitrary local directories. v1.0.4 adds deletion confirmation gate — NO automatic file/directory removal without user consent.
+version: 1.0.4
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -25,6 +25,8 @@ import re
 import hashlib
 import base64
 import ssl
+import shutil
+import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
@@ -38,6 +40,15 @@ except ImportError:
 
 
 class SyncEngine:
+    # EXCLUSION PATTERNS: never upload these files/directories
+    UPLOAD_EXCLUDES = {
+        '.backups', '.backup', '.env', '.env.local', '.git', '.github',
+        'logs', 'pending_approval', '__pycache__', 'node_modules',
+        '.DS_Store', 'Thumbs.db', '.vscode', '.idea',
+    }
+    UPLOAD_EXCLUDE_SUFFIXES = ('.pyc', '.pyo', '.so', '.zip.moved', '.bak')
+    UPLOAD_EXCLUDE_PREFIXES = ('.', 'temp_', 'tmp_')
+
     def __init__(self):
         self.cfg = load_config()
         self.dep_scripts = self.cfg.get_dependency_import_path()
@@ -45,6 +56,8 @@ class SyncEngine:
         self._init_github_api()
         self.token = self.cfg.get_github_token()
         self.api_base = "https://api.github.com"
+        self.pending_cleanup_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "pending_cleanup"
+        self.pending_cleanup_dir.mkdir(parents=True, exist_ok=True)
 
     def _init_github_api(self):
         if self.dep_scripts and Path(self.dep_scripts).exists():
@@ -112,6 +125,113 @@ class SyncEngine:
             return {"error": True, "status": 0, "message": err_str}
         except Exception as e:
             return {"error": True, "status": 0, "message": str(e)}
+
+    # ===== DELETION CONFIRMATION GATE =====
+    # CRITICAL: No file or directory shall be deleted without user consent.
+    # All cleanup operations record to pending_cleanup/ and wait for approval.
+
+    def _record_pending_cleanup(self, path: Path, reason: str, auto_approved: bool = False) -> str:
+        """
+        Record a path for cleanup instead of deleting immediately.
+        Returns the path to the recorded manifest file.
+
+        If auto_approved is True (for pure temp dirs like mkdtemp), 
+        still records but marks as 'system_temp' for audit trail.
+        """
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        manifest = self.pending_cleanup_dir / f"cleanup_{ts}_{path.name}.json"
+
+        record = {
+            "path": str(path.absolute()),
+            "reason": reason,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending_confirmation" if not auto_approved else "system_temp_recorded",
+            "size_bytes": self._get_path_size(path) if path.exists() else 0,
+        }
+
+        with open(manifest, "w", encoding="utf-8") as f:
+            json.dump(record, f, indent=2, ensure_ascii=False)
+
+        print(f"[CLEANUP_RECORDED] {path} -> {manifest}")
+        print(f"[CLEANUP_RECORDED] Reason: {reason}")
+        if not auto_approved:
+            print(f"[CLEANUP_PENDING] User must run cleanup_pending() or manually delete. DO NOT auto-delete.")
+
+        return str(manifest)
+
+    def _get_path_size(self, path: Path) -> int:
+        """Get total size of a file or directory in bytes."""
+        if path.is_file():
+            return path.stat().st_size
+        elif path.is_dir():
+            return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+        return 0
+
+    def cleanup_pending(self, confirm: bool = False, dry_run: bool = True) -> dict:
+        """
+        Execute or preview pending cleanup operations.
+
+        Args:
+            confirm: MUST be True to actually delete. Default False = dry-run only.
+            dry_run: If True, only list what would be deleted.
+
+        Returns:
+            {"deleted": [...], "skipped": [...], "dry_run": bool}
+        """
+        manifests = sorted(self.pending_cleanup_dir.glob("cleanup_*.json"))
+        deleted = []
+        skipped = []
+
+        for manifest in manifests:
+            with open(manifest, "r", encoding="utf-8") as f:
+                record = json.load(f)
+
+            path = Path(record["path"])
+
+            if dry_run or not confirm:
+                skipped.append({
+                    "path": str(path),
+                    "reason": record["reason"],
+                    "manifest": str(manifest),
+                    "action": "skipped (dry_run or confirm=False)",
+                })
+                continue
+
+            # CONFIRMED deletion
+            if path.exists():
+                try:
+                    if path.is_file():
+                        os.remove(path)
+                    elif path.is_dir():
+                        shutil.rmtree(path)
+                    deleted.append({
+                        "path": str(path),
+                        "reason": record["reason"],
+                        "manifest": str(manifest),
+                    })
+                    # Archive manifest instead of deleting it (audit trail)
+                    archive_dir = self.pending_cleanup_dir / "executed"
+                    archive_dir.mkdir(exist_ok=True)
+                    manifest.rename(archive_dir / manifest.name)
+                except Exception as e:
+                    skipped.append({
+                        "path": str(path),
+                        "reason": f"ERROR: {e}",
+                        "manifest": str(manifest),
+                    })
+            else:
+                skipped.append({
+                    "path": str(path),
+                    "reason": "Path already missing",
+                    "manifest": str(manifest),
+                })
+
+        return {
+            "deleted": deleted,
+            "skipped": skipped,
+            "dry_run": dry_run or not confirm,
+            "total_pending": len(manifests),
+        }
 
     # ===== FRONTMATTER VALIDATION =====
 
@@ -185,6 +305,63 @@ class SyncEngine:
             return sha
         except Exception:
             return None
+
+    # ===== EXCLUSION HELPERS =====
+
+    def _should_exclude(self, path: Path) -> bool:
+        """Check if a file or directory should be excluded from upload."""
+        name = path.name
+        # Directory exclusion
+        if path.is_dir():
+            if name in self.UPLOAD_EXCLUDES:
+                return True
+            if any(name.startswith(p) for p in self.UPLOAD_EXCLUDE_PREFIXES):
+                return True
+            return False
+        # File exclusion
+        if name in self.UPLOAD_EXCLUDES:
+            return True
+        if any(name.endswith(s) for s in self.UPLOAD_EXCLUDE_SUFFIXES):
+            return True
+        if any(name.startswith(p) for p in self.UPLOAD_EXCLUDE_PREFIXES):
+            return True
+        return False
+
+    def _create_clean_temp_dir(self, source_dir: Path) -> Path:
+        """
+        Create a temporary directory containing only files that should be uploaded.
+        Excludes .backups, logs, pending_approval, __pycache__, .env, etc.
+        Returns the path to the temporary directory.
+
+        CRITICAL: The returned temp dir is recorded for cleanup, NOT auto-deleted.
+        """
+        temp_dir = Path(tempfile.mkdtemp(prefix="sync_clean_"))
+        source_dir = Path(source_dir)
+
+        for item in source_dir.rglob("*"):
+            if not item.exists():
+                continue
+            # Check exclusion at every level of the path
+            if any(self._should_exclude(part) for part in item.relative_to(source_dir).parents):
+                continue
+            if self._should_exclude(item):
+                continue
+
+            rel_path = item.relative_to(source_dir)
+            dest = temp_dir / rel_path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if item.is_file():
+                shutil.copy2(item, dest)
+
+        # Log what was excluded
+        excluded = []
+        for item in source_dir.rglob("*"):
+            if item.is_dir() and self._should_exclude(item):
+                excluded.append(str(item.relative_to(source_dir)))
+        if excluded:
+            print(f"[EXCLUDE] Skipped directories: {', '.join(excluded[:5])}" + ("..." if len(excluded) > 5 else ""))
+
+        return temp_dir
 
     # ===== COMPARISON: Local vs GitHub =====
 
@@ -580,7 +757,11 @@ class SyncEngine:
         return {"method": "api", "status": "placeholder", "repo_name": repo_name}
 
     def _upload_via_cli(self, repo_name, files, commit_msg, skill_name=None):
-        """Call github_repo_sync.py via CLI with CORRECT parameters."""
+        """
+        Call github_repo_sync.py via CLI with CORRECT parameters.
+        CRITICAL v1.0.4: Creates clean temp dir excluding dev artifacts.
+        NO automatic deletion — temp dir recorded for user-confirmed cleanup.
+        """
         try:
             dep_path = Path(self.cfg.dependency_skill_path)
             cli_script = dep_path / "scripts" / "github_repo_sync.py"
@@ -594,21 +775,37 @@ class SyncEngine:
                 local_dir = self.cfg.user_skills_folder / (skill_name or repo_name)
             skill_dir_name = Path(str(local_dir)).name  # e.g., "github-skill-organizer"
 
+            # CRITICAL FIX v1.0.3: Create clean temp dir excluding development artifacts
+            print(f"[UPLOAD] Creating clean temp dir from {local_dir}...")
+            clean_dir = self._create_clean_temp_dir(local_dir)
+            print(f"[UPLOAD] Clean temp dir: {clean_dir}")
+
             cmd = [
                 sys.executable, str(cli_script),
                 "--repo-name", repo_name,
-                "--local-dir", str(local_dir),
+                "--local-dir", str(clean_dir),
                 "--repo-base-path", skill_dir_name,
                 "--force",
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(dep_path))
+
+            # CRITICAL v1.0.4: NO automatic deletion. Record for user-confirmed cleanup.
+            self._record_pending_cleanup(
+                clean_dir,
+                f"Upload temp dir for {skill_name or repo_name}. Safe to delete after confirming upload success.",
+                auto_approved=False,
+            )
+            print(f"[UPLOAD] Temp dir preserved for audit. Run cleanup_pending(confirm=True) to delete after verifying upload.")
+
             return {
                 "method": "cli",
                 "status": "success" if result.returncode == 0 else "error",
                 "returncode": result.returncode,
                 "stdout": result.stdout[:500] if result.stdout else "",
                 "stderr": result.stderr[:500] if result.stderr else "",
+                "clean_dir_used": str(clean_dir),
+                "cleanup_status": "pending_user_confirmation",
             }
         except Exception as e:
             return {"method": "cli", "status": "error", "reason": str(e)}
