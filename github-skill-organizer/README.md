@@ -322,7 +322,7 @@ Minor/Major 變更不直接 push，而是：
 | v1.0.0 | 2026-05-17 | 初始版本，含背景 Daemon、變更分級、上傳閘門、嚴格 frontmatter 驗證 |
 | v1.1.0 | 2026-05-19 | 新增 Commit 策略詳細規範、semantic-release 整合、六層安全防線、commit_validator.py |
 | v1.1.1 | 2026-05-19 | 新增 upload exclusion（防止 .backups/logs/pending_approval 洩漏）、clean temp dir、deletion confirmation gate |
-| **v1.1.2** | **2026-05-20** | **新增安裝後自測機制（install_report.json）、方法級變更檢測、簡單錯誤自動修復、複雜錯誤 GitHub Issue 自動上報** |
+| **v1.1.2** | **2026-05-20** | **新增安裝後自測機制、方法級變更檢測、簡單錯誤自動修復、設計七道安全閘；修正語法錯誤** |
 
 ---
 
