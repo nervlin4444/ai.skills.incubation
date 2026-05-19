@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/nervlin4444/ai.skills.incubation/compare/v1.0.0...v1.1.0) (2026-05-19)
+
+
+### Features
+
+* **github-skill-organizer:** sync .semantic-release-test for semantic-release automation test ([f709148](https://github.com/nervlin4444/ai.skills.incubation/commit/f7091486015ad845c1c41a525ae51530c46dd401))
+
 # 1.0.0 (2026-05-19)
 
 
