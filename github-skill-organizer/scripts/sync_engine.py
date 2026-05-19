@@ -389,6 +389,35 @@ class SyncEngine:
 
         return {"status": "error", "reason": f"Unknown action: {action}"}
 
+    def download_all_skills(self):
+        """Pull latest skills from GitHub to local skills folder."""
+        results = {}
+        try:
+            # Read sync.config.json to get skill repositories
+            config_path = Path(__file__).parent.parent / "config" / "sync.config.json"
+            if config_path.exists():
+                import json
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                skill_name = config.get("skill_name", "github-skill-organizer")
+            else:
+                skill_name = "github-skill-organizer"
+            
+            # Get the owner from dependency
+            owner = self.cfg.get_github_owner()
+            if not owner:
+                return {"error": "Cannot determine GitHub owner"}
+            
+            # Try to sync the skill-organizer repo itself
+            skill_dir = Path(self.cfg.user_skills_folder) / skill_name
+            if skill_dir.exists():
+                result = self.sync_skill(skill_name, str(skill_dir), dry_run=False)
+                results[skill_name] = result
+        except Exception as e:
+            results["error"] = str(e)
+        
+        return results
+
     # ===== UPLOAD (existing) =====
 
     def upload_skill(self, skill_name, files, classification):
@@ -436,7 +465,7 @@ class SyncEngine:
         if self.github_api:
             result = self._upload_via_api(repo_name, files, commit_msg)
         else:
-            result = self._upload_via_cli(repo_name, files, commit_msg)
+            result = self._upload_via_cli(repo_name, files, commit_msg, skill_name)
 
         return {
             "status": "uploaded",
@@ -550,10 +579,10 @@ class SyncEngine:
                 "timestamp": datetime.utcnow().isoformat(),
             }, f, indent=2, ensure_ascii=False)
 
-    def _upload_via_api(self, repo_name, files, commit_msg):
+    def _upload_via_api(self, repo_name, files, commit_msg, skill_name=None):
         return {"method": "api", "status": "placeholder", "repo_name": repo_name}
 
-    def _upload_via_cli(self, repo_name, files, commit_msg):
+    def _upload_via_cli(self, repo_name, files, commit_msg, skill_name=None):
         """Call github_repo_sync.py via CLI with CORRECT parameters."""
         try:
             dep_path = Path(self.cfg.dependency_skill_path)
@@ -561,11 +590,17 @@ class SyncEngine:
             if not cli_script.exists():
                 return {"method": "cli", "status": "error", "reason": "github_repo_sync.py not found"}
 
+            # Determine the local directory from the first file's parent
+            # files are like [.../skills/github-skill-organizer/scripts/...]
+            # We need to get the skill directory: .../skills/github-skill-organizer
+            local_dir = files[0].parent.parent if files else str(self.cfg.user_skills_folder / (skill_name or repo_name))
+            skill_dir_name = Path(local_dir).name  # e.g., "github-skill-organizer"
+
             cmd = [
                 sys.executable, str(cli_script),
                 "--repo-name", repo_name,
-                "--local-dir", str(self.cfg.user_skills_folder / repo_name),
-                "--repo-base-path", repo_name,
+                "--local-dir", str(local_dir),
+                "--repo-base-path", skill_dir_name,  # Use skill dir name, not repo name
                 "--force",
             ]
 
