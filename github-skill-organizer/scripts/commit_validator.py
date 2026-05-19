@@ -18,6 +18,7 @@ file_mapping:
   - local_path: "{baseDir}/scripts/commit_validator.py"
     github_path: "github-skill-organizer/scripts/commit_validator.py"
 ---
+"""
 
 """
 Commit Message Validator for Conventional Commits.
