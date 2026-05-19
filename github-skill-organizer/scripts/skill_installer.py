@@ -3,7 +3,7 @@
 title: Skill Installer
 name: github-skill-organizer
 description: Installs new skill files from DOWNLOAD_FOLDER into USER_SKILLS_FOLDER. All scanned files are MOVED out of download folder regardless of install status: identical -> .identical/, skipped -> .skipped/, rejected -> .rejected/, unclassified -> .unclassified/. Only newer AND different files are actually installed.
-version: 1.0.3
+version: 1.0.4
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -12,8 +12,8 @@ auth_config:
   token_env_var: GITHUB_TOKEN
   env_file_path: ../.env
 file_mapping:
-  local_path: "{baseDir}/scripts/skill_installer.py"
-  github_path: "github-skill-organizer/scripts/skill_installer.py"
+  - local_path: "{baseDir}/scripts/skill_installer.py"
+    github_path: "github-skill-organizer/scripts/skill_installer.py"
 ---
 """
 
@@ -23,7 +23,7 @@ import json
 import re
 import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from skill_organizer_config import load_config
@@ -39,11 +39,11 @@ class SkillInstaller:
     out of DOWNLOAD_FOLDER, regardless of install outcome.
 
     Archive destinations:
-      - installed    -> skills_moved/{skill_name}/
-      - identical    -> skills_moved/.identical/
-      - skipped      -> skills_moved/.skipped/
-      - rejected     -> skills_moved/.rejected/
-      - unclassified -> skills_moved/.unclassified/
+    - installed -> skills_moved/{skill_name}/
+    - identical -> skills_moved/.identical/
+    - skipped -> skills_moved/.skipped/
+    - rejected -> skills_moved/.rejected/
+    - unclassified -> skills_moved/.unclassified/
     """
 
     def __init__(self):
@@ -92,7 +92,7 @@ class SkillInstaller:
         try:
             archive_subdir = self.archive_dir / subdir_name
             archive_subdir.mkdir(parents=True, exist_ok=True)
-            ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
             archive_name = f"{source_path.stem}.{ts}{source_path.suffix}"
             archived_to = archive_subdir / archive_name
             shutil.move(str(source_path), str(archived_to))
@@ -191,9 +191,10 @@ class SkillInstaller:
         # === OUTCOME: Installed (source is newer AND content differs) ===
         backup = None
         if target_path.exists():
+            # FIX: use .backups (plural) to match sync_engine.py skip logic
             backup_dir = skill_dir / ".backups"
             backup_dir.mkdir(exist_ok=True)
-            ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
             backup_name = f"{target_path.name}.{ts}.bak"
             backup = backup_dir / backup_name
             shutil.copy2(target_path, backup)
@@ -230,7 +231,7 @@ class SkillInstaller:
     def _log_rejected_install(self, file_info, reason):
         rejected_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "rejected"
         rejected_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         log_file = rejected_dir / f"install_rejected_{ts}.json"
         with open(log_file, "w", encoding="utf-8") as f:
             json.dump({
@@ -238,7 +239,7 @@ class SkillInstaller:
                 "path": file_info.get("path", "unknown"),
                 "frontmatter": file_info.get("frontmatter", {}),
                 "reason": reason,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }, f, indent=2, ensure_ascii=False)
 
     def install_batch(self, file_infos):
