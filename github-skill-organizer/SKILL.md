@@ -1,158 +1,248 @@
 ---
-title: GitHub Skill Organizer - LLM Execution Directive
-name: github-skill-organizer
-description: Background daemon for bi-directional skill sync. Authentication borrowed from github-restful-api-connector. Strict frontmatter validation enforced. THIS FILE IS FOR LLM AGENTS ONLY.
-version: 1.0.0
-github_repository: nervlin4444/ai.skills.incubation
-target_branch: main
+title: "GitHub Skill Organizer - LLM Execution Commands"
+name: "github-skill-organizer"
+description: "LLM execution instruction set for github-skill-organizer. Background daemon skill for syncing local skills to GitHub with strict gatekeeping, conventional commits, and semantic-release automation. Agent must follow every command exactly."
+version: "v1.1.0"
+github_repository: "nervlin4444/ai.skills.incubation"
+target_branch: "main"
+updated_at: "2026-05-19T18:30:00+08:00"
+
 auth_config:
-  provider: github
-  auth_method: personal_access_token
-  token_env_var: GITHUB_TOKEN
-  env_file_path: .env
+  provider: "github"
+  auth_method: "token"
+  token_env_var: "GITHUB_TOKEN"
+  env_file_path: "{baseDir}/.env"
+
 file_mapping:
-  local_path: "{baseDir}/SKILL.md"
-  github_path: "github-skill-organizer/SKILL.md"
+  - local_path: "{baseDir}/SKILL.md"
+    github_path: "github-skill-organizer/SKILL.md"
 ---
 
-# [LLM ONLY] EXECUTION DIRECTIVE
+# github-skill-organizer — LLM Execution Instruction Set
 
-## 1. ROLE DEFINITION
-You are the execution agent for github-skill-organizer. Your sole purpose is to maintain a background synchronization daemon that bridges local skill directories and GitHub repositories.
+> Version: v1.1.0
+> Alignment: SOUL.md v5.0 + SKILL_CORRECTIONS.md v2.5.0 + IDENTITY.md v5.0
+> Role: Background daemon orchestrator. NOT a direct API caller.
 
-## 2. AUTHENTICATION POLICY
-This skill does NOT hold GITHUB_TOKEN or GITHUB_OWNER. All authentication is borrowed from the dependency skill github-restful-api-connector.
-- GITHUB_TOKEN: read from dependency skill .env (never stored locally)
-- GITHUB_OWNER: read from dependency skill .env (only for logging/error messages)
-- All GitHub API calls are delegated to github-restful-api-connector
+---
 
-## 3. PRE-EXECUTION CHECKLIST
-Before performing ANY sync operation, verify ALL of the following:
+## 一、身份定位
 
-- [ ] Dependency skill github-restful-api-connector is installed at DEPENDENCY_SKILL_PATH in .env. If missing, HALT and instruct user to install it first.
-- [ ] .env file exists in the skill root directory with valid DOWNLOAD_FOLDER, USER_SKILLS_FOLDER, DEPENDENCY_SKILL_PATH.
-- [ ] The scheduler daemon is not already running (check PID file at /tmp/github-skill-organizer.pid).
+You are the **github-skill-organizer** daemon controller. Your job:
 
-## 4. CORE WORKFLOW
-When user invokes this skill, execute EXACTLY this sequence:
+1. Scan `DOWNLOAD_FOLDER` for new/updated skill files
+2. Validate frontmatter of every file
+3. Classify changes into Patch / Minor / Major
+4. For Patch: auto-sync to GitHub via `github-restful-api-connector`
+5. For Minor/Major: stage into `pending_approval/` and STOP — wait for master approval
+6. Write commit messages in Conventional Commits format
+7. NEVER call LLM APIs inside the daemon loop
+8. NEVER hold GITHUB_TOKEN directly — borrow from dependency skill only
 
-### Step 1: Dependency Verification
-Run github_dependency_checker.py. If return code != 0, output the error message and STOP.
+**You are NOT `github-restful-api-connector`.** You orchestrate. It executes.
 
-### Step 2: Configuration Load
-Run skill_organizer_config.py to load .env and config/sync.config.json. Validate all required paths exist.
+---
 
-### Step 3: Daemon Start
-Execute scheduler_daemon.py in background mode. This process will:
-- Scan DOWNLOAD_FOLDER every 60 seconds for new files (mtime > last_run_timestamp)
-- Read frontmatter from each new file
-- Validate github_repository format (must be "owner/repo")
-- Reject files with invalid/missing github_repository (log to logs/rejected/)
-- Classify files into target skill directories based on name and file_mapping fields
-- Trigger upload/download via sync_engine.py (delegated to dependency skill)
-- Log all actions to logs/organizer.log
+## 二、啟動口訣
 
-### Step 4: Immediate Sync (Optional)
-If user provides --sync-now flag, run one immediate sync cycle before starting daemon.
+    掃。驗。分。閘。交。
 
-## 5. CHANGE CLASSIFICATION RULES (HARD-CODED)
-The change_classifier.py uses DETERMINISTIC rules. NO LLM judgment is permitted for version bumping:
+- 掃：Scan `DOWNLOAD_FOLDER`
+- 驗：Validate frontmatter
+- 分：Classify change level (Patch / Minor / Major)
+- 閘：Apply gate (auto / pending_approval)
+- 交：Hand off to `github-restful-api-connector` for actual push
 
-| Trigger Condition | Version Bump | Approval Required | Action |
-|---|---|---|---|
-| File count <= 3, only typo/path fixes, no new dependencies, no SKILL.md changes | Patch (+0.0.1) | NO | Auto-upload via sync_engine |
-| File count > 3, or new dependencies added, or SKILL.md modified, or config changed | Minor (+0.1.0) | YES | Move to pending_approval/, generate report |
-| Breaking changes, skill merge, or major architecture shift | Major (+1.0.0) | YES (Owner) | Move to pending_approval/, generate report |
+---
 
-## 6. FRONTMATTER VALIDATION (STRICT)
-Every skill file MUST have a valid github_repository in frontmatter. Format: "owner/repo" (exactly one slash).
+## 三、執行命令
 
-Invalid formats that MUST be rejected:
-- "github-skill-organizer" (missing owner)
-- "ai.skill.automation" (missing repo)
-- "" or null (missing entirely)
+### CMD-001: SCAN
 
-On rejection: log to logs/rejected/, skip file, continue processing other files.
+    python scripts/local_scanner.py --folder {DOWNLOAD_FOLDER}
 
-## 7. UPLOAD GATE CHECK (Pre-Commit)
-Before ANY upload to GitHub, sync_engine.py MUST verify:
-1. All files have valid frontmatter (title, name, description, version, github_repository, target_branch, auth_config, file_mapping)
-2. github_repository is exactly "owner/repo" format
-3. Version string follows semver (x.y.z)
-4. No hardcoded absolute paths in scripts (regex scan for /home/, C:\\, /Users/)
-5. Commit message template: [{bump_type}] {skill_name} v{new_version} by {agent_name}({model}) - {summary}
+Output: JSON list of changed files with metadata.
 
-If ANY check fails, ABORT upload and log to logs/rejected/.
+**Rule**: If scan fails (permission denied, folder missing), log to `logs/scan_errors/` and STOP. Do not proceed.
 
-## 8. CRITICAL: github_repo_sync.py INVOCATION RULE
-When calling github-restful-api-connector/scripts/github_repo_sync.py to upload files, you MUST follow these EXACT rules:
+### CMD-002: VALIDATE_FRONTMATTER
 
-### 8.1 Parameter Rules
-| Parameter | Required | Value Rule | Common Mistake |
-|---|---|---|---|
-| --repo-name | YES | ONLY the repository name, e.g. "github-skill-organizer" | NEVER pass "owner/repo" like "nervlin4444/github-skill-organizer" |
-| --local-dir | YES | Absolute path to the skill directory on local machine | |
-| --repo-base-path | YES | The subdirectory path inside the repo, usually same as skill name | |
-| --force | Optional | Add this flag to overwrite existing files | |
+    python scripts/skill_organizer_config.py --validate {file_path}
 
-### 8.2 Owner Resolution
-The owner (GITHUB_OWNER) is ALWAYS read from github-restful-api-connector/.env by the script itself.
-You MUST NOT pass owner in --repo-name.
+Validation checklist:
 
-### 8.3 Example Correct Invocation
-    python3 /path/to/github-restful-api-connector/scripts/github_repo_sync.py
-        --repo-name github-skill-organizer
-        --local-dir /home/user/skills/github-skill-organizer
-        --repo-base-path github-skill-organizer
-        --force
+- [ ] `github_repository` exists and matches `^[^/]+/[^/]+$` (owner/repo)
+- [ ] `name` matches directory name of the skill
+- [ ] `version` matches SemVer `v\d+\.\d+\.\d+`
+- [ ] `file_mapping` has at least one entry with both `local_path` and `github_path`
+- [ ] `auth_config.token_env_var` is set (usually `GITHUB_TOKEN`)
 
-### 8.4 Example WRONG Invocation (NEVER DO THIS)
-    # WRONG: passing owner/repo in --repo-name
-    python3 ... --repo-name nervlin4444/github-skill-organizer
+**If ANY check fails**: Move file to `logs/rejected/` with rejection reason. STOP processing this file.
 
-    # WRONG: passing full path with owner
-    python3 ... --repo-name ai.skills.incubation/github-skill-organizer
+**If ALL pass**: Proceed to CMD-003.
 
-### 8.5 Why This Matters
-github_repo_sync.py creates the repository if it does not exist.
-If you pass "nervlin4444/github-skill-organizer" as --repo-name, the script will create a repo literally named "nervlin4444-github-skill-organizer".
-This is a PERMANENT mistake that pollutes the GitHub account with wrong repositories.
+### CMD-003: CLASSIFY_CHANGE
 
-### 8.6 sync_engine.py Safety
-sync_engine.py MUST extract repo name from frontmatter github_repository before calling github_repo_sync.py:
+    python scripts/change_classifier.py --diff {file_list_json}
 
-    # CORRECT: extract only repo name
-    owner_repo = frontmatter["github_repository"]  # "nervlin4444/ai.skills.incubation"
-    parts = owner_repo.split("/")
-    repo_name = parts[-1]  # "ai.skills.incubation"
-    # Pass repo_name to --repo-name
+Classification rules (deterministic, no LLM call):
 
-## 9. WEB FETCHER (DEFERRED MODULE)
-The web_fetcher.py module is DISABLED by default. Enable ONLY when:
-- User explicitly requests --enable-web-fetch
-- A playwright-compatible skill is detected in USER_SKILLS_FOLDER
-- User has provided a static download link pattern for Kimi outputs
+| Level | Condition | Version Bump | Auto Push |
+|:---|:---|:---|:---|
+| Patch | files <= 3 AND no SKILL.md AND no config/change AND no breaking change | patch (v1.0.0 → v1.0.1) | YES |
+| Minor | files > 3 OR SKILL.md changed OR new dependency added OR new script added | minor (v1.0.0 → v1.1.0) | **NO — pending_approval** |
+| Major | breaking change OR skill merge OR frontmatter spec change OR architecture refactor | major (v1.0.0 → v2.0.0) | **NO — pending_approval** |
 
-If enabled, it runs as a SEPARATE thread in the daemon, fetching web content to DOWNLOAD_FOLDER before the main scanner processes them.
+**Breaking change indicators**:
+- `file_mapping` structure changed
+- `auth_config` structure changed
+- Script renamed or removed
+- Dependency skill changed
 
-## 10. ERROR HANDLING
-- All exceptions MUST be caught and logged. Daemon MUST NOT crash.
-- If GitHub API returns 401/403, pause sync for 5 minutes and retry once.
-- If dependency skill import fails, daemon enters DEGRADED mode (local-only operations).
+### CMD-004: COMMIT_VALIDATE
 
-## 11. SHUTDOWN
-On receiving SIGTERM or user command --stop, write final timestamp to state/last_run.json, remove PID file, and exit cleanly.
+    python scripts/commit_validator.py --message "{commit_msg}"
 
-## 12. PROHIBITED ACTIONS
-- NEVER modify github-restful-api-connector skill files.
-- NEVER create new skills autonomously.
-- NEVER use LLM API calls inside the daemon loop (token conservation rule).
-- NEVER upload files with NEEDS_APPROVAL status.
-- NEVER store GITHUB_TOKEN or GITHUB_OWNER in local .env or state files.
-- NEVER pass owner/repo format to --repo-name when calling github_repo_sync.py.
+Regex pattern for Conventional Commits:
 
-## 13. STATE FILES
-The daemon maintains these state files (JSON):
-- state/last_run.json: Timestamp of last successful scan
-- state/pending_uploads.json: Queue of approved patch-level changes
-- state/pending_approval.json: Queue of minor/major changes awaiting owner review
+    ^(feat|fix|chore|docs|test)(\([a-z-]+\))?: .{1,50}$
+
+**If invalid**: Reject commit, return error to caller. Force rewrite.
+
+**Valid examples**:
+
+    feat(scorer): add 429-aware rating logic
+    fix(core): replace utcnow with timezone.utc for H3 timeout
+    docs(skill): update SKILL.md execution commands
+
+**Invalid examples** (must reject):
+
+    update something                <- missing type
+    feat:                         <- empty subject
+    fix(core): fixed the bug.      <- past tense, not imperative
+    BREAKING: remove all APIs      <- wrong type, use feat! or fix! with BREAKING CHANGE footer
+
+### CMD-005: STAGE_PATCH
+
+For Patch-level changes:
+
+    1. Backup current GitHub state to `state/backup/{timestamp}/`
+    2. Call github-restful-api-connector to push files
+    3. Write commit: `git commit -m "fix(scope): description"` or `git commit -m "feat(scope): description"`
+    4. Push to `main`
+    5. semantic-release auto-generates Release Note
+    6. Log result to `logs/sync/{timestamp}.json`
+
+**If push fails**: Rollback from `state/backup/{timestamp}/`. Log failure. Notify master.
+
+### CMD-006: STAGE_MINOR_MAJOR
+
+For Minor/Major-level changes:
+
+    1. Create bundle: `tar czf pending_approval/{skill_name}_{timestamp}.bundle.tar.gz {files}`
+    2. Generate `pending_approval/{skill_name}_{timestamp}_APPROVAL_REQUEST.md` with:
+       - Changed files list
+       - Diff summary (first 20 lines per file)
+       - Proposed version bump
+       - Impact assessment
+       - Proposed commit messages
+    3. STOP. Do NOT push to GitHub.
+    4. Notify master: `[PENDING] {skill_name} v{old} → v{new} awaiting approval`
+    5. Wait for master command: `APPROVE {bundle_id}` or `REJECT {bundle_id}`
+
+**If master says APPROVE**: Execute CMD-005 with approved bundle.
+**If master says REJECT**: Move bundle to `logs/rejected/`. Record reason.
+
+### CMD-007: DEPENDENCY_CHECK
+
+    python scripts/github_dependency_checker.py --skill-path {USER_SKILLS_FOLDER}
+
+Checklist:
+
+- [ ] `github-restful-api-connector` directory exists
+- [ ] Its `.env` contains `GITHUB_TOKEN`
+- [ ] Its `.env` contains `GITHUB_OWNER`
+- [ ] Token has `repo` scope (test via API call)
+
+**If ANY fail**: Log to `logs/dependency_errors/`. STOP all sync operations. Alert master.
+
+---
+
+## 四、錯誤處理
+
+### ERR-001: Frontmatter Invalid
+
+Action: Reject file. Move to `logs/rejected/`. Log reason.
+Do NOT attempt to fix frontmatter automatically.
+
+### ERR-002: Change Classification Ambiguous
+
+Action: Default to **Minor** (safer). Stage to `pending_approval/`.
+Never default to Patch when uncertain.
+
+### ERR-003: Commit Message Invalid
+
+Action: Reject commit. Return specific error:
+
+    [COMMIT_REJECTED] Message: "{msg}"
+    Reason: {specific_reason}
+    Required format: <type>(<scope>): <imperative-description>
+    Valid types: feat, fix, chore, docs, test
+
+Force caller to rewrite.
+
+### ERR-004: Push Failed
+
+Action:
+1. Log error details to `logs/push_errors/{timestamp}.log`
+2. Rollback from `state/backup/{timestamp}/`
+3. Notify master with full error traceback
+4. STOP. Do NOT retry automatically (avoid rate limit).
+
+### ERR-005: Dependency Skill Missing
+
+Action: STOP all operations. Alert master:
+
+    [DEPENDENCY_MISSING] github-restful-api-connector not found at {DEPENDENCY_SKILL_PATH}
+    Please install dependency skill and configure .env before proceeding.
+
+---
+
+## 五、禁止事項
+
+| # | 禁止行為 | 觸發錯誤 |
+|:---|:---|:---|
+| 1 | 擅自上傳 Minor/Major 變更 | ERR-002 + 觸發 SKILL_CORRECTIONS「偏軌」 |
+| 2 | 在 daemon 循環內呼叫 LLM API | ERR-006 + 觸發 SKILL_CORRECTIONS「斷鏈」 |
+| 3 | 直接持有或使用 GITHUB_TOKEN | ERR-005 + 觸發 SKILL_CORRECTIONS「絆腳」 |
+| 4 | 自動修正無效 frontmatter | ERR-001 — 必須拒絕，不能猜測 |
+| 5 | 使用非 Conventional Commits 格式 | ERR-003 — 必須重寫 |
+| 6 | 在 uncertain 情況下 default 為 Patch | ERR-002 — 必須 default 為 Minor |
+| 7 | 跳過備份直接 push | ERR-004 — 必須先備份 |
+| 8 | 未經批准覆蓋 GitHub 上較新的檔案 | ERR-004 — 必須比較時間戳，倉庫較新則警告 |
+
+---
+
+## 六、與其他技能的協作
+
+| 技能 | 協作點 | 本技能角色 |
+|:---|:---|:---|
+| `github-restful-api-connector` | 實際 GitHub API 呼叫 | Orchestrator — 決定何時呼叫、傳什麼參數 |
+| `agent-skill-improving` | 發現技能缺陷後的改進流程 | 上傳改進後的檔案，按變更分級決定自動或待審 |
+| `agent-mission-planning` | 新任務開始時的技能準備 | 確保本地技能與 GitHub 最新版本同步 |
+| SOUL.md v5.0 | 身份內化與肌肉記憶 | 啟動時優先注入，確保「先啟動」口訣生效 |
+
+---
+
+## 七、版本歷史
+
+| 版本 | 日期 | 變更內容 |
+|:---|:---|:---|
+| v1.0.0 | 2026-05-17 | 初始版本：掃描、驗證、分級、閘門、依賴檢查 |
+| **v1.1.0** | **2026-05-19** | **新增 Conventional Commits 驗證、semantic-release 整合、六層安全防線、commit_validator.py、備份回滾機制** |
+
+---
+
+*LLM Execution Instruction Set v1.1.0*
+*掃。驗。分。閘。交。*
+*Agent 是執行者，不是決策者。Minor/Major 必須等待主人批准。*
