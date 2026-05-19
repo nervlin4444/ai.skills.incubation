@@ -2,8 +2,8 @@
 ---
 title: Local File Scanner
 name: github-skill-organizer
-description: Scans DOWNLOAD_FOLDER for new files. Auto-extracts .zip archives under 100KB, forces current timestamp on extracted files to ensure immediate processing in the same daemon cycle. Renames processed .zip to .zip.moved.
-version: 1.0.3
+description: Scans DOWNLOAD_FOLDER for new files. Auto-extracts .zip archives under 100KB, forces current timestamp on extracted files to ensure immediate processing in the same daemon cycle. Renames processed .zip to .zip.moved. v1.0.5 fixes timezone-aware datetime comparisons.
+version: 1.0.6
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -12,8 +12,8 @@ auth_config:
   token_env_var: GITHUB_TOKEN
   env_file_path: ../.env
 file_mapping:
-  local_path: "{baseDir}/scripts/local_scanner.py"
-  github_path: "github-skill-organizer/scripts/local_scanner.py"
+  - local_path: "{baseDir}/scripts/local_scanner.py"
+    github_path: "github-skill-organizer/scripts/local_scanner.py"
 ---
 """
 
@@ -23,7 +23,7 @@ import json
 import re
 import zipfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from skill_organizer_config import load_config
@@ -48,17 +48,27 @@ class LocalScanner:
         self.state_file = self.cfg.get_state_file("last_run.json")
 
     def get_last_run_time(self):
+        """
+        Return timezone-aware datetime for safe comparison.
+        Handles legacy state files that may have naive timestamps.
+        """
         if self.state_file.exists():
             with open(self.state_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                ts = data.get("last_run_timestamp")
-                if ts:
-                    return datetime.fromisoformat(ts)
-        return datetime.min
+            ts = data.get("last_run_timestamp")
+            if ts:
+                dt = datetime.fromisoformat(ts)
+                # CRITICAL: Ensure timezone-aware for safe comparison
+                # Legacy files may have naive timestamps
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+        # Return epoch with UTC timezone (not naive datetime.min)
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
 
     def set_last_run_time(self, dt=None):
         if dt is None:
-            dt = datetime.utcnow()
+            dt = datetime.now(timezone.utc)
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump({"last_run_timestamp": dt.isoformat()}, f, ensure_ascii=False)
 
@@ -72,7 +82,7 @@ class LocalScanner:
         """
         extracted_files = []
         extract_dir = zip_path.parent / zip_path.stem
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
 
         try:
             with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -92,11 +102,11 @@ class LocalScanner:
                         os.utime(member_path, (now, now))
                         extracted_files.append(member_path)
 
-            # Rename original zip to .zip.moved (prevents daemon reprocessing)
-            moved_path = zip_path.with_suffix('.zip.moved')
-            zip_path.rename(moved_path)
-            print(f"[ZIP EXTRACT] {zip_path.name} -> {extract_dir} ({len(extracted_files)} files, timestamp forced)")
-            print(f"[ZIP ARCHIVE] Original renamed to {moved_path.name}")
+                # Rename original zip to .zip.moved (prevents daemon reprocessing)
+                moved_path = zip_path.with_suffix('.zip.moved')
+                zip_path.rename(moved_path)
+                print(f"[ZIP EXTRACT] {zip_path.name} -> {extract_dir} ({len(extracted_files)} files, timestamp forced)")
+                print(f"[ZIP ARCHIVE] Original renamed to {moved_path.name}")
 
         except zipfile.BadZipFile:
             print(f"[ZIP ERROR] {zip_path.name}: Bad zip file")
@@ -137,7 +147,7 @@ class LocalScanner:
                     "path": str(extracted_path),
                     "relative_path": str(extracted_path.relative_to(self.download_path)),
                     "original_name": extracted_path.name,
-                    "mtime": datetime.utcnow().isoformat(),
+                    "mtime": datetime.now(timezone.utc).isoformat(),
                     "frontmatter": meta,
                     "classified": meta is not None and "name" in meta,
                     "source": "zip_extracted",
@@ -155,7 +165,8 @@ class LocalScanner:
             if file_path.suffix == ".moved" and file_path.stem.endswith(".zip"):
                 continue
 
-            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+            # CRITICAL: tz=timezone.utc ensures timezone-aware comparison
+            mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
             if mtime > last_run:
                 meta = self._extract_frontmatter(file_path)
                 new_files.append({
