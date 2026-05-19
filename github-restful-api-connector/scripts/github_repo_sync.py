@@ -3,11 +3,11 @@
 ---
 title: "Repo Sync Tool"
 name: "github-restful-api-connector"
-description: "批量目錄同步上傳：本地技能目錄 → GitHub 倉庫子目錄。自動檢測技能名稱、自動創建倉庫、衝突檢測、安全克隆。v0.3.1 修復 .backups 排除與加入 --test-conventional-commit 參數。"
+description: "批量目錄同步上傳：本地技能目錄 → GitHub 倉庫子目錄。自動檢測技能名稱、自動創建倉庫、衝突檢測、安全克隆。v0.3.1 修復 .backups 排除與加入 --test-conventional-commit 參數。v0.3.1-fix 確保 test mode 強制生成 commit。"
 version: "0.3.1"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-20T00:50:00+08:00"
+updated_at: "2026-05-20T00:55:00+08:00"
 
 auth_config:
   provider: "github"
@@ -22,10 +22,11 @@ file_mapping:
 
 github_repo_sync.py — F-005 批量目錄同步上傳
 版本：v0.3.1
-生成日期：2026-05-20 00:50:00
+生成日期：2026-05-20 00:55:00
 核心修復：
   1. exclude_patterns 加入 .backups / .backup（防止備份檔案洩漏到 GitHub）
   2. 新增 --test-conventional-commit 參數，生成 feat: 格式 commit 以測試 semantic-release
+  3. test mode 自動創建 .semantic-release-test trigger 檔案，確保強制生成 commit
 """
 
 import os
@@ -191,6 +192,45 @@ def upload_file(owner: str, repo: str, local_path: Path, repo_path: str,
     return True
 
 # ============================================
+# 觸發檔案上傳（v0.3.1-fix 新增）
+# ============================================
+
+def upload_trigger_file(owner: str, repo: str, skill_name: str,
+                        dry_run: bool = False, test_conventional_commit: bool = False) -> bool:
+    """
+    當 test-conventional-commit 模式且所有檔案都 identical 時，
+    創建一個 .semantic-release-test 觸發檔案強制生成 commit。
+    """
+    trigger_path = ".semantic-release-test"
+    trigger_content = f"# semantic-release test trigger\n# Skill: {skill_name}\n# Timestamp: {datetime.now(timezone.utc).isoformat()}\n# This file is safe to delete after release is generated.\n"
+    content_b64 = base64.b64encode(trigger_content.encode("utf-8")).decode("utf-8")
+
+    # 檢查是否已存在
+    repo_sha = ""
+    try:
+        existing = rest_request("GET", f"/repos/{owner}/{repo}/contents/{trigger_path}")
+        repo_sha = existing.get("sha", "")
+    except RuntimeError as e:
+        if "404" not in str(e):
+            raise
+
+    if dry_run:
+        logger.info(f"[DRY-RUN] Would create trigger file: {trigger_path}")
+        return True
+
+    commit_msg = generate_commit_message(trigger_path, skill_name, test_conventional_commit)
+    payload = {
+        "message": commit_msg,
+        "content": content_b64,
+    }
+    if repo_sha:
+        payload["sha"] = repo_sha
+
+    rest_request("PUT", f"/repos/{owner}/{repo}/contents/{trigger_path}", payload)
+    logger.info(f"[TRIGGER] Created {trigger_path} to force commit generation")
+    return True
+
+# ============================================
 # 批量同步（核心函數）
 # ============================================
 
@@ -267,6 +307,18 @@ def sync_directory(owner: str, repo: str, local_dir: str,
             logger.error(f"[FAIL] {repo_path}: {e}")
             results["failed"] += 1
             results["files"].append({"path": repo_path, "status": "fail", "error": str(e)})
+
+    # v0.3.1-fix: 如果 test mode 且沒有實際上傳，創建 trigger 檔案強制生成 commit
+    if test_conventional_commit and results["uploaded"] == 0 and not dry_run:
+        logger.info("[TEST MODE] No files changed. Creating trigger file to force commit generation...")
+        try:
+            upload_trigger_file(owner, repo, skill_name or repo_base_path,
+                              dry_run=dry_run, test_conventional_commit=test_conventional_commit)
+            results["uploaded"] += 1
+            results["files"].append({"path": ".semantic-release-test", "status": "trigger"})
+        except Exception as e:
+            logger.error(f"[FAIL] Trigger file creation failed: {e}")
+            results["failed"] += 1
 
     return results
 
@@ -365,7 +417,7 @@ def main():
     # v0.3.1 新增參數
     parser.add_argument("--test-conventional-commit", action="store_true",
                         help="Generate Conventional Commits format (feat:) for semantic-release testing. "
-                             "Each file upload will use a feat: commit message.")
+                             "If no files changed, creates a trigger file to force commit generation.")
     args = parser.parse_args()
 
     if args.version:
@@ -417,6 +469,9 @@ def main():
         print("  Expected: semantic-release should generate a MINOR release")
         print("  Check: https://github.com/nervlin4444/ai.skills.incubation/actions")
         print("  Check: https://github.com/nervlin4444/ai.skills.incubation/releases")
+        if results["uploaded"] > 0 and any(f["status"] == "trigger" for f in results["files"]):
+            print("  [TRIGGER] .semantic-release-test file created to force commit generation")
+            print("  [NOTE] You can delete .semantic-release-test after release is generated")
 
     if results["failed"] > 0:
         print("\n[!] Some files failed. Check logs above.")
