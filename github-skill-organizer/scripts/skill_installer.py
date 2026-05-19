@@ -2,8 +2,8 @@
 ---
 title: Skill Installer
 name: github-skill-organizer
-description: Installs new skill files from DOWNLOAD_FOLDER into USER_SKILLS_FOLDER. All scanned files are MOVED out of download folder regardless of install status: identical -> .identical/, skipped -> .skipped/, rejected -> .rejected/, unclassified -> .unclassified/. Only newer AND different files are actually installed.
-version: 1.0.4
+description: Installs new skill files from DOWNLOAD_FOLDER into USER_SKILLS_FOLDER. All scanned files are MOVED out of download folder regardless of install status. v1.0.5 adds post-install change detection, risk pattern analysis, and test recommendation report generation.
+version: 1.0.5
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -38,6 +38,13 @@ class SkillInstaller:
     CRITICAL RULE: Every file scanned by local_scanner.py MUST be moved
     out of DOWNLOAD_FOLDER, regardless of install outcome.
 
+    v1.0.5: Post-install change detection and test recommendation generation.
+    After installation, generates install_report.json with:
+    - Changed methods (added/modified)
+    - Risk pattern detection (datetime, file deletion, subprocess, etc.)
+    - Test recommendations for agent to execute
+    - Auto-fix candidates for known simple issues
+
     Archive destinations:
     - installed -> skills_moved/{skill_name}/
     - identical -> skills_moved/.identical/
@@ -45,6 +52,18 @@ class SkillInstaller:
     - rejected -> skills_moved/.rejected/
     - unclassified -> skills_moved/.unclassified/
     """
+
+    # Known risk patterns for post-install analysis
+    RISK_PATTERNS = {
+        "datetime.utcnow()": "Deprecated datetime.utcnow(), use datetime.now(timezone.utc)",
+        "datetime.min": "Naive datetime.min may cause timezone comparison errors",
+        "shutil.rmtree": "Directory deletion - requires user confirmation per memory rule",
+        "os.remove": "File deletion - requires user confirmation per memory rule",
+        "subprocess.run": "Subprocess execution - verify command safety",
+        "urlopen": "Network request - verify SSL and timeout handling",
+        "eval(": "Dangerous eval() usage detected",
+        "exec(": "Dangerous exec() usage detected",
+    }
 
     def __init__(self):
         self.cfg = load_config()
@@ -105,6 +124,141 @@ class SkillInstaller:
             print(f"[WARN] Failed to archive {source_path}: {e}")
             return ""
 
+    # ===== CHANGE DETECTION =====
+
+    def _extract_methods(self, content: str) -> dict:
+        """Extract method names and bodies from Python source for comparison."""
+        methods = {}
+        # Match def statements and capture indented body until next def/class/end
+        pattern = r'^\s*def\s+(\w+)\s*\([^)]*\):.*?(?=^\s*def\s+\w+\s*\(|^\s*class\s+\w+|\Z)'
+        for match in re.finditer(pattern, content, re.MULTILINE | re.DOTALL):
+            name = match.group(1)
+            body = match.group(0)
+            methods[name] = body
+        return methods
+
+    def _detect_risk_patterns(self, method_body: str) -> list:
+        """Detect known risk patterns in method body."""
+        risks = []
+        for pattern, description in self.RISK_PATTERNS.items():
+            if pattern in method_body:
+                risks.append(description)
+        return risks
+
+    def _generate_install_report(self, skill_name: str, target_path: Path,
+                                  backup_path: Path = None, old_content: str = None) -> dict:
+        """
+        Generate post-install report with change detection and test recommendations.
+        This report is consumed by the agent for post-install self-testing.
+        """
+        report = {
+            "skill_name": skill_name,
+            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "target_path": str(target_path),
+            "backup_path": str(backup_path) if backup_path else None,
+            "changes": {},
+            "test_recommendations": [],
+            "risk_flags": [],
+            "auto_fix_candidates": [],
+            "requires_manual_review": False,
+            "agent_action": "review_and_test",
+        }
+
+        try:
+            new_content = target_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            new_content = ""
+
+        if old_content and target_path.suffix == ".py":
+            old_methods = self._extract_methods(old_content)
+            new_methods = self._extract_methods(new_content)
+
+            for method_name, method_body in new_methods.items():
+                risks = self._detect_risk_patterns(method_body)
+
+                if method_name not in old_methods:
+                    report["changes"][method_name] = {"type": "added", "risks": risks}
+                    report["test_recommendations"].append(
+                        f"Test new method: {method_name}() — verify basic execution with mock data"
+                    )
+                elif old_methods[method_name] != method_body:
+                    report["changes"][method_name] = {"type": "modified", "risks": risks}
+                    report["test_recommendations"].append(
+                        f"Re-test modified method: {method_name}() — verify change did not break existing behavior"
+                    )
+
+                if risks:
+                    for r in risks:
+                        report["risk_flags"].append(f"{method_name}: {r}")
+
+                    # Auto-fix candidates for known simple patterns
+                    if "datetime.utcnow()" in method_body:
+                        report["auto_fix_candidates"].append({
+                            "method": method_name,
+                            "issue": "datetime.utcnow() deprecated",
+                            "suggested_fix": "Replace datetime.utcnow() with datetime.now(timezone.utc)",
+                            "confidence": "high",
+                            "auto_fixable": True,
+                        })
+                    if "datetime.min" in method_body and "replace(tzinfo=timezone.utc)" not in method_body:
+                        report["auto_fix_candidates"].append({
+                            "method": method_name,
+                            "issue": "naive datetime.min",
+                            "suggested_fix": "Replace datetime.min with datetime(1970,1,1,tzinfo=timezone.utc)",
+                            "confidence": "medium",
+                            "auto_fixable": True,
+                        })
+                    if "shutil.rmtree" in method_body or "os.remove" in method_body:
+                        report["requires_manual_review"] = True
+                        report["auto_fix_candidates"].append({
+                            "method": method_name,
+                            "issue": "file_deletion_without_confirmation",
+                            "suggested_fix": "Add user confirmation gate before any deletion",
+                            "confidence": "high",
+                            "auto_fixable": False,  # Requires architectural change, not simple text replace
+                        })
+        elif target_path.suffix == ".py":
+            # New file - all methods are new
+            methods = self._extract_methods(new_content)
+            for method_name, method_body in methods.items():
+                risks = self._detect_risk_patterns(method_body)
+                report["changes"][method_name] = {"type": "new_file", "risks": risks}
+                report["test_recommendations"].append(
+                    f"Test method: {method_name}() — first time installation, verify with mock data"
+                )
+                if risks:
+                    for r in risks:
+                        report["risk_flags"].append(f"{method_name}: {r}")
+
+        # Write report to logs/install_reports/
+        report_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "install_reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        report_file = report_dir / f"{skill_name}_{ts}_install_report.json"
+        with open(report_file, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+
+        # Print summary for agent to capture
+        print(f"\n{'='*60}")
+        print(f"[INSTALL_REPORT] Generated: {report_file}")
+        print(f"[INSTALL_REPORT] Skill: {skill_name}")
+        print(f"[INSTALL_REPORT] File: {target_path.name}")
+        print(f"[INSTALL_REPORT] Methods changed: {len(report['changes'])}")
+        print(f"[INSTALL_REPORT] Risk flags: {len(report['risk_flags'])}")
+        print(f"[INSTALL_REPORT] Test recommendations: {len(report['test_recommendations'])}")
+        print(f"[INSTALL_REPORT] Auto-fix candidates: {len(report['auto_fix_candidates'])}")
+        if report['risk_flags']:
+            print(f"[INSTALL_REPORT] Risk details:")
+            for flag in report['risk_flags'][:5]:
+                print(f"[INSTALL_REPORT]   ⚠ {flag}")
+        if report['requires_manual_review']:
+            print(f"[INSTALL_REPORT] ⚠️  REQUIRES MANUAL REVIEW — deletion operations detected")
+        print(f"{'='*60}\n")
+
+        return report
+
+    # ===== INSTALL =====
+
     def install_file(self, file_info):
         """
         file_info: dict from local_scanner
@@ -160,6 +314,14 @@ class SkillInstaller:
         target_path = skill_dir / rel_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Read old content for change detection BEFORE overwriting
+        old_content = None
+        if target_path.exists() and target_path.suffix == ".py":
+            try:
+                old_content = target_path.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                old_content = None
+
         # === OUTCOME: Identical (content same, target exists) ===
         if target_path.exists():
             source_hash = self._file_hash(source_path)
@@ -191,7 +353,6 @@ class SkillInstaller:
         # === OUTCOME: Installed (source is newer AND content differs) ===
         backup = None
         if target_path.exists():
-            # FIX: use .backups (plural) to match sync_engine.py skip logic
             backup_dir = skill_dir / ".backups"
             backup_dir.mkdir(exist_ok=True)
             ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -207,6 +368,16 @@ class SkillInstaller:
         # Archive source file after successful install
         archived_to = self._archive_file(source_path, skill_name, "installed")
 
+        # === POST-INSTALL: Generate change detection report ===
+        install_report = None
+        if target_path.suffix == ".py":
+            install_report = self._generate_install_report(
+                skill_name=skill_name,
+                target_path=target_path,
+                backup_path=backup,
+                old_content=old_content,
+            )
+
         return {
             "status": "installed",
             "skill_name": skill_name,
@@ -214,7 +385,16 @@ class SkillInstaller:
             "backup": str(backup) if backup else None,
             "archived_to": archived_to,
             "derived_from": "frontmatter" if file_mapping else "fallback",
+            "install_report": str(self._get_report_path(skill_name)) if install_report else None,
         }
+
+    def _get_report_path(self, skill_name: str) -> Path:
+        """Get the most recent install report for a skill."""
+        report_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "install_reports"
+        if not report_dir.exists():
+            return None
+        reports = sorted(report_dir.glob(f"{skill_name}_*_install_report.json"), reverse=True)
+        return reports[0] if reports else None
 
     def _derive_local_path_from_github_path(self, github_path, skill_name):
         path = github_path.lstrip("/")
