@@ -3,7 +3,7 @@
 title: Sync Engine
 name: github-skill-organizer
 description: Handles bi-directional sync between local skills and GitHub. Includes upload gate, download sync, SHA-based comparison, and reverse download to arbitrary local directories.
-version: 1.0.1
+version: 1.0.2
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -12,8 +12,8 @@ auth_config:
   token_env_var: GITHUB_TOKEN
   env_file_path: ../.env
 file_mapping:
-  local_path: "{baseDir}/scripts/sync_engine.py"
-  github_path: "github-skill-organizer/scripts/sync_engine.py"
+  - local_path: "{baseDir}/scripts/sync_engine.py"
+    github_path: "github-skill-organizer/scripts/sync_engine.py"
 ---
 """
 
@@ -26,7 +26,7 @@ import hashlib
 import base64
 import ssl
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -393,7 +393,6 @@ class SyncEngine:
         """Pull latest skills from GitHub to local skills folder."""
         results = {}
         try:
-            # Read sync.config.json to get skill repositories
             config_path = Path(__file__).parent.parent / "config" / "sync.config.json"
             if config_path.exists():
                 import json
@@ -402,20 +401,18 @@ class SyncEngine:
                 skill_name = config.get("skill_name", "github-skill-organizer")
             else:
                 skill_name = "github-skill-organizer"
-            
-            # Get the owner from dependency
+
             owner = self.cfg.get_github_owner()
             if not owner:
                 return {"error": "Cannot determine GitHub owner"}
-            
-            # Try to sync the skill-organizer repo itself
+
             skill_dir = Path(self.cfg.user_skills_folder) / skill_name
             if skill_dir.exists():
                 result = self.sync_skill(skill_name, str(skill_dir), dry_run=False)
                 results[skill_name] = result
         except Exception as e:
             results["error"] = str(e)
-        
+
         return results
 
     # ===== UPLOAD (existing) =====
@@ -463,7 +460,7 @@ class SyncEngine:
             return {"status": "rejected", "reason": str(e)}
 
         if self.github_api:
-            result = self._upload_via_api(repo_name, files, commit_msg)
+            result = self._upload_via_api(repo_name, files, commit_msg, skill_name)
         else:
             result = self._upload_via_cli(repo_name, files, commit_msg, skill_name)
 
@@ -546,7 +543,7 @@ class SyncEngine:
 
     def _move_to_pending(self, skill_name, files, classification):
         pending_dir = Path(self.cfg.user_skills_folder).parent / "pending_approval"
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         batch_dir = pending_dir / f"{skill_name}_{ts}"
         batch_dir.mkdir(parents=True, exist_ok=True)
 
@@ -554,7 +551,7 @@ class SyncEngine:
             "skill_name": skill_name,
             "classification": classification,
             "files": [str(f) for f in files],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         with open(batch_dir / "meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2, ensure_ascii=False)
@@ -569,14 +566,14 @@ class SyncEngine:
     def _log_rejected(self, skill_name, files, gate_result):
         rejected_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "rejected"
         rejected_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         log_file = rejected_dir / f"{skill_name}_{ts}.json"
         with open(log_file, "w", encoding="utf-8") as f:
             json.dump({
                 "skill_name": skill_name,
                 "files": [str(f) for f in files],
                 "reason": gate_result.get("error") or gate_result.get("reason"),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }, f, indent=2, ensure_ascii=False)
 
     def _upload_via_api(self, repo_name, files, commit_msg, skill_name=None):
@@ -590,17 +587,18 @@ class SyncEngine:
             if not cli_script.exists():
                 return {"method": "cli", "status": "error", "reason": "github_repo_sync.py not found"}
 
-            # Determine the local directory from the first file's parent
-            # files are like [.../skills/github-skill-organizer/scripts/...]
-            # We need to get the skill directory: .../skills/github-skill-organizer
-            local_dir = files[0].parent.parent if files else str(self.cfg.user_skills_folder / (skill_name or repo_name))
-            skill_dir_name = Path(local_dir).name  # e.g., "github-skill-organizer"
+            # FIX: files is a list of strings (paths). Must wrap in Path() before accessing .parent
+            if files:
+                local_dir = Path(files[0]).parent.parent
+            else:
+                local_dir = self.cfg.user_skills_folder / (skill_name or repo_name)
+            skill_dir_name = Path(str(local_dir)).name  # e.g., "github-skill-organizer"
 
             cmd = [
                 sys.executable, str(cli_script),
                 "--repo-name", repo_name,
                 "--local-dir", str(local_dir),
-                "--repo-base-path", skill_dir_name,  # Use skill dir name, not repo name
+                "--repo-base-path", skill_dir_name,
                 "--force",
             ]
 
