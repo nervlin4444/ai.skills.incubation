@@ -2,10 +2,11 @@
 ---
 title: Scheduler Daemon
 name: github-skill-organizer
-description: Background daemon that runs every 60 seconds to scan, classify, install, and sync skill files. Includes file logging.
-version: 1.0.0
+description: Background daemon that runs every 60 seconds to scan, classify, install, and sync skill files. v1.0.1 fixes cold-start file detection by forcing full scan on daemon first cycle.
+version: 1.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
+updated_at: 2026-05-21T17:45:00+08:00
 auth_config:
   provider: github
   auth_method: personal_access_token
@@ -47,11 +48,9 @@ def setup_logging(log_dir, log_level):
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # File handler
     fh = logging.FileHandler(log_file, encoding="utf-8")
     fh.setFormatter(formatter)
 
-    # Console handler
     ch = logging.StreamHandler(sys.stdout)
     ch.setFormatter(formatter)
 
@@ -80,6 +79,10 @@ class SkillOrganizerDaemon:
         self.running = False
         self.pid_file = Path(self.cfg.pid_file_path)
 
+        # v1.0.1 FIX: Track first cycle to force full scan on daemon start.
+        # This catches files placed in DOWNLOAD_FOLDER BEFORE daemon started.
+        self._is_first_cycle = True
+
     def _write_pid(self):
         self.pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
@@ -105,7 +108,15 @@ class SkillOrganizerDaemon:
         self.logger.info("Cycle starting")
 
         # Phase 1: Process DOWNLOAD_FOLDER (new files from Kimi/web/manual)
-        new_files = self.scanner.scan()
+        # v1.0.1 FIX: First cycle uses force=True to scan ALL files regardless
+        # of mtime. Subsequent cycles use incremental scan (force=False).
+        force_scan = self._is_first_cycle
+        if force_scan:
+            self.logger.info("FIRST_CYCLE: Force full scan enabled (catching pre-existing files)")
+
+        new_files = self.scanner.scan(force=force_scan)
+        self._is_first_cycle = False  # Mark first cycle complete
+
         if new_files:
             self.logger.info(f"Found {len(new_files)} new file(s) in download folder")
 
