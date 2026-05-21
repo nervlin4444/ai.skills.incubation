@@ -2,10 +2,11 @@
 ---
 title: Local File Scanner
 name: github-skill-organizer
-description: Scans DOWNLOAD_FOLDER for new files. Auto-extracts .zip archives under 100KB, forces current timestamp on extracted files to ensure immediate processing in the same daemon cycle. Renames processed .zip to .zip.moved. v1.0.5 fixes timezone-aware datetime comparisons.
-version: 1.0.5
+description: Scans DOWNLOAD_FOLDER for new files. Auto-extracts .zip archives under 100KB, forces current timestamp on extracted files. v1.0.6 adds force-scan mode for daemon first-cycle full scan, fixing the "files older than last_run" cold-start problem.
+version: 1.0.6
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
+updated_at: 2026-05-21T17:45:00+08:00
 auth_config:
   provider: github
   auth_method: personal_access_token
@@ -36,8 +37,11 @@ class LocalScanner:
     """
     Scans DOWNLOAD_FOLDER for new skill files.
     Auto-extracts .zip archives <= 100KB, forces current timestamp on extracted
-    files so they are processed in the SAME daemon cycle (no wait for next round).
+    files so they are processed in the SAME daemon cycle.
     Renames processed .zip to .zip.moved to prevent reprocessing.
+
+    v1.0.6 FIX: force=True skips mtime comparison. Used by daemon on its
+    first cycle to catch files that existed BEFORE daemon started.
     """
 
     ZIP_SIZE_LIMIT = 100 * 1024  # 100 KB
@@ -58,12 +62,9 @@ class LocalScanner:
             ts = data.get("last_run_timestamp")
             if ts:
                 dt = datetime.fromisoformat(ts)
-                # CRITICAL: Ensure timezone-aware for safe comparison
-                # Legacy files may have naive timestamps
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
                 return dt
-        # Return epoch with UTC timezone (not naive datetime.min)
         return datetime(1970, 1, 1, tzinfo=timezone.utc)
 
     def set_last_run_time(self, dt=None):
@@ -76,7 +77,7 @@ class LocalScanner:
         """
         Extract a .zip file into a subdirectory.
         Forces current timestamp on ALL extracted files so they are picked up
-        in the SAME scan cycle (no need to wait for next daemon round).
+        in the SAME scan cycle.
         Renames the original .zip to .zip.moved.
         Returns list of extracted file paths.
         """
@@ -86,7 +87,6 @@ class LocalScanner:
 
         try:
             with zipfile.ZipFile(zip_path, 'r') as zf:
-                # Safety: check total extracted size (zip bomb protection)
                 total_size = sum(info.file_size for info in zf.infolist())
                 if total_size > self.ZIP_SIZE_LIMIT * 5:
                     print(f"[ZIP SKIP] {zip_path.name}: total content {total_size} bytes exceeds safety limit")
@@ -94,15 +94,12 @@ class LocalScanner:
 
                 zf.extractall(path=extract_dir)
 
-                # CRITICAL: Force current timestamp on ALL extracted files
-                # so they are recognized as "new" in the SAME scan cycle
                 for member in zf.namelist():
                     member_path = extract_dir / member
                     if member_path.is_file():
                         os.utime(member_path, (now, now))
                         extracted_files.append(member_path)
 
-                # Rename original zip to .zip.moved (prevents daemon reprocessing)
                 moved_path = zip_path.with_suffix('.zip.moved')
                 zip_path.rename(moved_path)
                 print(f"[ZIP EXTRACT] {zip_path.name} -> {extract_dir} ({len(extracted_files)} files, timestamp forced)")
@@ -115,11 +112,15 @@ class LocalScanner:
 
         return extracted_files
 
-    def scan(self):
+    def scan(self, force=False):
         """
         Scan DOWNLOAD_FOLDER for new files.
         Auto-extracts .zip archives <= 100KB before processing.
         Skips .zip.moved files (already processed).
+
+        Args:
+            force: If True, skip mtime > last_run check. Used by daemon on
+                   first cycle to catch pre-existing files.
         """
         last_run = self.get_last_run_time()
         new_files = []
@@ -141,7 +142,6 @@ class LocalScanner:
 
             extracted = self._extract_zip(zip_file)
             for extracted_path in extracted:
-                # Because we forced timestamp to now, these WILL be picked up
                 meta = self._extract_frontmatter(extracted_path)
                 new_files.append({
                     "path": str(extracted_path),
@@ -165,19 +165,22 @@ class LocalScanner:
             if file_path.suffix == ".moved" and file_path.stem.endswith(".zip"):
                 continue
 
-            # CRITICAL: tz=timezone.utc ensures timezone-aware comparison
             mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
-            if mtime > last_run:
-                meta = self._extract_frontmatter(file_path)
-                new_files.append({
-                    "path": str(file_path),
-                    "relative_path": str(file_path.relative_to(self.download_path)),
-                    "original_name": file_path.name,
-                    "mtime": mtime.isoformat(),
-                    "frontmatter": meta,
-                    "classified": meta is not None and "name" in meta,
-                    "source": "direct",
-                })
+
+            # v1.0.6 FIX: force mode skips mtime check for daemon first cycle
+            if not force and mtime <= last_run:
+                continue
+
+            meta = self._extract_frontmatter(file_path)
+            new_files.append({
+                "path": str(file_path),
+                "relative_path": str(file_path.relative_to(self.download_path)),
+                "original_name": file_path.name,
+                "mtime": mtime.isoformat(),
+                "frontmatter": meta,
+                "classified": meta is not None and "name" in meta,
+                "source": "direct",
+            })
 
         return new_files
 
