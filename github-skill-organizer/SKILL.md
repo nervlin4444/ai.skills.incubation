@@ -1,361 +1,166 @@
 ---
-title: "GitHub Skill Organizer - LLM Execution Commands"
-name: "github-skill-organizer"
-description: "LLM execution instruction set for github-skill-organizer. Background daemon skill for syncing local skills to GitHub with strict gatekeeping, conventional commits, semantic-release automation, and post-install self-testing. Agent must follow every command exactly."
-version: "v1.1.2"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-20T00:15:00+08:00"
-
+title: GitHub Skill Organizer - LLM Execution Directive
+name: github-skill-organizer
+description: LLM execution directive for bi-directional skill sync. CRITICAL: This file is an INSTRUCTION for LLM, not a human manual. Every rule below is MANDATORY. Violation causes upload failure, skill pollution, or data loss.
+version: 1.0.10
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-22T01:46:00+00:00
 auth_config:
-  provider: "github"
-  auth_method: "token"
-  token_env_var: "GITHUB_TOKEN"
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
   env_file_path: "{baseDir}/.env"
-
 file_mapping:
   - local_path: "{baseDir}/SKILL.md"
     github_path: "github-skill-organizer/SKILL.md"
 ---
 
-# github-skill-organizer — LLM Execution Instruction Set
+# LLM EXECUTION DIRECTIVE: github-skill-organizer v1.0.10
 
-> Version: v1.1.2
-> Alignment: SOUL.md v5.0 + SKILL_CORRECTIONS.md v2.5.0 + IDENTITY.md v5.0
-> Role: Background daemon orchestrator. NOT a direct API caller.
+## 0. 前置聲明
 
----
+本文件是給 LLM 直接執行的指令。不是給人類閱讀的說明書。每一條規則都是強制性的。違反任何一條都會導致上傳失敗、技能污染或數據丟失。
 
-## 一、身份定位
+## 1. 核心架構
 
-You are the **github-skill-organizer** daemon controller. Your job:
+本技能由以下組件構成：
 
-1. Scan `DOWNLOAD_FOLDER` for new/updated skill files
-2. Validate frontmatter of every file
-3. Classify changes into Patch / Minor / Major
-4. For Patch: auto-sync to GitHub via `github-restful-api-connector`
-5. For Minor/Major: stage into `pending_approval/` and STOP — wait for master approval
-6. Write commit messages in Conventional Commits format
-7. **Post-install: execute self-test based on install_report.json**
-8. **Auto-fix simple errors; escalate complex errors to master via GitHub issue**
-9. NEVER call LLM APIs inside the daemon loop
-10. NEVER hold GITHUB_TOKEN directly — borrow from dependency skill only
+    sync_engine.py          核心引擎（禁止修改 compare_skill / upload_skill / _upload_via_cli 的簽名）
+    skill_organizer_config.py   配置加載器
+    skill_sync.py           技能同步協調器
+    local_scanner.py        本地掃描器
+    change_classifier.py    變更分類器
+    commit_validator.py     提交驗證器
+    version_manager.py      版本管理器
+    repo_inventory.py       倉庫清單
+    repo_migrator.py        倉庫遷移器
+    repo_validator.py       倉庫驗證器
+    scheduler_daemon.py     定時守護進程
+    skill_installer.py      技能安裝器
+    github_dependency_checker.py   依賴檢查器
 
-**You are NOT `github-restful-api-connector`.** You orchestrate. It executes.
+## 2. 絕對禁止（LOCK 規則）
 
----
+以下操作絕對禁止，一旦發現立即上報主人，不得擅自修改：
 
-## 二、啟動口訣
+### 2.1 禁止從 files[0] 推導 local_dir
 
-    掃。驗。分。閘。交。測。修。報。
+    原始錯誤: local_dir = Path(files[0]).parent.parent
+    後果: 當 files[0] 是 SKILL.md（技能根目錄下的文件）時，parent.parent 指向 skills 的父目錄（如 ~/.workbuddy/skills/），導致所有技能被一起上傳，嚴重污染目標技能。
+    正確做法: local_dir = Path(os.path.expanduser(str(self.cfg.user_skills_folder))) / (skill_name or repo_name)
 
-- 掃：Scan `DOWNLOAD_FOLDER`
-- 驗：Validate frontmatter
-- 分：Classify change level (Patch / Minor / Major)
-- 閘：Apply gate (auto / pending_approval)
-- 交：Hand off to `github-restful-api-connector` for actual push
-- 測：Post-install self-test based on install_report.json
-- 修：Auto-fix simple errors (e.g., datetime.utcnow)
-- 報：Escalate complex errors to master via GitHub issue
+### 2.2 禁止在不展開 ~ 的情況下使用 Path()
 
----
+    原始錯誤: Path("~/.workbuddy/skills")
+    後果: Python 的 Path 不會自動展開 ~，指向不存在的路徑，_create_clean_temp_dir 產生空臨時目錄，上傳失敗。
+    正確做法: Path(os.path.expanduser("~/.workbuddy/skills")) 或 Path(os.path.expanduser(str(self.cfg.user_skills_folder)))
 
-## 三、執行命令
+### 2.3 禁止調用 _upload_via_api()
 
-### CMD-001: SCAN
+    原始錯誤: if self.github_api: result = self._upload_via_api(...)
+    後果: _upload_via_api() 是 placeholder，只返回 {"status": "placeholder"}，上傳實際從未執行。
+    正確做法: 強制使用 result = self._upload_via_cli(repo_name, files, commit_msg, skill_name)
 
-    python scripts/local_scanner.py --folder {DOWNLOAD_FOLDER}
+### 2.4 禁止用臨時目錄名作為 skill_dir_name
 
-Output: JSON list of changed files with metadata.
+    原始錯誤: skill_dir_name = Path(clean_dir).name
+    後果: clean_dir 是 sync_clean_abc123，--repo-base-path 傳入隨機名稱，文件放到錯誤路徑。
+    正確做法: skill_dir_name = skill_name or Path(str(local_dir)).name
 
-**Rule**: If scan fails (permission denied, folder missing), log to `logs/scan_errors/` and STOP. Do not proceed.
+### 2.5 禁止用 files[0] 讀取 frontmatter
 
-### CMD-002: VALIDATE_FRONTMATTER
+    原始錯誤: fm = self._read_frontmatter_from_file(files[0])
+    後果: files[0] 可能不是 SKILL.md，讀取到錯誤的 frontmatter，repo_name 提取錯誤。
+    正確做法: skill_md = skill_dir / "SKILL.md"; fm = self._read_frontmatter_from_file(skill_md)
 
-    python scripts/skill_organizer_config.py --validate {file_path}
+### 2.6 禁止直接取整倉所有 blob 作為 github_files
 
-Validation checklist:
+    原始錯誤: github_files = {item["path"]: item["sha"] for item in tree_data.get("tree", []) if item["type"] == "blob"}
+    後果: GitHub tree API 返回整倉所有文件（含其他技能），與本地路徑永遠不匹配，錯誤判定為 diverged。
+    正確做法: 只保留 skill_name + "/" 前綴的路徑，並去掉前綴。
 
-- [ ] `github_repository` exists and matches `^[^/]+/[^/]+$` (owner/repo)
-- [ ] `name` matches directory name of the skill
-- [ ] `version` matches SemVer `v\d+\.\d+\.\d+`
-- [ ] `file_mapping` has at least one entry with both `local_path` and `github_path`
-- [ ] `auth_config.token_env_var` is set (usually `GITHUB_TOKEN`)
+### 2.7 禁止在 action 判定中遺漏 local_only
 
-**If ANY check fails**: Move file to `logs/rejected/` with rejection reason. STOP processing this file.
+    原始錯誤: elif modified and not github_only: action = "local_ahead"
+    後果: 當只有 local_only（本地新增文件）而無 modified 時，錯誤落入 diverged。
+    正確做法: elif (modified or local_only) and not github_only: action = "local_ahead"
 
-**If ALL pass**: Proceed to CMD-003.
+## 3. 強制規範（MUST 規則）
 
-### CMD-003: CLASSIFY_CHANGE
+### 3.1 上傳前必須驗證的文件
 
-    python scripts/change_classifier.py --diff {file_list_json}
+    必須驗證: .py, .md, .json 等核心技能文件
+    跳過驗證: CHANGELOG.md（由 semantic-release 自動生成，CI 後處理會加 frontmatter）
+    排除上傳: LICENSE, LICENSE.md, LICENSE.txt（UPLOAD_EXCLUDES 已配置）
 
-Classification rules (deterministic, no LLM call):
+### 3.2 compare_skill() 強制邏輯
 
-| Level | Condition | Version Bump | Auto Push |
-|:---|:---|:---|:---|
-| Patch | files <= 3 AND no SKILL.md AND no config/change AND no breaking change | patch (v1.0.0 -> v1.0.1) | YES |
-| Minor | files > 3 OR SKILL.md changed OR new dependency added OR new script added | minor (v1.0.0 -> v1.1.0) | **NO — pending_approval** |
-| Major | breaking change OR skill merge OR frontmatter spec change OR architecture refactor | major (v1.0.0 -> v2.0.0) | **NO — pending_approval** |
+    Step 1: 讀取本地 SKILL.md frontmatter，提取 owner/repo
+    Step 2: 調用 GitHub tree API: /repos/{owner}/{repo}/git/trees/main?recursive=1
+    Step 3: 過濾 github_files: 只保留 skill_name + "/" 開頭的路徑，去掉前綴
+    Step 4: 遍歷本地文件，計算 SHA，與 github_files 比對
+    Step 5: 遍歷 github_files，檢查本地缺失的文件
+    Step 6: action 判定:
+        - 無 modified, 無 local_only, 無 github_only → identical
+        - (modified 或 local_only) 且無 github_only → local_ahead
+        - 只有 github_only 且無 modified/local_only → github_ahead
+        - 其他 → diverged
 
-**Breaking change indicators**:
-- `file_mapping` structure changed
-- `auth_config` structure changed
-- Script renamed or removed
-- Dependency skill changed
+### 3.3 upload_skill() 強制流程
 
-### CMD-004: COMMIT_VALIDATE
-
-    python scripts/commit_validator.py --message "{commit_msg}"
-
-Regex pattern for Conventional Commits:
-
-    ^(feat|fix|chore|docs|test)(\([a-z-]+\))?: .{1,50}$
-
-**If invalid**: Reject commit, return error to caller. Force rewrite.
-
-**Valid examples**:
-
-    feat(scorer): add 429-aware rating logic
-    fix(core): replace utcnow with timezone.utc for H3 timeout
-    docs(skill): update SKILL.md execution commands
-
-**Invalid examples** (must reject):
-
-    update something                <- missing type
-    feat:                         <- empty subject
-    fix(core): fixed the bug.      <- past tense, not imperative
-    BREAKING: remove all APIs      <- wrong type, use feat! or fix! with BREAKING CHANGE footer
-
-### CMD-005: INSTALL
-
-    python scripts/skill_installer.py
-
-**Output**: After installation, `skill_installer.py` generates an **install report** at:
-
-    logs/install_reports/{skill_name}_{timestamp}_install_report.json
-
-**Agent MUST read this report immediately after installation.**
-
-### CMD-006: POST_INSTALL_TEST (CRITICAL — v1.1.2)
-
-After CMD-005 (INSTALL), Agent **must** execute post-install self-testing:
-
-    1. Read the latest install_report.json from logs/install_reports/
-    2. For each `test_recommendations` item:
-       a. Identify the method mentioned
-       b. Attempt to import the installed module and execute the method with mock data
-       c. For methods with `datetime` operations: verify timezone-aware behavior
-       d. For methods with `subprocess` or `urlopen`: verify no hardcoded secrets
-    3. For each `auto_fix_candidates`:
-       a. If confidence == "high" AND fix is simple text replacement:
-          - Apply fix automatically
-          - Re-run the method to verify
-          - Log fix to logs/auto_fix/
-       b. If confidence == "medium" OR fix requires structural change:
-          - STOP auto-fix
-          - Add to `requires_manual_review` list
-    4. For each `risk_flags` marked as NOT auto-fixable:
-       a. STOP all operations
-       b. Notify master with full context
-       c. Create GitHub issue (via github-restful-api-connector) — see CMD-008
-
-**Test execution examples**:
-
-    # For datetime-related methods:
-    python -c "
-    from scripts.local_scanner import LocalScanner
-    from datetime import datetime, timezone
-    scanner = LocalScanner()
-    result = scanner.get_last_run_time()
-    assert result.tzinfo is not None, 'FAIL: naive datetime returned'
-    print('PASS: timezone-aware datetime')
-    "
-
-    # For file operation methods:
-    python -c "
-    from scripts.sync_engine import SyncEngine
-    engine = SyncEngine()
-    # Verify no unauthorized deletion methods exist without confirmation gate
-    import inspect
-    src = inspect.getsource(engine._record_pending_cleanup)
-    assert 'user confirmation' in src or 'confirm' in src, 'FAIL: missing confirmation gate'
-    print('PASS: deletion has confirmation gate')
-    "
-
-### CMD-007: STAGE_PATCH
-
-For Patch-level changes:
-
-    1. Backup current GitHub state to `state/backup/{timestamp}/`
-    2. Call github-restful-api-connector to push files
-    3. Write commit: `git commit -m "fix(scope): description"` or `git commit -m "feat(scope): description"`
-    4. Push to `main`
-    5. semantic-release auto-generates Release Note
-    6. Log result to `logs/sync/{timestamp}.json`
-
-**If push fails**: Rollback from `state/backup/{timestamp}/`. Log failure. Notify master.
-
-### CMD-008: CREATE_ISSUE (for complex errors — v1.1.2)
-
-When post-install test reveals a complex error that cannot be auto-fixed:
-
-    python scripts/github_restful_api_connector.py \
-      --action create_issue \
-      --repo nervlin4444/ai.skills.incubation \
-      --title "[BUG] {skill_name}: {brief_error_description}" \
-      --body "{detailed_error_report}" \
-      --labels "bug,auto-detected,needs-review"
-
-**Issue body must contain**:
-- Skill name and version
-- File path and method name
-- Error message and stack trace
-- install_report.json excerpt (changes, risk_flags, test_recommendations)
-- Suggested fix (if any)
-- Agent confidence level (high/medium/low)
-
-**If issue creation fails**: Log to `logs/issues_failed/` and notify master immediately.
-
-**Note**: This command has NOT been tested in production. If `github-restful-api-connector` does not support `--action create_issue`, STOP and notify master.
-
-### CMD-009: STAGE_MINOR_MAJOR
-
-For Minor/Major-level changes:
-
-    1. Create bundle: `tar czf pending_approval/{skill_name}_{timestamp}.bundle.tar.gz {files}`
-    2. Generate `pending_approval/{skill_name}_{timestamp}_APPROVAL_REQUEST.md` with:
-       - Changed files list
-       - Diff summary (first 20 lines per file)
-       - Proposed version bump
-       - Impact assessment
-       - Proposed commit messages
-       - **Post-install test results summary**
-    3. STOP. Do NOT push to GitHub.
-    4. Notify master: `[PENDING] {skill_name} v{old} -> v{new} awaiting approval`
-    5. Wait for master command: `APPROVE {bundle_id}` or `REJECT {bundle_id}`
-
-**If master says APPROVE**: Execute CMD-007 with approved bundle.
-**If master says REJECT**: Move bundle to `logs/rejected/`. Record reason.
-
-### CMD-010: DEPENDENCY_CHECK
-
-    python scripts/github_dependency_checker.py --skill-path {USER_SKILLS_FOLDER}
-
-Checklist:
-
-- [ ] `github-restful-api-connector` directory exists
-- [ ] Its `.env` contains `GITHUB_TOKEN`
-- [ ] Its `.env` contains `GITHUB_OWNER`
-- [ ] Token has `repo` scope (test via API call)
-
-**If ANY fail**: Log to `logs/dependency_errors/`. STOP all sync operations. Alert master.
-
----
-
-## 四、錯誤處理
-
-### ERR-001: Frontmatter Invalid
-
-Action: Reject file. Move to `logs/rejected/`. Log reason.
-Do NOT attempt to fix frontmatter automatically.
-
-### ERR-002: Change Classification Ambiguous
-
-Action: Default to **Minor** (safer). Stage to `pending_approval/`.
-Never default to Patch when uncertain.
-
-### ERR-003: Commit Message Invalid
-
-Action: Reject commit. Return specific error:
-
-    [COMMIT_REJECTED] Message: "{msg}"
-    Reason: {specific_reason}
-    Required format: <type>(<scope>): <imperative-description>
-    Valid types: feat, fix, chore, docs, test
-
-Force caller to rewrite.
-
-### ERR-004: Push Failed
-
-Action:
-1. Log error details to `logs/push_errors/{timestamp}.log`
-2. Rollback from `state/backup/{timestamp}/`
-3. Notify master with full error traceback
-4. STOP. Do NOT retry automatically (avoid rate limit).
-
-### ERR-005: Dependency Skill Missing
-
-Action: STOP all operations. Alert master:
-
-    [DEPENDENCY_MISSING] github-restful-api-connector not found at {DEPENDENCY_SKILL_PATH}
-    Please install dependency skill and configure .env before proceeding.
-
-### ERR-006: Post-Install Test Failed (v1.1.2)
-
-Action:
-1. Log full test output to `logs/test_failures/{timestamp}_{skill_name}.log`
-2. If auto-fix candidate with high confidence:
-   - Attempt auto-fix (see CMD-006 step 3)
-   - Re-run test
-   - If pass: proceed
-   - If fail: escalate
-3. If NOT auto-fixable or auto-fix failed:
-   - STOP all upload operations
-   - Execute CMD-008 (CREATE_ISSUE) or notify master if issue creation unavailable
-   - Include install_report.json and test output in issue body
-   - Wait for master resolution before proceeding
-
-### ERR-007: Issue Creation Failed (v1.1.2)
-
-Action:
-1. Log to `logs/issues_failed/{timestamp}_{skill_name}.json`
-2. Notify master directly with error details
-3. Include the intended issue title and body in the notification
-4. Master must manually create issue or resolve the underlying bug
-
----
-
-## 五、禁止事項
-
-| # | 禁止行為 | 觸發錯誤 |
-|:---|:---|:---|
-| 1 | 擅自上傳 Minor/Major 變更 | ERR-002 + 觸發 SKILL_CORRECTIONS「偏軌」 |
-| 2 | 在 daemon 循環內呼叫 LLM API | ERR-006 + 觸發 SKILL_CORRECTIONS「斷鏈」 |
-| 3 | 直接持有或使用 GITHUB_TOKEN | ERR-005 + 觸發 SKILL_CORRECTIONS「絆腳」 |
-| 4 | 自動修正無效 frontmatter | ERR-001 — 必須拒絕，不能猜測 |
-| 5 | 使用非 Conventional Commits 格式 | ERR-003 — 必須重寫 |
-| 6 | 在 uncertain 情況下 default 為 Patch | ERR-002 — 必須 default 為 Minor |
-| 7 | 跳過備份直接 push | ERR-004 — 必須先備份 |
-| 8 | 未經批准覆蓋 GitHub 上較新的檔案 | ERR-004 — 必須比較時間戳，倉庫較新則警告 |
-| 9 | **安裝後跳過自測直接上傳** | ERR-006 — **必須執行 CMD-006** |
-| 10 | **擅自刪除任何檔案或目錄** | ERR-006 + 觸發記憶規則 — **必須經主人確認** |
-| 11 | **未經測試直接上傳含風險標記的檔案** | ERR-006 — **requires_manual_review=True 必須 STOP** |
-
----
-
-## 六、與其他技能的協作
-
-| 技能 | 協作點 | 本技能角色 |
-|:---|:---|:---|
-| `github-restful-api-connector` | 實際 GitHub API 呼叫（push、create_issue） | Orchestrator — 決定何時呼叫、傳什麼參數 |
-| `agent-skill-improving` | 發現技能缺陷後的改進流程 | 上傳改進後的檔案，按變更分級決定自動或待審 |
-| `agent-mission-planning` | 新任務開始時的技能準備 | 確保本地技能與 GitHub 最新版本同步 |
-| SOUL.md v5.0 | 身份內化與肌肉記憶 | 啟動時優先注入，確保「先啟動」口訣生效 |
-
----
-
-## 七、版本歷史
-
-| 版本 | 日期 | 變更內容 |
-|:---|:---|:---|
-| v1.0.0 | 2026-05-17 | 初始版本：掃描、驗證、分級、閘門、依賴檢查 |
-| v1.1.0 | 2026-05-19 | 新增 Conventional Commits 驗證、semantic-release 整合、六層安全防線、commit_validator.py、備份回滾機制 |
-| v1.1.1 | 2026-05-19 | 新增 upload exclusion（.backups/logs/pending_approval）、clean temp dir、deletion confirmation gate |
-| **v1.1.2** | **2026-05-20** | **新增 post-install self-test 流程（CMD-006）、auto-fix 機制、GitHub issue 自動上報（CMD-008）、install_report.json 生成規範** |
-
----
-
-*LLM Execution Instruction Set v1.1.2*
-*掃。驗。分。閘。交。測。修。報。*
-*Agent 是執行者，不是決策者。Minor/Major 必須等待主人批准。安裝後必須自測。*
+    Step 1: 檢查 classification["approval_required"]
+    Step 2: 對所有 files 驗證 frontmatter（CHANGELOG.md 除外）
+    Step 3: 運行 gate_checks
+    Step 4: 從 SKILL.md 讀取 frontmatter，提取 repo_name
+    Step 5: 強制調用 _upload_via_cli()
+    Step 6: _upload_via_cli 內部:
+        a. local_dir = Path(os.path.expanduser(str(self.cfg.user_skills_folder))) / skill_name
+        b. clean_dir = _create_clean_temp_dir(local_dir)
+        c. skill_dir_name = skill_name
+        d. 調用 github_repo_sync.py --repo-name {repo_name} --local-dir {clean_dir} --repo-base-path {skill_dir_name} --force
+        e. 記錄 pending_cleanup，不自動刪除
+
+## 4. CHANGELOG.md 特殊處理
+
+### 4.1 上傳時
+
+    CHANGELOG.md 由 semantic-release 自動生成，本地版本可能無 frontmatter。
+    上傳時跳過 frontmatter 驗證。
+    GitHub Actions workflow 會在 semantic-release 完成後自動插入 frontmatter。
+
+### 4.2 同步時
+
+    調用 sync_changelog(skill_name):
+        - 檢查本地 CHANGELOG.md 是否有 frontmatter
+        - 檢查遠程 CHANGELOG.md 是否有 frontmatter
+        - 若遠程有而本地無 → 下載覆蓋本地
+        - 若本地有而遠程無 → 提示上傳
+        - 若內容相同 → 報告 identical
+        - 若內容不同 → 報告 diverged，需人工審查
+
+## 5. 刪除操作強制規範
+
+    任何文件或目錄的刪除操作必須經用戶確認。
+    禁止擅自執行 shutil.rmtree、os.remove、目錄清理。
+    臨時目錄清理必須記錄到 pending_cleanup/，由用戶確認後處理。
+
+## 6. 錯誤上報規範
+
+    遇到以下情況必須上報主人，禁止擅自決定：
+    - 路徑包含 ~ 但無法確定是否已 expanduser
+    - files 列表包含非技能文件（如 LICENSE、.gitignore）
+    - compare_skill 返回 diverged 但無法確定原因
+    - upload_skill 返回 error 且 details 中無 returncode
+    - 任何涉及刪除的操作請求
+
+## 7. 版本更新記錄
+
+| 版本 | 修復內容 |
+|------|---------|
+| v1.0.5 | compare_skill 路徑前綴過濾 + action 判定修正 |
+| v1.0.6 | upload_skill frontmatter 讀取修正 + API/CLI 路由修正 + skill_dir_name 修正 |
+| v1.0.7 | 錯誤移除 per-file 驗證（已回滾） |
+| v1.0.8 | 恢復 per-file 驗證（CHANGELOG.md 除外）+ LICENSE 排除 + sync_changelog 新增 |
+| v1.0.9 | local_dir 路徑推導修正（不再從 files[0] 推導） |
+| v1.0.10 | expanduser(~) 路徑展開修正 |
