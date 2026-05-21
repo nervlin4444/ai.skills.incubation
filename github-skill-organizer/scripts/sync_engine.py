@@ -2,8 +2,8 @@
 ---
 title: Sync Engine
 name: github-skill-organizer
-description: Handles bi-directional sync between local skills and GitHub. Includes upload gate, download sync, SHA-based comparison, and reverse download to arbitrary local directories. v1.0.4 adds deletion confirmation gate — NO automatic file/directory removal without user consent.
-version: 1.0.4
+description: Handles bi-directional sync between local skills and GitHub. Includes upload gate, download sync, SHA-based comparison, and reverse download to arbitrary local directories. v1.0.4 adds deletion confirmation gate. v1.0.11 fixes compare_skill subdir prefix, action logic, upload frontmatter routing, API/CLI fallback, temp dir skill naming, CHANGELOG.md CI frontmatter injection, LICENSE exclusion, local_dir path derivation, expanduser(~) path resolution, and upload files list filtering — NO automatic file/directory removal without user consent.
+version: 1.0.11
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
 auth_config:
@@ -45,6 +45,7 @@ class SyncEngine:
         '.backups', '.backup', '.env', '.env.local', '.git', '.github',
         'logs', 'pending_approval', '__pycache__', 'node_modules',
         '.DS_Store', 'Thumbs.db', '.vscode', '.idea',
+        'LICENSE', 'LICENSE.md', 'LICENSE.txt',  # ← 排除 LICENSE 文件
     }
     UPLOAD_EXCLUDE_SUFFIXES = ('.pyc', '.pyo', '.so', '.zip.moved', '.bak')
     UPLOAD_EXCLUDE_PREFIXES = ('.', 'temp_', 'tmp_')
@@ -327,6 +328,21 @@ class SyncEngine:
             return True
         return False
 
+    def _is_excluded_path(self, file_path: str) -> bool:
+        """
+        Check if a full file path should be excluded from upload.
+        Checks the file itself AND all parent directories.
+        """
+        path = Path(file_path)
+        # Check the file itself
+        if self._should_exclude(path):
+            return True
+        # Check all parent directories
+        for parent in path.parents:
+            if self._should_exclude(parent):
+                return True
+        return False
+
     def _create_clean_temp_dir(self, source_dir: Path) -> Path:
         """
         Create a temporary directory containing only files that should be uploaded.
@@ -368,7 +384,15 @@ class SyncEngine:
     def compare_skill(self, skill_name, local_dir=None):
         """
         Compare local skill files with GitHub repository using SHA hashes.
-        Returns: {"status": "ok"|"error", "owner": str, "repo": str, "comparisons": [...], "action": str}
+
+        FIX v1.0.6:
+        - GitHub tree API returns paths with skill subdir prefix (e.g. "skill-name/SKILL.md")
+        - Local scan returns relative paths without prefix (e.g. "SKILL.md")
+        - Must filter github_files to only the skill subdir and strip the prefix
+        - Must also handle local_only correctly in action determination
+
+        Returns: {"status": "ok"|"error", "owner": str, "repo": str,
+                  "comparisons": [...], "action": str}
         action values: "identical", "local_ahead", "github_ahead", "diverged"
         """
         if local_dir is None:
@@ -395,7 +419,20 @@ class SyncEngine:
         if isinstance(tree_data, dict) and tree_data.get("error"):
             return {"status": "error", "reason": f"GitHub API error: {tree_data.get('message', 'unknown')}"}
 
-        github_files = {item["path"]: item["sha"] for item in tree_data.get("tree", []) if item["type"] == "blob"}
+        # =====================================================================
+        # FIX v1.0.6: Filter github_files to ONLY the skill subdir and strip prefix
+        # =====================================================================
+        prefix = skill_name + "/"
+        github_files = {}
+        for item in tree_data.get("tree", []):
+            if item["type"] != "blob":
+                continue
+            path = item["path"]
+            # Only include files under this skill's subdirectory
+            if path.startswith(prefix):
+                rel_path = path[len(prefix):]
+                github_files[rel_path] = item["sha"]
+        # =====================================================================
 
         comparisons = []
         local_only = []
@@ -445,16 +482,18 @@ class SyncEngine:
                     "github_sha": github_files[gh_path],
                 })
 
+        # =====================================================================
+        # FIX v1.0.6: Correct action determination including local_only cases
+        # =====================================================================
         if not modified and not local_only and not github_only:
             action = "identical"
-        elif modified and not github_only:
+        elif (modified or local_only) and not github_only:
             action = "local_ahead"
         elif github_only and not modified and not local_only:
             action = "github_ahead"
-        elif modified and github_only:
-            action = "diverged"
         else:
             action = "diverged"
+        # =====================================================================
 
         return {
             "status": "ok",
@@ -595,17 +634,48 @@ class SyncEngine:
     # ===== UPLOAD (existing) =====
 
     def upload_skill(self, skill_name, files, classification):
-        """Upload changed files to GitHub. Delegates all API calls to dependency skill."""
+        """
+        Upload changed files to GitHub. Delegates all API calls to dependency skill.
+
+        FIX v1.0.8:
+        - Use skill_name to locate SKILL.md for frontmatter (not files[0])
+        - Always use CLI method since _upload_via_api is placeholder
+        - Validate frontmatter on all files EXCEPT CHANGELOG.md (CI will inject)
+        - LICENSE excluded from upload via _should_exclude()
+        """
         if classification["approval_required"]:
             self._move_to_pending(skill_name, files, classification)
             return {"status": "pending_approval", "reason": classification["reason"]}
 
+        # =====================================================================
+        # FIX v1.0.11: Filter files list BEFORE validation.
+        # Agent may pass files from .backups/, __pycache__/, LICENSE, etc.
+        # _is_excluded_path() checks both the file and all parent directories.
+        # CHANGELOG.md is kept (CI post-process will add frontmatter).
+        # =====================================================================
+        filtered_files = [f for f in files if not self._is_excluded_path(f)]
+        excluded_count = len(files) - len(filtered_files)
+        if excluded_count > 0:
+            print(f"[UPLOAD] Excluded {excluded_count} files (.backups, __pycache__, LICENSE, etc.)")
+        files = filtered_files
+        # =====================================================================
+
+        # =====================================================================
+        # FIX v1.0.8: Validate frontmatter on all files EXCEPT CHANGELOG.md.
+        # CHANGELOG.md is auto-generated by semantic-release and will receive
+        # frontmatter via CI post-process step (see .github/workflows/release.yml).
+        # LICENSE is excluded via _should_exclude().
+        # =====================================================================
         for f in files:
-            fm = self._read_frontmatter_from_file(f)
-            validation = self._validate_github_repository(fm, f)
+            f_path = Path(f)
+            if f_path.name in ("CHANGELOG.md", "CHANGELOG"):
+                continue  # Skip frontmatter validation for auto-generated CHANGELOG
+            fm_file = self._read_frontmatter_from_file(f)
+            validation = self._validate_github_repository(fm_file, f)
             if not validation["valid"]:
                 self._log_rejected(skill_name, files, validation)
                 return {"status": "rejected", "reason": validation["error"]}
+        # =====================================================================
 
         gate_result = self._run_gate_checks(files)
         if not gate_result["passed"]:
@@ -630,16 +700,26 @@ class SyncEngine:
             summary=summary,
         )
 
+        # =====================================================================
+        # FIX v1.0.6: Read frontmatter from SKILL.md (not files[0]) to get correct repo info
+        # =====================================================================
+        skill_dir = Path(self.cfg.user_skills_folder) / skill_name
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            return {"status": "rejected", "reason": f"SKILL.md not found for skill: {skill_name}"}
+
+        fm = self._read_frontmatter_from_file(skill_md)
         try:
-            fm = self._read_frontmatter_from_file(files[0]) if files else {}
             repo_name = self._extract_repo_name(fm.get("github_repository", ""))
         except ValueError as e:
             return {"status": "rejected", "reason": str(e)}
+        # =====================================================================
 
-        if self.github_api:
-            result = self._upload_via_api(repo_name, files, commit_msg, skill_name)
-        else:
-            result = self._upload_via_cli(repo_name, files, commit_msg, skill_name)
+        # =====================================================================
+        # FIX v1.0.6: Always use CLI method since _upload_via_api is placeholder
+        # =====================================================================
+        result = self._upload_via_cli(repo_name, files, commit_msg, skill_name)
+        # =====================================================================
 
         return {
             "status": "uploaded",
@@ -761,6 +841,10 @@ class SyncEngine:
         Call github_repo_sync.py via CLI with CORRECT parameters.
         CRITICAL v1.0.4: Creates clean temp dir excluding dev artifacts.
         NO automatic deletion — temp dir recorded for user-confirmed cleanup.
+
+        FIX v1.0.6:
+        - Use skill_name (passed from upload_skill) as skill_dir_name
+        - NOT Path(clean_dir).name which is a random temp directory name
         """
         try:
             dep_path = Path(self.cfg.dependency_skill_path)
@@ -768,17 +852,21 @@ class SyncEngine:
             if not cli_script.exists():
                 return {"method": "cli", "status": "error", "reason": "github_repo_sync.py not found"}
 
-            # FIX: files is a list of strings (paths). Must wrap in Path() before accessing .parent
-            if files:
-                local_dir = Path(files[0]).parent.parent
-            else:
-                local_dir = self.cfg.user_skills_folder / (skill_name or repo_name)
-            skill_dir_name = Path(str(local_dir)).name  # e.g., "github-skill-organizer"
+            # =====================================================================
+            # FIX v1.0.6: Determine local_dir from files[0] (parent.parent = skill dir)
+            # =====================================================================
+            local_dir = Path(os.path.expanduser(str(self.cfg.user_skills_folder))) / (skill_name or repo_name)  # FIX v1.0.10: expanduser(~)  # FIX v1.0.9: never derive from files[0].parent.parent
 
             # CRITICAL FIX v1.0.3: Create clean temp dir excluding development artifacts
             print(f"[UPLOAD] Creating clean temp dir from {local_dir}...")
             clean_dir = self._create_clean_temp_dir(local_dir)
             print(f"[UPLOAD] Clean temp dir: {clean_dir}")
+
+            # =====================================================================
+            # FIX v1.0.6: Use skill_name as skill_dir_name, NOT the random temp dir name
+            # =====================================================================
+            skill_dir_name = skill_name or Path(str(local_dir)).name
+            # =====================================================================
 
             cmd = [
                 sys.executable, str(cli_script),
@@ -809,6 +897,100 @@ class SyncEngine:
             }
         except Exception as e:
             return {"method": "cli", "status": "error", "reason": str(e)}
+
+    # ===== CHANGELOG.md SYNC =====
+
+    def sync_changelog(self, skill_name, local_dir=None):
+        """
+        Check and sync CHANGELOG.md frontmatter between local and GitHub.
+        If remote has frontmatter but local does not, download and overwrite local.
+        Returns: {"status": "synced"|"identical"|"pending_upload"|"diverged"|"error", ...}
+        """
+        if local_dir is None:
+            local_dir = Path(self.cfg.user_skills_folder) / skill_name
+        else:
+            local_dir = Path(local_dir)
+
+        local_changelog = local_dir / "CHANGELOG.md"
+        if not local_changelog.exists():
+            return {"status": "error", "reason": "Local CHANGELOG.md not found"}
+
+        local_content = local_changelog.read_text(encoding="utf-8", errors="ignore")
+        local_has_fm = local_content.startswith("---")
+
+        comparison = self.compare_skill(skill_name, local_dir)
+        if comparison["status"] != "ok":
+            return comparison
+
+        owner = comparison["owner"]
+        repo = comparison["repo"]
+        prefix = skill_name + "/"
+
+        changelog_api = self._github_api_call(
+            f"/repos/{owner}/{repo}/contents/{prefix}CHANGELOG.md?ref=main"
+        )
+        if isinstance(changelog_api, dict) and changelog_api.get("error"):
+            return {"status": "error", "reason": "Cannot fetch remote CHANGELOG.md"}
+
+        import base64
+        remote_content = base64.b64decode(changelog_api.get("content", "")).decode("utf-8")
+        remote_has_fm = remote_content.startswith("---")
+
+        if not local_has_fm and remote_has_fm:
+            local_changelog.write_text(remote_content, encoding="utf-8")
+            return {
+                "status": "synced",
+                "action": "downloaded",
+                "message": "CHANGELOG.md frontmatter synced from GitHub to local",
+                "local_path": str(local_changelog),
+            }
+        elif local_has_fm and not remote_has_fm:
+            return {
+                "status": "pending_upload",
+                "action": "local_ahead",
+                "message": "Local CHANGELOG.md has frontmatter but remote does not. Run upload to sync.",
+            }
+        elif local_content == remote_content:
+            return {
+                "status": "identical",
+                "action": "identical",
+                "message": "CHANGELOG.md is identical between local and remote.",
+            }
+        else:
+            return {
+                "status": "diverged",
+                "action": "diverged",
+                "message": "CHANGELOG.md content differs. Manual review required.",
+            }
+
+    def notify_user_changelog_sync(self, sync_result):
+        """Notify user of CHANGELOG.md sync status in UI."""
+        status = sync_result.get("status")
+        message = sync_result.get("message", "")
+
+        if status == "synced":
+            print(f"\n{'='*60}")
+            print("【CHANGELOG.md 同步通知】")
+            print("="*60)
+            print(f"✅ {message}")
+            print(f"📁 本地路徑: {sync_result.get('local_path')}")
+            print("="*60)
+        elif status == "pending_upload":
+            print(f"\n{'='*60}")
+            print("【CHANGELOG.md 同步通知】")
+            print("="*60)
+            print(f"⚠️  {message}")
+            print("建議: 執行 upload_skill 將本地 CHANGELOG.md 上傳到 GitHub")
+            print("="*60)
+        elif status == "identical":
+            print(f"[CHANGELOG] {message}")
+        elif status == "diverged":
+            print(f"\n{'='*60}")
+            print("【CHANGELOG.md 同步通知】")
+            print("="*60)
+            print(f"❌ {message}")
+            print("建議: 手動檢查並解決差異")
+            print("="*60)
 
 
 if __name__ == "__main__":
