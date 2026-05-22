@@ -20,7 +20,7 @@ file_mapping:
 
 > 本文件是 LLM 執行指令，不是人類說明書。
 > LLM 讀取後必須嚴格執行，禁止自由發揮。
-> v1.2.5 新增：Guardian Pattern 架構、腳本更名、標準 Issue 報告器。
+> v1.2.5 新增：Guardian Pattern 架構、腳本更名、。
 
 ---
 
@@ -58,7 +58,7 @@ file_mapping:
 | 不考慮臨時文件清理 | JSON文件堆積污染目錄，我等於製造垃圾 |
 | **禁止直接 open()/write_text() 寫入文件** | 違反 Guardian Pattern，生成沒有身份證的文件，我等於非法 |
 | **禁止調用舊名稱腳本** | skill_validate / skill_improving 已廢棄，調用舊腳本我等於不更新 |
-| **禁止自由發揮撰寫 Issue** | 必須通過 skill_issue_reporter.py 生成，自由撰寫我等於格式不一致 |
+
 
 ---
 
@@ -77,11 +77,7 @@ Step 4: 如需改進，調用 skill_patch_validator.py 應用 Patch
     ↓
 Step 5: 再次調用 skill_integrity_checker.py --strict 驗證
     ↓ PASS
-Step 6: 如需報告 Issue，調用 skill_issue_reporter.py 生成
-    ↓
-Step 7: 主人審核 [FRAMEWORK] Issue（如適用）
-    ↓
-Step 8: 上傳（commit 含 Fixes #{issue_number}）
+Step 6: 上傳（commit 含 Fixes #{issue_number}）
 ```
 
 **禁止跳過任何一步。**
@@ -111,11 +107,6 @@ python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict
 ### LOCK-012: 禁止修改 github_repository / target_branch
 frontmatter 中的 github_repository 和 target_branch 是全局配置，禁止任何 Agent 修改。
 如需變更倉庫，必須上報主人決策。
-
-### LOCK-013: 禁止自由發揮撰寫 Issue（v1.2.5 新增）
-Agent 發現問題需要報告時，禁止直接撰寫 Issue 內容。
-必須調用 skill_issue_reporter.py，通過腳本強制生成標準格式。
-違反後果：不同 LLM 輸出格式不一致，主人審核成本高，Kimi 分析困難。
 
 ---
 
@@ -260,52 +251,6 @@ python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict --report-
 
 ---
 
-## Issue 報告規範（v1.2.5 新增）
-
-### 何時報告 Issue
-
-| 情況 | 分類 | 處理方式 |
-|------|------|----------|
-| skill_integrity_checker 發現無法自行修復的問題 | [RUNTIME] | 調用 skill_issue_reporter.py → 主人審核 → Agent 修復 → Fixes #N |
-| Agent 違反已知規範（如生成無 frontmatter 文件） | [AGENT-BUG] | Agent 自行修復，記錄到本地日誌，不上報 Issue |
-| 涉及架構決策（新增文件類型、修改 semantic-release 配置） | [FRAMEWORK] | 調用 skill_issue_reporter.py → **必須上報主人決策** |
-| 主人主動發現問題 | 任意 | 主人創建 Issue，Agent 修復 |
-
-### Issue 生成指令
-
-```bash
-# Agent 推薦方式：從 stdin 讀取 JSON
-cat << 'EOF' | python skill_issue_reporter.py --skill-dir ./{skill_name}/ --from-stdin --output-dir ./improve/issues
-{
-  "classification": "[RUNTIME]",
-  "summary": "問題摘要（>=50中文字符）",
-  "reproduction_steps": [
-    {"step": 1, "action": "操作", "parameters": "參數", "result": "結果"}
-  ],
-  "root_cause": {
-    "location": "文件路徑+行號",
-    "phenomenon": "觀察到的代碼邏輯",
-    "problem": "邏輯錯誤點",
-    "consequence": "導致的結果"
-  },
-  "attempted_fixes": [],
-  "proposed_fix": {
-    "solution": "建議修復方案",
-    "impact_scope": "影響範圍",
-    "risk": "低/中/高",
-    "expected_result": "預期結果"
-  }
-}
-EOF
-```
-
-**禁止**：
-- 禁止 Agent 直接撰寫 Issue Markdown
-- 禁止不經過 skill_issue_reporter.py 驗證直接創建 Issue
-- 禁止 [FRAMEWORK] 問題不經主人決策直接修復
-
----
-
 ## 紅線
 
 - [ ] 禁止擅自改進（必須建議 → 等待確認）
@@ -320,7 +265,6 @@ EOF
 - [ ] 禁止不考慮臨時文件管理（v1.2.4 新增）
 - [ ] **禁止直接 open()/write_text() 寫入文件（v1.2.5 新增）**
 - [ ] **禁止調用舊名稱腳本（v1.2.5 新增）**
-- [ ] **禁止自由發揮撰寫 Issue（v1.2.5 新增）**
 
 ---
 
@@ -346,16 +290,12 @@ EOF
 - 動作：優化 JSON 文件機制 → 測試不同長度閾值 → 報告主人
 - 禁止：回到「寫臨時腳本」方案
 
-### Issue 報告被拒絕（v1.2.5 新增）
-- 輸出：[ISSUE-REJECTED] Section {N} 字數不足
-- 動作：擴充對應 Section 內容 → 重新調用 skill_issue_reporter.py
-- 禁止：繞過字數驗證直接創建 Issue
 
 ---
 
 ## 版本鎖定
 
-LOCK v1.2.5 PERMANENT — 操作手冊定位、建議確認機制、Patch 應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查、Guardian Pattern 事前強制、腳本更名規範、標準 Issue 報告器。
+LOCK v1.2.5 PERMANENT — 操作手冊定位、建議確認機制、Patch 應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查、Guardian Pattern 事前強制、腳本更名規範、。
 
 ---
 
