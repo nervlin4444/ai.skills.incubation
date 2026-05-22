@@ -1,18 +1,16 @@
 ---
-title: "Skill Improvement Operations Manual"
-name: "agent-skill-improving"
-description: "技能改進操作手冊的人類可讀說明書。涵蓋操作手冊定位、建議確認機制、Patch應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查。融入conversation_append.py v1.4.0長文件經驗。"
-version: "v1.2.4"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-21T15:28:00+08:00"
-
+title: Skill Improvement Operations Manual
+name: agent-skill-improving
+description: 技能改進操作手冊。涵蓋Guardian Pattern事前強制架構、腳本更名規範、Patch應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查。融入conversation_append.py v1.4.0長文件經驗及github-skill-organizer v1.0.4-v1.0.12教訓。
+version: v1.2.5
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-22T17:00:00+08:00
 auth_config:
-  provider: "github"
-  auth_method: "token"
-  token_env_var: "GITHUB_TOKEN"
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
   env_file_path: "{baseDir}/.env"
-
 file_mapping:
   - local_path: "{baseDir}/README.md"
     github_path: "agent-skill-improving/README.md"
@@ -20,214 +18,259 @@ file_mapping:
 
 # agent-skill-improving — 技能改進操作手冊
 
-> 版本：v1.2.4
-> 對齊：SKILL.md v1.2.4 + SOUL.md v5.0 + IDENTITY.md v5.0
-> 更新重點：**跨平台兼容檢查、長內容處理檢查、臨時JSON文件管理**
+> 當前版本：v1.2.5
+> 配套文件：SKILL.md v1.2.5 + SOUL.md v5.0 + IDENTITY.md v5.0
+> **核心變更：v1.2.5 引入 Guardian Pattern 事前強制架構，腳本全面更名**
 
 ---
 
-## 一、技能定位（核心改變）
+## 一、定位與原則
 
-agent-skill-improving **不是執行指令，是操作手冊**。
+agent-skill-improving **不是給 Agent 自由發揮的技能**，而是**框架守衛**。
 
-| 舊理解 | 新理解 |
-|:---|:---|
-| 「發現缺陷就改」 | **「發現缺陷 → 建議主人 → 等待確認 → 按手冊執行」** |
-| Agent 擅自改進 | Agent 只負責「建議」，改進權在主人 |
-| 直接修改原始檔案 | 必須以 Patch 形式，備份後應用 |
-| **只驗證功能正確（舊）** | **還要驗證跨平台兼容、長內容處理、臨時文件管理（v1.2.4 新增）** |
+| 角色 | 說明 |
+|------|------|
+| Agent | 執行改進操作（Patch 應用、合規驗證）|
+| 主人 | 現場定框架、審核 [FRAMEWORK] 級 Issue |
+| 本技能 | **用代碼強制 Agent 遵守規範**，而非語言勸說 |
 
-**為何改為操作手冊？**
-- 技能是主人的資產，Agent 不應擅自修改
-- 改進有風險，必須經主人知情/確認
-- 操作手冊確保「每次改進都按同一套標準執行」
+**核心原則：用代碼約束 Agent，而非語言。**
+Agent 不會記住規則，但 Agent 會調用腳本。Guardian Pattern 確保 Agent 在犯錯之前就被阻止。
 
 ---
 
-## 二、核心工作流：三步操作
+## 二、Guardian Pattern 架構（v1.2.5 新增）
 
-### Step 1：發現缺陷（內部思考）
+### 2.1 三層防禦
 
-Agent 內部默念口訣：
+```
+Agent 想創建/修改文件
+        ↓
+┌─────────────────────────────────────────┐
+│ 第一層：Framework Guard（框架守衛）      │
+│ 腳本：skill_files_designer.py           │
+│ 作用：Agent 禁止直接 open()/write_text() │
+│       必須通過腳本生成 frontmatter       │
+│ 結果：無法生成沒有身份證的文件            │
+└─────────────────────────────────────────┘
+        ↓ PASS
+┌─────────────────────────────────────────┐
+│ 第二層：Self-Diagnosis（自我診斷）       │
+│ 腳本：skill_integrity_checker.py        │
+│ 作用：修改後自動執行 23+ 項合規檢查      │
+│ 結果：發現問題立即報錯，不上傳            │
+└─────────────────────────────────────────┘
+        ↓ PASS
+┌─────────────────────────────────────────┐
+│ 第三層：Issue Classifier（問題分類）     │
+│ 作用：區分 [FRAMEWORK] / [RUNTIME] / [AGENT-BUG]│
+│ 結果：只有 [FRAMEWORK] 上報主人           │
+└─────────────────────────────────────────┘
+```
 
-    缺。改。問。
+### 2.2 腳本更名對照表（v1.2.5）
 
-- 缺：什麼技能？什麼版本？什麼缺陷？
-- 改：建議怎麼修復？影響多大？
-- **新增（v1.2.4）：是否涉及跨平台？是否涉及長內容？是否涉及臨時文件？**
-- 問：建議主人，等待確認
+| 舊名稱 | 新名稱 | 功能 |
+|--------|--------|------|
+| skill_validate.py | **skill_integrity_checker.py** | 合規檢查器（23+ 項檢查 + 8 項紅線）|
+| skill_improving.py | **skill_patch_validator.py** | Patch 應用與驗證 |
+| frontmatter_generator.py + file_creation_guard.py | **skill_files_designer.py** | 文件設計器（生成 frontmatter + 攔截直接寫入）|
+| skill_bootstrap.py | **skill_folder_designer.py** | 文件夾設計器（初始化技能目錄結構）|
 
-### Step 2：建議主人（輸出給用戶）
+**舊名稱腳本已廢棄，Agent 必須使用新名稱。**
 
-    [SUGGEST] agent-skill-improving
-    Skill: {技能名稱} v{版本}
-    Defect: {缺陷描述}
-    Impact: {影響範圍}
-    Cross-Platform: {是否涉及跨平台兼容}
-    Long-Content: {是否涉及長文件處理}
-    Proposed Fix: {建議修復方式}
-    Confirm: [YES / NO / DEFER]
+### 2.3 身份證制度（強制）
 
-**禁止**：
-- 禁止不輸出建議就直接改代碼
-- 禁止建議不明確
-- 禁止不等確認就執行
+所有技能文件（.md / .py / .json / .html）必須包含統一 frontmatter/docstring。
+沒有身份證的文件是**非法的**，不能上傳，必須報錯。
 
-### Step 3：按手冊執行（主人確認後）
+```yaml
+---
+title: 描述性標題（≠ name）
+name: 技能名（固定）
+description: 描述
+version: x.x.x
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-22T17:00:00+08:00
+auth_config:
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: "{baseDir}/.env"
+file_mapping:
+  - local_path: "{baseDir}/文件名.擴展名"
+    github_path: "技能名/文件名.擴展名"
+---
+```
 
-主人說 YES 後，嚴格按順序：
-
-    1. 備份舊版本
-    2. 生成 Patch
-    3. 應用 Patch（replace_in_file → 重試 → write_to_file 降級）
-    4. 更新版本號
-    5. 驗證合規（skill_validate.py --strict）
-    6. **驗證跨平台（v1.2.4 新增）**
-    7. **驗證長內容（v1.2.4 新增）**
-    8. **驗證臨時文件（v1.2.4 新增）**
-    9. 記錄歷史
-    10. 通知 skill-acquiring
-
-**禁止跳過任何一步。**
+**注意：github_path 禁止前導 "/"，必須是相對路徑。**
 
 ---
 
-## 三、新增驗證項（v1.2.4）
+## 三、操作手冊
 
-### 驗證 6：跨平台兼容性
+### Step 1：確認改進目標（主人審核）
 
-改進涉及腳本執行時，必須檢查：
+Agent 確認改進目標：
 
-| 檢查項 | Windows | Linux/macOS | 通過標準 |
-|--------|---------|-------------|----------|
-| 路徑分隔符 | `\` 或 `/` | `/` | 使用 `pathlib.Path`，禁止硬編碼 |
-| 命令行長度限制 | 8191 字符 | 通常無限制 | 長內容用 `--from-file`，不用命令行 |
-| 引號轉義 | PowerShell `"` 地獄 | Bash 單引號友好 | JSON 文件傳遞，避免引號問題 |
-| 編碼聲明 | cp950 風險 | UTF-8 默認 | 文件必須用 UTF-8，聲明 `# -*- coding: utf-8 -*-` |
-| 換行符 | `\r\n` | `\n` | Python 自動處理，無需擔心 |
+- 目標技能：**{技能名稱}** v{版本}
+- 改進類型：**{patch / refactor / docs}**
+- 跨平台：**{Windows / Linux/macOS / 通用}**
+- 長內容：**{是 / 否}**
 
-**為何需要？**
-0513 實戰教訓：Agent 在 Windows 用 PowerShell 生成 JSON 文件，但沒考慮 Linux/macOS 的 `echo` 語法差異，導致跨平台部署失敗。
+**[SUGGEST] agent-skill-improving**
+Skill: **{技能名}** v{版本}
+Defect: **{缺陷描述}**
+Impact: **{影響範圍}**
+Cross-Platform: **{平台}**
+Long-Content: **{是否長內容}**
+Proposed Fix: **{建議修復}**
+Confirm: [YES / NO / DEFER]
 
-**失敗處理**：若某平台不兼容，必須在 Patch 中說明「已知限制：{平台} 需 {解決方案}」。
+**確認後執行：**
 
-### 驗證 7：長內容處理
+### Step 2：改進執行（Agent 操作）
 
-改進涉及內容傳遞時，必須測試：
+```bash
+# 1. 合規檢查（改進前）
+python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict
 
-    Test A: 短內容（< 500 字符）→ 用 --user-input / --agent-response
-    Test B: 長內容（> 500 字符）→ 用 --from-file JSON 文件
-    Test C: 超長內容（> 50KB）→ 檢查 max_block_size，可能需要拆分
+# 2. 應用 Patch
+python skill_patch_validator.py --skill-dir ./{skill_name}/ --patch-file ./improve/{skill_name}/PATCH.md
 
-**為何需要？**
-0513 實戰教訓：Agent 輸出長回覆後，用 `--user-input` 硬塞命令行，結果被 Windows 8191 字符限制截斷，備份不完整。
+# 3. 合規檢查（改進後）
+python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict --report-path ./improve/{skill_name}/VALIDATION_REPORT.md
 
-**失敗處理**：若長內容處理失敗，禁止回到「寫臨時腳本」方案，必須優化 JSON 文件機制。
+# 4. 上傳驗證（通過後）
+python skill_files_designer.py --validate-only --skill-dir ./{skill_name}/
+```
 
-### 驗證 8：臨時文件管理
+### Step 3：上傳與閉環
 
-改進涉及 `--from-file` 時，必須確認：
-
-| 檢查項 | 要求 | 禁止 |
-|--------|------|------|
-| 臨時 JSON 文件位置 | 放在系統 temp 目錄或技能 assets/temp/ | 放在用戶桌面、文件等永久目錄 |
-| 文件命名 | backup_{conv_id}_{timestamp}.json | backup.json、temp.json 等無標識名稱 |
-| 編碼 | UTF-8，無 BOM | cp950、Big5、GBK |
-| 清理機制 | 備份成功後可選刪除 | 堆積不清理 |
-| 文件內容 | 純 JSON 數據，無執行代碼 | 包含 Python 代碼、shell 命令 |
-
-**重要**：臨時 JSON 文件 **不是臨時腳本**：
-- 不是 `.py` 文件（無執行代碼）
-- 只是 UTF-8 數據文件
-- 不違反 SOUL v5.0「禁止臨時腳本」禁令
+```bash
+# 上傳改進後的技能
+# commit message 必須包含 Fixes #{issue_number} 以自動關閉 Issue
+```
 
 ---
 
-## 四、Patch 應用策略分級
+## 四、腳本詳細說明
 
-| 策略 | 條件 | 操作 | 前置要求 |
-|:---|:---|:---|:---|
-| A replace_in_file | 首次嘗試 | 精確字符串替換 | 無 |
-| B 重試 | A 失敗（全形標點/編碼差異） | 修正匹配條件 | 記錄失敗原因 |
-| C write_to_file 降級 | B 連續失敗 >= 3 次 | 重寫整個文件 | **已備份舊版本** |
+### 4.1 skill_integrity_checker.py（合規檢查器）
 
-**為何需要分級？**
+**功能**：掃描技能目錄，執行 23+ 項合規檢查 + 8 項架構紅線。
 
-0512 實戰教訓：Agent 反覆嘗試 replace_in_file 失敗，陷入「分析為什麼失敗」的無限循環，花了幾十分鐘才靠 write_to_file 解決。
+**檢查項（v1.2.5 新增）**：
+- frontmatter 字段完整性（所有必填字段是否存在）
+- github_path 前導 "/" 檢查（禁止前導斜杠）
+- updated_at ISO 8601 格式驗證
+- version 一致性（所有文件 version 必須相同）
+- file_mapping 完整性（local_path 和 github_path 必須成對）
+- 文件名規範（xxx.yyy.zzz.ext，禁止 - 和 _）
+- 必要文件結構（SKILL.md、README.md 等）
 
-v1.2.4 的解決方案：
-- 最多分析 3 次失敗原因
-- 第 4 次直接降級 write_to_file
-- 禁止無限糾結
+**用法**：
+```bash
+python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict
+```
+
+### 4.2 skill_patch_validator.py（Patch 驗證器）
+
+**功能**：應用 Patch、驗證、回滾保護。
+
+**策略分級**：
+| 策略 | 風險 | 說明 |
+|------|------|------|
+| A replace_in_file | 低 | 精確替換，可逆 |
+| B 多行插入 | 中 | 需確認上下文匹配 |
+| C write_to_file 覆蓋 | 高 | 強制備份，超過 3 次需主人確認 |
+
+**用法**：
+```bash
+python skill_patch_validator.py --skill-dir ./{skill_name}/ --patch-file PATCH.md
+```
+
+### 4.3 skill_files_designer.py（文件設計器）
+
+**功能**：生成標準 frontmatter + 攔截直接寫入操作。
+
+**核心機制**：
+- Agent 禁止直接 `open()` / `write_text()` 創建 .md/.py/.json/.html
+- 必須通過 `skill_files_designer.py` 生成 frontmatter 後再寫入
+- 自動填充 github_repository、target_branch、file_mapping
+- 支持 .py 文件的 docstring YAML 塊格式
+
+**用法**：
+```python
+from skill_files_designer import SkillFileWriter
+
+with SkillFileWriter(
+    file_path="scripts/new_module.py",
+    skill_name="github-skill-organizer",
+    description="Handles new feature"
+) as writer:
+    writer.write("# 業務代碼...")
+    # 自動在文件開頭插入 frontmatter
+```
+
+### 4.4 skill_folder_designer.py（文件夾設計器）
+
+**功能**：初始化新技能目錄結構，自動生成所有必要文件的 frontmatter。
+
+**生成結構**：
+```
+new-skill/
+├── README.md（含 frontmatter）
+├── LLM/SKILL.md（含 frontmatter）
+├── scripts/（可選）
+├── config/（可選）
+└── assets/（可選）
+```
+
+**用法**：
+```bash
+python skill_folder_designer.py --name "new-skill" --description "..." --version "1.0.0"
+```
 
 ---
 
-## 五、強制合規驗證
-
-應用 Patch 後、交付前，必須執行：
-
-    python skill_validate.py --skill-dir ./{skill_name}/ --strict --report-path ./improve/{skill_name}/VALIDATION_REPORT.md
-
-通過標準：
-- 0 項 CRITICAL 違規
-- 0 項 ARCH 架構紅線違規
-- **跨平台兼容檢查通過（v1.2.4 新增）**
-- **長內容處理檢查通過（v1.2.4 新增）**
-- **臨時文件管理檢查通過（v1.2.4 新增）**
-- 報告已輸出
-
-**驗證失敗 → 自動回滾 → 報告主人 → 禁止交付。**
-
----
-
-## 六、與 SOUL.md v5.0 的協作
-
-| SOUL 口訣 | skill-improving 對應 |
-|:---|:---|
-| 先。啟。動。 | 對話開始時讀取記憶，回顧歷史缺陷 |
-| 備。歸。檔。 | 改進前備份舊版本 |
-| 問。清。楚。 | 建議改進前說清楚缺陷和修復方式 |
-| 完。了。嗎。下。一。層。 | 改進完成後建議是否需要 skill-acquiring |
-
----
-
-## 七、常見問題
-
-**Q：為什麼 Agent 不能擅自改進？**
-A：技能是主人的資產。Agent 是僕，不是主。擅自改進 = 越權。
-
-**Q：主人說 NO 怎麼辦？**
-A：記錄到 SKILL_CORRECTION.md：「建議被拒絕，原因：{主人理由}」。長期累積後，Agent 會學習主人的偏好。
-
-**Q：驗證失敗但改進內容邏輯正確怎麼辦？**
-A：違規項通常涉及架構紅線（檔案命名、frontmatter 格式）。先修復違規項，重新驗證通過後方可交付。禁止繞過驗證。
-
-**Q：replace_in_file 反覆失敗怎麼辦？**
-A：3 次失敗後直接降級 write_to_file，禁止無限分析。但必須先備份。
-
-**Q：跨平台兼容失敗怎麼辦？**
-A：在 Patch 中標註「已知限制：{平台} 需 {解決方案}」。例如「Linux 用戶需手動將 `\` 改為 `/`」。
-
-**Q：長內容處理失敗怎麼辦？**
-A：禁止回到「寫臨時腳本」方案。優化 JSON 文件機制：檢查文件編碼、確認 JSON 格式正確、測試不同長度閾值。
-
-**Q：臨時 JSON 文件算臨時腳本嗎？**
-A：**不算**。JSON 文件是純數據文件，不是 `.py` 執行文件。它不違反 SOUL v5.0「禁止臨時腳本」禁令。
-
----
-
-## 八、版本歷史
+## 五、版本迭代記錄
 
 | 版本 | 日期 | 變更內容 |
-|:---|:---|:---|
-| v1.2.0 | 2026-05-11 | 初始版本：趨勢分析、Patch 生成、回滾保護 |
-| v1.2.1 | 2026-05-11 | 新增強制合規驗證（skill_validate.py） |
-| v1.2.2 | 2026-05-12 | 新增 Patch 應用策略分級（replace_in_file → write_to_file 降級） |
-| v1.2.3 | 2026-05-13 | 改為操作手冊定位、建議確認機制、漸進式披露、內部思考後建議 |
-| **v1.2.4** | **2026-05-13** | **新增跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查** |
+|------|------|---------|
+| v1.2.0 | 2026-05-11 | 初始版本，涵蓋 Patch 應用策略分級 |
+| v1.2.1 | 2026-05-11 | 新增 skill_integrity_checker.py（原 skill_validate.py）合規驗證 |
+| v1.2.2 | 2026-05-12 | Patch 應用策略細化（replace_in_file vs write_to_file）|
+| v1.2.3 | 2026-05-13 | 新增跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查 |
+| v1.2.4 | 2026-05-13 | 新增強制合規驗證、frontmatter 統一規範、身份證制度 |
+| **v1.2.5** | **2026-05-22** | **引入 Guardian Pattern 事前強制架構、腳本全面更名、github_path 前導 "/" 防禦處理、Issue 自動閉環機制** |
 
 ---
 
-*人類可讀解釋書 v1.2.4*
-*本文件是操作手冊，不是執行指令。*
-*發現缺陷 → 建議主人 → 等待確認 → 按手冊執行。*
+## 六、常見問題（Q&A）
+
+**Q1：為什麼要更名腳本？**
+A：舊名稱（skill_validate、skill_improving）語義模糊，Agent 容易誤解。新名稱（skill_integrity_checker、skill_patch_validator）明確表達功能，減少誤用。
+
+**Q2：為什麼禁止 Agent 直接寫入文件？**
+A：v1.0.4-1.0.11 的教訓證明，Agent 會反覆生成沒有 frontmatter 的文件。只有通過腳本強制插入 frontmatter，才能保證 100% 合規。
+
+**Q3：什麼是 [FRAMEWORK] Issue？**
+A：涉及架構決策的問題（如"是否需要新增文件類型？"、"semantic-release 配置如何調整？"）。這類問題 Agent 不能自行決定，必須上報主人。
+
+**Q4：如何做到 Issue 自動閉環？**
+A：Agent 發現 [RUNTIME] 問題 → 創建 Issue → 自行修復 → Commit message 包含 `Fixes #{issue_number}` → GitHub 自動關閉 Issue → Agent 本地驗證。只有 [FRAMEWORK] 問題需要主人介入。
+
+---
+
+## 七、配套文件
+
+| 文件 | 說明 |
+|------|------|
+| SKILL.md | LLM 執行指令（含 LOCK-009~012）|
+| SOUL.md v5.0 | 人格定義 |
+| IDENTITY.md v5.0 | 身份定義 |
+| scripts/USAGE.md | 腳本使用教程 |
+| assets/SKILL.CORRECTIONS.md | 技能修正記錄 |
+| assets/SCRIPT.CORRECTIONS.md | 腳本修正記錄 |
