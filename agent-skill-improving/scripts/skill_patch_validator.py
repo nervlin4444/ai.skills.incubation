@@ -1,858 +1,580 @@
 """
 ---
-title: "Skill Patch Validator - Post-Modification Improvement & Validation"
-name: "agent-skill-improving"
-description: "Analyzes existing skill bundles after modification, identifies deviations from established conventions, generates patch recommendations, and validates against known traps from v1.0.4-1.0.11 lessons. Integrates with integrity checker for comprehensive validation. Auto-classifies issues as [FRAMEWORK], [RUNTIME], or [AGENT-BUG]."
+title: "Skill Patch Validator - 技能補丁驗證與應用器"
+name: agent-skill-improving
+description: "讀取、驗證、應用技能補丁（Patch），支持干跑預覽與自動回滾。禁止直接手動修改技能文件。"
 version: "1.2.5"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T18:26:00+08:00"
+updated_at: "2026-05-22T22:38:00+08:00"
 auth_config:
   provider: "github"
-  auth_method: "token"
+  auth_method: "personal_access_token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
 file_mapping:
-  local_path: "{baseDir}/skill_patch_validator.py"
+  local_path: "scripts/skill_patch_validator.py"
   github_path: "agent-skill-improving/scripts/skill_patch_validator.py"
 ---
 """
 
 import os
 import sys
-import re
 import json
-import argparse
+import re
+import shutil
+import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import List, Dict, Tuple, Optional, Set
-from dataclasses import dataclass, field, asdict
-from enum import Enum
-
-
-class IssueCategory(Enum):
-    """Three-layer defense mechanism issue classification."""
-    FRAMEWORK = "[FRAMEWORK]"      # Framework issues requiring owner decision
-    RUNTIME = "[RUNTIME]"          # Runtime issues agent can handle
-    AGENT_BUG = "[AGENT-BUG]"      # Agent violated known conventions
-
-
-class Severity(Enum):
-    CRITICAL = "CRITICAL"    # Blocks upload/execution
-    HIGH = "HIGH"            # Must fix before release
-    MEDIUM = "MEDIUM"        # Should fix, not blocking
-    LOW = "LOW"              # Nice to have
-
-
-@dataclass
-class ValidationIssue:
-    """Standard issue record for skill validation."""
-    category: IssueCategory
-    severity: Severity
-    file_path: str
-    check_id: str
-    title: str
-    description: str
-    root_cause: str = ""
-    attempted_fix: str = ""
-    suggested_fix: str = ""
-    line_number: int = 0
-    snippet: str = ""
-
-    def to_dict(self) -> Dict:
-        return {
-            "category": self.category.value,
-            "severity": self.severity.value,
-            "file_path": self.file_path,
-            "check_id": self.check_id,
-            "title": self.title,
-            "description": self.description,
-            "root_cause": self.root_cause,
-            "attempted_fix": self.attempted_fix,
-            "suggested_fix": self.suggested_fix,
-            "line_number": self.line_number,
-            "snippet": self.snippet,
-        }
+from typing import List, Dict, Optional, Tuple, Any
 
 
 class SkillPatchValidator:
     """
-    Post-modification validator for skill bundles.
+    LOCK v1.2.5: 技能補丁驗證與應用器
 
-    Implements three-layer defense:
-    - Layer 1: Framework Guard (naming, frontmatter, path safety)
-    - Layer 2: Self-Diagnosis (known traps from v1.0.4-1.0.11)
-    - Layer 3: Issue Classifier (auto-tag FRAMEWORK/RUNTIME/AGENT-BUG)
+    職責：
+    1. 讀取並驗證 patch 文件的合法性
+    2. 干跑預覽（dry-run）確認變更內容
+    3. 應用 patch 並自動備份原文件
+    4. 應用後自動調用 skill_integrity_checker 驗證
+    5. 支持回滾到上一版本
+
+    安全規則：
+    - 禁止修改無 frontmatter 的文件
+    - 禁止刪除文件（只能替換內容）
+    - 禁止修改 .env 或憑證相關文件
+    - 備份保留在 .backups/（上傳時自動排除）
     """
 
-    # Known traps from v1.0.4 to v1.0.11 (per memory #34)
-    KNOWN_TRAPS = {
-        "TRAP-001": "compare_skill path prefix misalignment",
-        "TRAP-002": "action判定遺漏local_only",
-        "TRAP-003": "upload_skill frontmatter overwritten by files[0]",
-        "TRAP-004": "API placeholder called without replacement",
-        "TRAP-005": "skill_dir_name using temp directory name",
-        "TRAP-006": "local_dir derived from files[0] pointing to parent",
-        "TRAP-007": "expanduser(~) not expanded",
-        "TRAP-008": "frontmatter validation too strict for all files",
-        "TRAP-009": "semantic-release CHANGELOG.md missing frontmatter",
-        "TRAP-010": "upload_skill not filtering files list",
-        "TRAP-011": "github_path leading slash causing double slash",
-        "TRAP-012": "missing _is_excluded_path check for parent dirs",
-        "TRAP-013": "_create_clean_temp_dir not using exclusion filter",
-        "TRAP-014": "CHANGELOG validation skipped incorrectly",
-    }
-
-    # Excluded paths (per memory #28)
-    EXCLUDED_PATTERNS = [
-        r"__pycache__",
-        r"\.backups",
-        r"\.git",
+    # 禁止修改的文件模式
+    PROTECTED_PATTERNS = [
         r"\.env",
-        r"\.env\.local",
-        r"LICENSE$",
-        r"\.pyc$",
-        r"\.log$",
+        r"\.env\.example",
+        r".*token.*",
+        r".*secret.*",
+        r".*credential.*",
+        r".*password.*",
     ]
 
-    REQUIRED_FRONTMATTER_FIELDS = [
-        "title", "name", "description", "version",
-        "github_repository", "target_branch", "updated_at",
-        "auth_config", "file_mapping"
-    ]
+    def __init__(self, skill_dir: str):
+        self.skill_dir = Path(os.path.expanduser(str(skill_dir))).resolve()
+        self.backups_dir = self.skill_dir / ".backups"
+        self.last_patch_record: Optional[Dict] = None
+        self._ensure_backups_dir()
 
-    def __init__(self, skill_dir: str, strict: bool = True):
-        self.skill_dir = Path(skill_dir).expanduser().resolve()
-        self.strict = strict
-        self.issues: List[ValidationIssue] = []
-        self.timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+08:00")
-        self._file_cache: Dict[str, str] = {}  # path -> content cache
+    def _ensure_backups_dir(self) -> None:
+        """確保備份目錄存在。"""
+        self.backups_dir.mkdir(parents=True, exist_ok=True)
 
-    def _is_excluded_path(self, path: Path) -> bool:
-        """Check if path should be excluded from validation."""
-        path_str = str(path)
-        for pattern in self.EXCLUDED_PATTERNS:
-            if re.search(pattern, path_str):
+    def _is_protected_file(self, relative_path: str) -> bool:
+        """檢查文件是否受保護（禁止修改）。"""
+        lower = relative_path.lower()
+        for pattern in self.PROTECTED_PATTERNS:
+            if re.search(pattern, lower):
                 return True
         return False
 
-    def _load_file(self, file_path: Path) -> Optional[str]:
-        """Load file content with caching."""
-        key = str(file_path)
-        if key not in self._file_cache:
-            try:
-                self._file_cache[key] = file_path.read_text(encoding="utf-8")
-            except Exception as e:
-                self._add_issue(
-                    category=IssueCategory.RUNTIME,
-                    severity=Severity.HIGH,
-                    file_path=key,
-                    check_id="FILE-001",
-                    title="File read failure",
-                    description=f"Cannot read file: {e}",
-                )
-                return None
-        return self._file_cache[key]
-
-    def _add_issue(self, **kwargs) -> None:
-        """Add an issue to the collection."""
-        self.issues.append(ValidationIssue(**kwargs))
-
-    def _extract_frontmatter(self, content: str, file_path: Path) -> Optional[Dict]:
-        """Extract frontmatter from .md (YAML) or .py (docstring YAML)."""
-        ext = file_path.suffix.lower()
-
-        if ext == ".md":
-            # YAML frontmatter between ---
-            match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
-            if match:
-                return self._parse_yaml_frontmatter(match.group(1), str(file_path))
-        elif ext == ".py":
-            # Docstring YAML block between """ and ---
-            match = re.search(r'"""\s*\n---\s*\n(.*?)\n---\s*\n"""', content, re.DOTALL)
-            if match:
-                return self._parse_yaml_frontmatter(match.group(1), str(file_path))
-        elif ext in [".json", ".html"]:
-            # For files that don't support frontmatter natively,
-            # check first comment block or directory-level mapping
-            # (Simplified: check for YAML in first 500 chars)
-            match = re.search(r"^\s*/*\s*---\s*\n(.*?)\n---", content, re.DOTALL)
-            if match:
-                return self._parse_yaml_frontmatter(match.group(1), str(file_path))
-
-        return None
-
-    def _parse_yaml_frontmatter(self, yaml_text: str, file_path: str) -> Optional[Dict]:
-        """Parse simple YAML frontmatter (not full YAML parser)."""
-        result = {}
-        current_key = None
-        current_dict = None
-
-        for line in yaml_text.strip().split("\n"):
-            line = line.rstrip()
-            if not line or line.startswith("#"):
-                continue
-
-            # Check for nested dict (2-space indent + key:)
-            indent_match = re.match(r"^(\s+)(\w+):\s*(.*)$", line)
-            if indent_match and current_key and isinstance(result.get(current_key), dict):
-                indent, sub_key, sub_val = indent_match.groups()
-                result[current_key][sub_key] = sub_val.strip().strip('"').strip("'")
-                continue
-
-            # Top-level key
-            match = re.match(r"^(\w+):\s*(.*)$", line)
-            if match:
-                key, val = match.groups()
-                val = val.strip().strip('"').strip("'")
-                if val == "":
-                    result[key] = {}  # Expect nested values
-                    current_key = key
-                else:
-                    result[key] = val
-
-        return result if result else None
-
-    # ==================== CHECK METHODS ====================
-
-    def check_frontmatter_completeness(self, file_path: Path, content: str) -> None:
-        """CHECK-001: Verify all required frontmatter fields present."""
-        fm = self._extract_frontmatter(content, file_path)
-        file_str = str(file_path.relative_to(self.skill_dir))
-
-        if fm is None:
-            # Special case: CHANGELOG.md may be auto-generated (per memory #34)
-            if file_path.name == "CHANGELOG.md":
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.MEDIUM,
-                    file_path=file_str,
-                    check_id="CHECK-001A",
-                    title="CHANGELOG.md missing frontmatter",
-                    description="Auto-generated CHANGELOG.md lacks frontmatter. Run CI post-processing to inject identity block.",
-                    suggested_fix="Add release_v2_dynamic.yml workflow to inject frontmatter after semantic-release generation.",
-                )
-                return
-
-            self._add_issue(
-                category=IssueCategory.AGENT_BUG,
-                severity=Severity.CRITICAL,
-                file_path=file_str,
-                check_id="CHECK-001",
-                title="Missing frontmatter identity block",
-                description="File lacks required frontmatter/docstring YAML block. All skill files must carry identity card.",
-                root_cause="Agent created file without using skill_files_designer or frontmatter_generator.",
-                suggested_fix="Re-generate file using skill_files_designer.py or manually inject standard frontmatter.",
-            )
-            return
-
-        missing = [f for f in self.REQUIRED_FRONTMATTER_FIELDS if f not in fm]
-        if missing:
-            self._add_issue(
-                category=IssueCategory.AGENT_BUG,
-                severity=Severity.CRITICAL,
-                file_path=file_str,
-                check_id="CHECK-001B",
-                title="Incomplete frontmatter fields",
-                description=f"Missing required fields: {', '.join(missing)}",
-                suggested_fix=f"Add missing fields to frontmatter: {missing}",
-            )
-
-    def check_naming_convention(self, file_path: Path) -> None:
-        """CHECK-002: Verify file naming conventions."""
-        file_str = str(file_path.relative_to(self.skill_dir))
-        name = file_path.name
-
-        # .py files: underscore allowed (exempt from dot rule, per memory #13)
+    def _has_frontmatter(self, file_path: Path) -> bool:
+        """檢查文件是否包含 frontmatter。"""
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except Exception:
+            return False
         if file_path.suffix == ".py":
-            if "-" in name:
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=file_str,
-                    check_id="CHECK-002",
-                    title="Python file uses hyphen",
-                    description=".py files must use underscore separator, not hyphen.",
-                    suggested_fix=f"Rename to {name.replace('-', '_')}",
+            return "---" in content and "title:" in content and "name:" in content
+        return content.strip().startswith("---") and "title:" in content
+
+    def _backup_file(self, target_file: Path) -> Tuple[bool, str, Optional[Path]]:
+        """
+        備份目標文件到 .backups/。
+
+        Returns:
+            (success, message, backup_path)
+        """
+        if not target_file.exists():
+            return True, "[BACKUP] 原文件不存在，無需備份", None
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        checksum = hashlib.sha256(target_file.read_bytes()).hexdigest()[:8]
+        backup_name = f"{target_file.name}.{timestamp}.{checksum}.bak"
+        backup_path = self.backups_dir / backup_name
+
+        try:
+            shutil.copy2(target_file, backup_path)
+        except Exception as e:
+            return False, f"[BACKUP-FAIL] 無法備份 {target_file}: {e}", None
+
+        return True, f"[BACKUP-OK] {target_file.name} -> {backup_name}", backup_path
+
+    def load_patch(self, patch_path: str) -> Dict:
+        """
+        讀取 patch 文件。
+
+        支持格式：JSON
+
+        Returns:
+            dict: patch 內容或錯誤信息
+        """
+        p = Path(os.path.expanduser(str(patch_path)))
+        if not p.exists():
+            return {"status": "error", "reason": f"[LOAD] Patch 文件不存在: {p}"}
+
+        try:
+            content = p.read_text(encoding="utf-8")
+            patch = json.loads(content)
+        except json.JSONDecodeError as e:
+            return {"status": "error", "reason": f"[LOAD] JSON 解析失敗: {e}"}
+        except Exception as e:
+            return {"status": "error", "reason": f"[LOAD] 讀取失敗: {e}"}
+
+        return {"status": "loaded", "patch": patch, "path": str(p)}
+
+    def validate_patch(self, patch: Dict) -> Dict:
+        """
+        驗證 patch 合法性。
+
+        檢查項：
+        1. 必填欄位（version, target_skill, changes）
+        2. 目標技能名稱匹配
+        3. 每個 change 的 action 合法性（replace/insert/delete_line）
+        4. 目標文件是否存在且含 frontmatter
+        5. 目標文件不在受保護列表中
+        6. old 內容是否與當前文件匹配（一致性檢查）
+        """
+        if "patch" in patch:
+            patch = patch["patch"]
+
+        errors = []
+        warnings = []
+
+        # 檢查必填欄位
+        required = ["version", "target_skill", "changes"]
+        for field in required:
+            if field not in patch:
+                errors.append(f"[VALIDATE] 缺少必填欄位: {field}")
+
+        if errors:
+            return {"status": "invalid", "errors": errors, "warnings": warnings}
+
+        # 檢查目標技能名稱
+        target_skill = patch.get("target_skill", "")
+        if self.skill_dir.name != target_skill:
+            warnings.append(
+                f"[VALIDATE] 目標技能名稱不匹配: "
+                f"patch={target_skill}, 實際={self.skill_dir.name}"
+            )
+
+        # 檢查每個 change
+        changes = patch.get("changes", [])
+        if not isinstance(changes, list):
+            errors.append("[VALIDATE] changes 必須是列表")
+            return {"status": "invalid", "errors": errors, "warnings": warnings}
+
+        for i, change in enumerate(changes):
+            idx = i + 1
+
+            # 檢查 change 結構
+            if not isinstance(change, dict):
+                errors.append(f"[VALIDATE] change[{idx}] 必須是字典")
+                continue
+
+            file_rel = change.get("file", "")
+            action = change.get("action", "")
+
+            if not file_rel:
+                errors.append(f"[VALIDATE] change[{idx}] 缺少 file")
+                continue
+
+            if action not in ("replace", "insert", "delete_line"):
+                errors.append(
+                    f"[VALIDATE] change[{idx}] action 非法: {action} "
+                    f"(必須為 replace/insert/delete_line)"
                 )
+
+            target_file = self.skill_dir / file_rel
+
+            # 受保護文件檢查
+            if self._is_protected_file(file_rel):
+                errors.append(
+                    f"[VALIDATE] change[{idx}] 目標文件受保護，禁止修改: {file_rel}"
+                )
+                continue
+
+            # 文件存在性與 frontmatter 檢查
+            if not target_file.exists():
+                errors.append(
+                    f"[VALIDATE] change[{idx}] 目標文件不存在: {file_rel}"
+                )
+                continue
+
+            if not self._has_frontmatter(target_file):
+                errors.append(
+                    f"[VALIDATE] change[{idx}] 目標文件無 frontmatter（身份證）: {file_rel}"
+                )
+
+            # 一致性檢查（replace 必須匹配 old）
+            if action == "replace" and "old" in change:
+                current = target_file.read_text(encoding="utf-8")
+                old_content = change["old"]
+                if old_content not in current:
+                    errors.append(
+                        f"[VALIDATE] change[{idx}] old 內容與當前文件不匹配: {file_rel}"
+                    )
+
+        if errors:
+            return {"status": "invalid", "errors": errors, "warnings": warnings}
+
+        return {
+            "status": "valid",
+            "changes_count": len(changes),
+            "warnings": warnings,
+            "patch": patch
+        }
+
+    def apply_patch(self, patch_input: Dict, dry_run: bool = False) -> Dict:
+        """
+        應用 patch。
+
+        Args:
+            patch_input: load_patch 或 validate_patch 的返回結果
+            dry_run: True=僅預覽不寫入
+
+        Returns:
+            dict: 應用結果
+        """
+        # 提取 patch 數據
+        if "patch" in patch_input and isinstance(patch_input["patch"], dict):
+            patch = patch_input["patch"]
+        elif "patch" in patch_input:
+            patch = patch_input
         else:
-            # Non-.py files: dot-separated only, no underscore/hyphen (per memory #4)
-            if "_" in name and "." not in name.replace(".", ""):
-                # Exception: .backups, __pycache__ already excluded
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=file_str,
-                    check_id="CHECK-002B",
-                    title="Non-Python file uses underscore",
-                    description="Non-.py skill files must use dot-separated naming.",
-                    suggested_fix=f"Rename to {name.replace('_', '.')}",
-                )
+            patch = patch_input
 
-    def check_github_path_leading_slash(self, file_path: Path, content: str) -> None:
-        """CHECK-003: Detect github_path with leading slash (per memory #31)."""
-        fm = self._extract_frontmatter(content, file_path)
-        if not fm or "file_mapping" not in fm:
-            return
+        # 先驗證
+        validation = self.validate_patch(patch)
+        if validation["status"] != "valid":
+            return {
+                "status": "rejected",
+                "reason": "驗證失敗，拒絕應用",
+                "validation": validation
+            }
 
-        file_str = str(file_path.relative_to(self.skill_dir))
-        fm_data = fm.get("file_mapping", {})
-        github_path = fm_data.get("github_path", "") if isinstance(fm_data, dict) else ""
+        changes = patch.get("changes", [])
+        results = []
+        backups = []
+        all_success = True
 
-        if github_path.startswith("/"):
-            self._add_issue(
-                category=IssueCategory.AGENT_BUG,
-                severity=Severity.CRITICAL,
-                file_path=file_str,
-                check_id="CHECK-003",
-                title="github_path has leading slash",
-                description=f"github_path '{github_path}' starts with '/'. This causes GitHub API double-slash, compare_skill mismatch, and upload path errors.",
-                root_cause="Agent incorrectly prefixed github_path with '/'.",
-                suggested_fix=f"Change to '{github_path.lstrip('/')}' (relative path, no leading slash).",
-            )
+        print(f"[PATCH] {'[DRY-RUN] ' if dry_run else ''}開始應用 {len(changes)} 個變更...")
 
-    def check_version_consistency(self, all_files: List[Path]) -> None:
-        """CHECK-004: All files in skill must share same version."""
-        versions = {}
-        for fp in all_files:
-            content = self._load_file(fp)
-            if not content:
-                continue
-            fm = self._extract_frontmatter(content, fp)
-            if fm and "version" in fm:
-                versions[str(fp.relative_to(self.skill_dir))] = fm["version"]
+        for i, change in enumerate(changes):
+            file_rel = change["file"]
+            action = change["action"]
+            target_file = self.skill_dir / file_rel
 
-        if len(set(versions.values())) > 1:
-            version_list = "\n".join([f"  {k}: {v}" for k, v in versions.items()])
-            self._add_issue(
-                category=IssueCategory.AGENT_BUG,
-                severity=Severity.HIGH,
-                file_path="SKILL_BUNDLE",
-                check_id="CHECK-004",
-                title="Version inconsistency across files",
-                description=f"Files have different version values:\n{version_list}",
-                root_cause="Agent modified some files without updating version across all files.",
-                suggested_fix="Align all files to the same version number. Use semantic versioning.",
-            )
+            print(f"  [{i+1}/{len(changes)}] {action} -> {file_rel}")
 
-    def check_deletion_safety(self, file_path: Path, content: str) -> None:
-        """CHECK-005: Detect unsafe deletion operations (per memory #21)."""
-        file_str = str(file_path.relative_to(self.skill_dir))
+            # 備份（dry-run 也執行備份邏輯檢查，但不實際複製）
+            if not dry_run:
+                ok, msg, backup_path = self._backup_file(target_file)
+                if not ok:
+                    results.append({
+                        "file": file_rel,
+                        "ok": False,
+                        "msg": msg,
+                        "action": action
+                    })
+                    all_success = False
+                    continue
+                if backup_path:
+                    backups.append(str(backup_path))
 
-        # Dangerous patterns
-        dangerous = [
-            (r"shutil\.rmtree\s*\(", "shutil.rmtree() call detected"),
-            (r"os\.remove\s*\(", "os.remove() call detected"),
-            (r"os\.rmdir\s*\(", "os.rmdir() call detected"),
-            (r"os\.unlink\s*\(", "os.unlink() call detected"),
-            (r"\.write_text\s*\([^)]*", "Direct write_text() call"),
-            (r"open\s*\([^)]*['"]w", "Direct file open() with write mode"),
-        ]
+            # 執行變更
+            if dry_run:
+                ok, msg = True, f"[DRY-RUN] 預覽 {action} 成功"
+            else:
+                ok, msg = self._execute_change(target_file, change)
 
-        for pattern, desc in dangerous:
-            for match in re.finditer(pattern, content):
-                line_num = content[:match.start()].count("\n") + 1
-                snippet = content[max(0, match.start()-30):match.end()+30]
+            results.append({
+                "file": file_rel,
+                "ok": ok,
+                "msg": msg,
+                "action": action
+            })
+            if not ok:
+                all_success = False
 
-                # Check if it's guarded by confirmation logic
-                context = content[max(0, match.start()-200):match.start()]
-                has_confirm = "confirm" in context.lower() or "user" in context.lower()
-
-                severity = Severity.MEDIUM if has_confirm else Severity.CRITICAL
-
-                self._add_issue(
-                    category=IssueCategory.FRAMEWORK if not has_confirm else IssueCategory.RUNTIME,
-                    severity=severity,
-                    file_path=file_str,
-                    check_id="CHECK-005",
-                    title=f"Unsafe file operation: {desc}",
-                    description=f"{desc} without explicit user confirmation mechanism.",
-                    root_cause="Agent may delete/modify files without owner approval.",
-                    suggested_fix="Add confirmation prompt or --confirm flag. Log to cleanup list for owner approval.",
-                    line_number=line_num,
-                    snippet=snippet.replace("\n", " ")[:100],
-                )
-
-    def check_path_safety(self, file_path: Path, content: str) -> None:
-        """CHECK-006: Detect path traversal and unsafe path construction."""
-        file_str = str(file_path.relative_to(self.skill_dir))
-
-        # Check for path traversal patterns
-        traversal_patterns = [
-            r"\.\.[/\\]",  # ../ or ..\
-            r"expanduser.*join.*\.\.",  # expanduser with parent reference
-        ]
-
-        for pattern in traversal_patterns:
-            if re.search(pattern, content):
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=file_str,
-                    check_id="CHECK-006",
-                    title="Potential path traversal vulnerability",
-                    description="Code contains patterns that may allow directory traversal outside intended scope.",
-                    suggested_fix="Use Path.resolve() and validate against allowed base directories.",
-                )
-
-    def check_api_placeholder(self, file_path: Path, content: str) -> None:
-        """CHECK-007: Detect API placeholder not replaced (TRAP-004)."""
-        file_str = str(file_path.relative_to(self.skill_dir))
-
-        placeholder_patterns = [
-            r"YOUR_API_KEY_HERE",
-            r"placeholder",
-            r"example\.com",
-            r"xxxxxx",
-            r"TODO.*API",
-            r"FIXME.*API",
-        ]
-
-        for pattern in placeholder_patterns:
-            for match in re.finditer(pattern, content, re.IGNORECASE):
-                line_num = content[:match.start()].count("\n") + 1
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=file_str,
-                    check_id="CHECK-007",
-                    title="API placeholder not replaced",
-                    description=f"Found placeholder pattern '{pattern}' in code.",
-                    root_cause="Agent failed to replace placeholder with actual implementation.",
-                    suggested_fix="Replace with actual API endpoint or configuration variable.",
-                    line_number=line_num,
-                )
-
-    def check_known_traps(self, file_path: Path, content: str) -> None:
-        """CHECK-008: Check for known traps from v1.0.4-1.0.11."""
-        file_str = str(file_path.relative_to(self.skill_dir))
-
-        trap_signatures = {
-            "TRAP-001": (r"compare_skill.*prefix", "compare_skill path prefix misalignment"),
-            "TRAP-003": (r"upload_skill.*files\[0\].*frontmatter", "upload_skill frontmatter overwritten"),
-            "TRAP-005": (r"skill_dir_name.*temp", "skill_dir_name using temp directory"),
-            "TRAP-007": (r"expanduser.*~.*not", "expanduser not expanded"),
-            "TRAP-011": (r"github_path.*=.*["']/", "github_path leading slash"),
+        # 記錄 patch 歷史
+        self.last_patch_record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "patch_version": patch.get("patch_version", "unknown"),
+            "target_version": patch.get("target_version", "unknown"),
+            "results": results,
+            "backups": backups,
+            "dry_run": dry_run
         }
 
-        for trap_id, (pattern, desc) in trap_signatures.items():
-            if re.search(pattern, content, re.IGNORECASE):
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=file_str,
-                    check_id=f"CHECK-008-{trap_id}",
-                    title=f"Known trap detected: {trap_id}",
-                    description=f"{desc}. This was a confirmed bug in previous versions.",
-                    root_cause=f"Agent reproduced known bug {trap_id}.",
-                    suggested_fix=f"Refer to fix documentation for {trap_id}.",
-                )
+        # 寫入歷史記錄
+        if not dry_run and all_success:
+            self._write_patch_history(self.last_patch_record)
 
-    def check_skill_md_location(self, all_files: List[Path]) -> None:
-        """CHECK-009: SKILL.md must be at root, not LLM/SKILL.md (per memory #11)."""
-        skill_md_paths = [f for f in all_files if f.name == "SKILL.md"]
+        if dry_run:
+            return {
+                "status": "dry_run_complete",
+                "results": results,
+                "notice": "這是預覽模式，未實際修改任何文件。確認無誤後重新執行（dry_run=False）"
+            }
 
-        for fp in skill_md_paths:
-            rel = str(fp.relative_to(self.skill_dir))
-            if rel != "SKILL.md":
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=rel,
-                    check_id="CHECK-009",
-                    title="SKILL.md not at root directory",
-                    description=f"SKILL.md found at '{rel}', but must be at root directory per architecture rules.",
-                    root_cause="Agent placed SKILL.md in subdirectory instead of root.",
-                    suggested_fix="Move SKILL.md to root directory. USAGE.md goes to scripts/USAGE.md.",
-                )
+        if not all_success:
+            return {
+                "status": "partial_failure",
+                "results": results,
+                "backups": backups,
+                "notice": "部分變更失敗。已成功的變更已備份，可嘗試 rollback_last() 回滾。"
+            }
 
-    def check_usage_md_location(self, all_files: List[Path]) -> None:
-        """CHECK-010: USAGE.md must be at scripts/USAGE.md (per memory #11)."""
-        usage_files = [f for f in all_files if f.name == "USAGE.md"]
+        # 應用成功後，自動驗證完整性
+        integrity_result = self._post_patch_integrity_check()
 
-        for fp in usage_files:
-            rel = str(fp.relative_to(self.skill_dir))
-            if rel != "scripts/USAGE.md":
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.MEDIUM,
-                    file_path=rel,
-                    check_id="CHECK-010",
-                    title="USAGE.md not in scripts directory",
-                    description=f"USAGE.md found at '{rel}', but should be at scripts/USAGE.md.",
-                    suggested_fix="Move USAGE.md to scripts/USAGE.md.",
-                )
-
-    def check_name_field_consistency(self, all_files: List[Path]) -> None:
-        """CHECK-011: All files' name field must match skill directory name."""
-        skill_name_from_dir = self.skill_dir.name
-
-        for fp in all_files:
-            content = self._load_file(fp)
-            if not content:
-                continue
-            fm = self._extract_frontmatter(content, fp)
-            if not fm or "name" not in fm:
-                continue
-
-            file_name = fm["name"]
-            if file_name != skill_name_from_dir:
-                rel = str(fp.relative_to(self.skill_dir))
-                self._add_issue(
-                    category=IssueCategory.AGENT_BUG,
-                    severity=Severity.HIGH,
-                    file_path=rel,
-                    check_id="CHECK-011",
-                    title="Name field mismatch",
-                    description=f"File claims name='{file_name}' but directory is '{skill_name_from_dir}'.",
-                    suggested_fix=f"Update name field to '{skill_name_from_dir}' or rename directory.",
-                )
-
-    def check_updated_at_format(self, file_path: Path, content: str) -> None:
-        """CHECK-012: Verify updated_at is ISO 8601 format (per memory #19)."""
-        fm = self._extract_frontmatter(content, file_path)
-        if not fm or "updated_at" not in fm:
-            return
-
-        file_str = str(file_path.relative_to(self.skill_dir))
-        updated_at = fm["updated_at"]
-
-        # ISO 8601 pattern: YYYY-MM-DDTHH:MM:SS+HH:MM
-        iso_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$"
-        if not re.match(iso_pattern, updated_at):
-            self._add_issue(
-                category=IssueCategory.AGENT_BUG,
-                severity=Severity.MEDIUM,
-                file_path=file_str,
-                check_id="CHECK-012",
-                title="Invalid updated_at format",
-                description=f"updated_at '{updated_at}' is not valid ISO 8601 format.",
-                suggested_fix="Use format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., 2026-05-22T18:26:00+08:00)",
-            )
-
-    # ==================== MAIN VALIDATION ====================
-
-    def validate(self) -> List[ValidationIssue]:
-        """Run full validation suite."""
-        if not self.skill_dir.exists():
-            self._add_issue(
-                category=IssueCategory.RUNTIME,
-                severity=Severity.CRITICAL,
-                file_path=str(self.skill_dir),
-                check_id="VAL-001",
-                title="Skill directory not found",
-                description=f"Directory does not exist: {self.skill_dir}",
-            )
-            return self.issues
-
-        # Collect all relevant files
-        all_files = []
-        for fp in self.skill_dir.rglob("*"):
-            if fp.is_file() and not self._is_excluded_path(fp):
-                all_files.append(fp)
-
-        if not all_files:
-            self._add_issue(
-                category=IssueCategory.RUNTIME,
-                severity=Severity.CRITICAL,
-                file_path=str(self.skill_dir),
-                check_id="VAL-002",
-                title="No valid files found in skill directory",
-                description="Directory exists but contains no valid skill files after exclusion filtering.",
-            )
-            return self.issues
-
-        # Run file-level checks
-        for fp in all_files:
-            content = self._load_file(fp)
-            if not content:
-                continue
-
-            self.check_frontmatter_completeness(fp, content)
-            self.check_naming_convention(fp)
-            self.check_github_path_leading_slash(fp, content)
-            self.check_deletion_safety(fp, content)
-            self.check_path_safety(fp, content)
-            self.check_api_placeholder(fp, content)
-            self.check_known_traps(fp, content)
-            self.check_updated_at_format(fp, content)
-
-        # Run bundle-level checks
-        self.check_version_consistency(all_files)
-        self.check_skill_md_location(all_files)
-        self.check_usage_md_location(all_files)
-        self.check_name_field_consistency(all_files)
-
-        return self.issues
-
-    # ==================== REPORT GENERATION ====================
-
-    def generate_report(self, output_format: str = "markdown") -> str:
-        """Generate validation report in specified format."""
-        if output_format == "json":
-            return self._generate_json_report()
-        return self._generate_markdown_report()
-
-    def _generate_markdown_report(self) -> str:
-        """Generate standard Markdown report (per memory #31 Issue format)."""
-        lines = [
-            f"# Skill Patch Validation Report",
-            f"",
-            f"**Skill Directory**: `{self.skill_dir}`",
-            f"**Validation Time**: {self.timestamp}",
-            f"**Total Issues**: {len(self.issues)}",
-            f"**Strict Mode**: {'Yes' if self.strict else 'No'}",
-            f"",
-            f"## Summary by Severity",
-            f"",
-        ]
-
-        # Severity summary
-        severity_counts = {}
-        for issue in self.issues:
-            severity_counts[issue.severity.value] = severity_counts.get(issue.severity.value, 0) + 1
-
-        for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
-            count = severity_counts.get(sev, 0)
-            emoji = "🔴" if sev == "CRITICAL" else "🟠" if sev == "HIGH" else "🟡" if sev == "MEDIUM" else "🟢"
-            lines.append(f"| {emoji} {sev} | {count} |")
-
-        lines.extend([
-            "",
-            "## Summary by Category",
-            "",
-        ])
-
-        # Category summary
-        cat_counts = {}
-        for issue in self.issues:
-            cat_counts[issue.category.value] = cat_counts.get(issue.category.value, 0) + 1
-
-        for cat in ["[FRAMEWORK]", "[RUNTIME]", "[AGENT-BUG]"]:
-            count = cat_counts.get(cat, 0)
-            lines.append(f"| {cat} | {count} |")
-
-        lines.extend([
-            "",
-            "---",
-            "",
-            "## Detailed Issues",
-            "",
-        ])
-
-        # Group by category
-        for category in IssueCategory:
-            cat_issues = [i for i in self.issues if i.category == category]
-            if not cat_issues:
-                continue
-
-            lines.extend([
-                f"### {category.value} Issues ({len(cat_issues)})",
-                "",
-            ])
-
-            for i, issue in enumerate(cat_issues, 1):
-                lines.extend([
-                    f"#### {i}. {issue.title}",
-                    f"",
-                    f"- **Check ID**: `{issue.check_id}`",
-                    f"- **Severity**: {issue.severity.value}",
-                    f"- **File**: `{issue.file_path}`",
-                    f"- **Line**: {issue.line_number if issue.line_number else 'N/A'}",
-                    f"",
-                    f"**Description**:",
-                    f"{issue.description}",
-                    f"",
-                ])
-                if issue.root_cause:
-                    lines.extend([
-                        f"**Root Cause Analysis**:",
-                        f"{issue.root_cause}",
-                        f"",
-                    ])
-                if issue.attempted_fix:
-                    lines.extend([
-                        f"**Attempted Fix**:",
-                        f"{issue.attempted_fix}",
-                        f"",
-                    ])
-                lines.extend([
-                    f"**Suggested Fix**:",
-                    f"{issue.suggested_fix}",
-                    f"",
-                ])
-                if issue.snippet:
-                    lines.extend([
-                        f"**Code Snippet**:",
-                        f"```python",
-                        f"{issue.snippet}",
-                        f"```",
-                        f"",
-                    ])
-                lines.append("---")
-                lines.append("")
-
-        # Standard Issue format footer (per memory #31)
-        lines.extend([
-            "",
-            "## Standard Issue Format (For GitHub Issues)",
-            "",
-            "When creating GitHub Issues for [FRAMEWORK] items, use this structure:",
-            "",
-            "### 問題摘要",
-            "[50+ characters minimum description]",
-            "",
-            "### 復現步驟",
-            "1. [Step 1]",
-            "2. [Step 2]",
-            "",
-            "### 根因分析",
-            "[Detailed root cause, 50+ characters]",
-            "",
-            "### 已嘗試的修復",
-            "[What has been tried, 50+ characters]",
-            "",
-            "### 建議修復方案",
-            "[Proposed solution, 50+ characters]",
-            "",
-            "### 分類",
-            "[FRAMEWORK] / [RUNTIME] / [AGENT-BUG]",
-            "",
-            "### 驗證結果",
-            "[How to verify the fix works]",
-            "",
-        ])
-
-        return "\n".join(lines)
-
-    def _generate_json_report(self) -> str:
-        """Generate JSON report for programmatic consumption."""
-        report = {
-            "meta": {
-                "skill_dir": str(self.skill_dir),
-                "timestamp": self.timestamp,
-                "total_issues": len(self.issues),
-                "strict_mode": self.strict,
-            },
-            "summary": {
-                "by_severity": {},
-                "by_category": {},
-            },
-            "issues": [asdict(i) for i in self.issues],
+        return {
+            "status": "success",
+            "results": results,
+            "backups": backups,
+            "integrity_check": integrity_result,
+            "next_steps": [
+                "1. 檢查變更結果",
+                "2. 執行 skill_integrity_checker.py 驗證",
+                "3. 通過 github-skill-organizer 上傳"
+            ]
         }
 
-        for issue in self.issues:
-            sev = issue.severity.value
-            cat = issue.category.value
-            report["summary"]["by_severity"][sev] = report["summary"]["by_severity"].get(sev, 0) + 1
-            report["summary"]["by_category"][cat] = report["summary"]["by_category"].get(cat, 0) + 1
+    def _execute_change(self, target_file: Path, change: Dict) -> Tuple[bool, str]:
+        """執行單個變更。"""
+        action = change["action"]
 
-        return json.dumps(report, indent=2, ensure_ascii=False)
+        try:
+            content = target_file.read_text(encoding="utf-8")
+        except Exception as e:
+            return False, f"[EXEC] 無法讀取文件: {e}"
 
-    def generate_patch_script(self) -> Optional[str]:
-        """Generate a patch script for auto-fixable issues."""
-        # Identify auto-fixable issues
-        fixable = [i for i in self.issues if i.check_id in ["CHECK-003", "CHECK-011", "CHECK-012"]]
+        if action == "replace":
+            old = change.get("old", "")
+            new = change.get("new", "")
+            if old not in content:
+                return False, "[EXEC] old 內容不在當前文件中（並發修改？）"
+            new_content = content.replace(old, new, 1)
+            target_file.write_text(new_content, encoding="utf-8")
+            return True, f"[EXEC] replace 成功"
 
-        if not fixable:
-            return None
+        elif action == "insert":
+            after = change.get("after", "")
+            new = change.get("new", "")
+            if after not in content:
+                return False, f"[EXEC] 插入錨點 'after' 不存在"
+            new_content = content.replace(after, after + new, 1)
+            target_file.write_text(new_content, encoding="utf-8")
+            return True, f"[EXEC] insert 成功"
 
-        lines = [
-            "#!/usr/bin/env python3",
-            """"Auto-generated patch script for skill validation issues."""",
-            "",
-            "import re",
-            "from pathlib import Path",
-            "",
-            f"SKILL_DIR = Path("{self.skill_dir}")",
-            "",
-            "def apply_patches():",
-            "    patches_applied = 0",
-            "",
-        ]
+        elif action == "delete_line":
+            line_pattern = change.get("line", "")
+            lines = content.splitlines()
+            new_lines = [ln for ln in lines if line_pattern not in ln]
+            if len(new_lines) == len(lines):
+                return False, f"[EXEC] 未找到匹配行: {line_pattern}"
+            target_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+            return True, f"[EXEC] delete_line 成功"
 
-        for issue in fixable:
-            if issue.check_id == "CHECK-003":  # Leading slash
-                lines.extend([
-                    f"    # Fix {issue.check_id}: Remove leading slash from github_path",
-                    f"    file_path = SKILL_DIR / "{issue.file_path}"",
-                    f"    content = file_path.read_text(encoding='utf-8')",
-                    f"    content = re.sub(r'github_path:\s*"/', 'github_path: "', content)",
-                    f"    file_path.write_text(content, encoding='utf-8')",
-                    f"    patches_applied += 1",
-                    "",
-                ])
+        else:
+            return False, f"[EXEC] 未知 action: {action}"
 
-        lines.extend([
-            "    print(f"Applied {patches_applied} patches")",
-            "",
-            "if __name__ == '__main__':",
-            "    apply_patches()",
-            "",
-        ])
+    def rollback_last(self) -> Dict:
+        """
+        回滾上一次 patch。
 
-        return "\n".join(lines)
+        從 .backups/ 目錄找到最新的備份並恢復。
+        """
+        if not self.last_patch_record:
+            # 嘗試從歷史記錄讀取
+            history = self._read_patch_history()
+            if not history:
+                return {"status": "error", "reason": "[ROLLBACK] 無 patch 歷史記錄"}
+            self.last_patch_record = history[-1]
+
+        backups = self.last_patch_record.get("backups", [])
+        if not backups:
+            return {"status": "error", "reason": "[ROLLBACK] 無備份文件可恢復"}
+
+        restored = []
+        failed = []
+
+        for backup_path_str in backups:
+            backup_path = Path(backup_path_str)
+            if not backup_path.exists():
+                failed.append(f"[ROLLBACK] 備份文件不存在: {backup_path}")
+                continue
+
+            # 解析原始文件名（去掉 .timestamp.checksum.bak）
+            original_name = backup_path.name.split(".")[0]
+            # 找到對應的目標文件（在 skill_dir 中搜索）
+            target_candidates = list(self.skill_dir.rglob(original_name))
+            if not target_candidates:
+                failed.append(f"[ROLLBACK] 找不到原始文件: {original_name}")
+                continue
+
+            target_file = target_candidates[0]
+            try:
+                shutil.copy2(backup_path, target_file)
+                restored.append(str(target_file))
+            except Exception as e:
+                failed.append(f"[ROLLBACK] 恢復失敗 {target_file}: {e}")
+
+        if failed and not restored:
+            return {"status": "error", "reason": "全部回滾失敗", "details": failed}
+
+        return {
+            "status": "rollback_complete" if not failed else "rollback_partial",
+            "restored": restored,
+            "failed": failed,
+            "notice": "回滾完成後請執行 skill_integrity_checker.py 驗證"
+        }
+
+    def _write_patch_history(self, record: Dict) -> None:
+        """寫入 patch 歷史到 .backups/patch_history.jsonl。"""
+        history_file = self.backups_dir / "patch_history.jsonl"
+        line = json.dumps(record, ensure_ascii=False)
+        with open(history_file, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    def _read_patch_history(self) -> List[Dict]:
+        """讀取 patch 歷史。"""
+        history_file = self.backups_dir / "patch_history.jsonl"
+        if not history_file.exists():
+            return []
+        records = []
+        with open(history_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        records.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        return records
+
+    def _post_patch_integrity_check(self) -> Dict:
+        """
+        應用 patch 後的完整性檢查。
+
+        調用 skill_integrity_checker.py（如果可用）。
+        """
+        checker_path = self.skill_dir / "scripts" / "skill_integrity_checker.py"
+        if not checker_path.exists():
+            return {
+                "status": "skipped",
+                "reason": "skill_integrity_checker.py 不存在，跳過自動驗證"
+            }
+
+        import subprocess
+        try:
+            result = subprocess.run(
+                [sys.executable, str(checker_path), "--strict"],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            return {
+                "status": "completed",
+                "returncode": result.returncode,
+                "stdout_preview": result.stdout[:500],
+                "stderr_preview": result.stderr[:500] if result.stderr else ""
+            }
+        except Exception as e:
+            return {"status": "error", "reason": f"完整性檢查調用失敗: {e}"}
 
 
 def main():
+    import argparse
     parser = argparse.ArgumentParser(
-        description="Validate and generate improvement patches for skill bundles"
+        description="Skill Patch Validator - 補丁驗證與應用"
     )
-    parser.add_argument("--skill-dir", required=True, help="Path to skill directory to validate")
-    parser.add_argument("--strict", action="store_true", default=True,
-                       help="Strict mode: treat missing frontmatter as critical (default: True)")
-    parser.add_argument("--format", choices=["markdown", "json"], default="markdown",
-                       help="Output report format")
-    parser.add_argument("--output", "-o", help="Output file path (default: stdout)")
-    parser.add_argument("--generate-patch", action="store_true",
-                       help="Generate auto-fix patch script if fixable issues found")
-    parser.add_argument("--patch-output", default="skill_auto_patch.py",
-                       help="Patch script output path")
+    parser.add_argument(
+        "--skill-dir",
+        required=True,
+        help="技能目錄路徑"
+    )
+    parser.add_argument(
+        "--patch",
+        required=True,
+        help="Patch JSON 文件路徑"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="預覽模式，不實際修改文件"
+    )
+    parser.add_argument(
+        "--rollback",
+        action="store_true",
+        help="回滾上一次 patch"
+    )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="僅驗證 patch，不應用"
+    )
 
     args = parser.parse_args()
 
-    validator = SkillPatchValidator(
-        skill_dir=args.skill_dir,
-        strict=args.strict
-    )
+    validator = SkillPatchValidator(skill_dir=args.skill_dir)
 
-    print(f"[INFO] Validating skill directory: {validator.skill_dir}")
-    issues = validator.validate()
+    if args.rollback:
+        result = validator.rollback_last()
+        print(f"[PATCH-VALIDATOR] 回滾狀態: {result['status']}")
+        if result.get('restored'):
+            print(f"  已恢復: {len(result['restored'])} 個文件")
+        if result.get('failed'):
+            print(f"  失敗: {len(result['failed'])} 個")
+        return
 
-    # Generate report
-    report = validator.generate_report(output_format=args.format)
-
-    if args.output:
-        output_path = Path(args.output)
-        output_path.write_text(report, encoding="utf-8")
-        print(f"[INFO] Report written to: {output_path}")
-    else:
-        print("\n" + "="*60)
-        print(report)
-
-    # Summary
-    critical = sum(1 for i in issues if i.severity == Severity.CRITICAL)
-    high = sum(1 for i in issues if i.severity == Severity.HIGH)
-
-    print(f"\n[SUMMARY] Total: {len(issues)} | Critical: {critical} | High: {high}")
-
-    if critical > 0:
-        print("[RESULT] FAILED - Critical issues found. Must fix before upload.")
+    # 加載 patch
+    load_result = validator.load_patch(args.patch)
+    if load_result["status"] == "error":
+        print(f"[PATCH-VALIDATOR] 錯誤: {load_result['reason']}")
         sys.exit(1)
-    elif high > 0:
-        print("[RESULT] WARNING - High severity issues found. Recommend fixing before release.")
-    else:
-        print("[RESULT] PASSED - No critical or high severity issues.")
 
-    # Generate patch script
-    if args.generate_patch:
-        patch = validator.generate_patch_script()
-        if patch:
-            patch_path = Path(args.patch_output)
-            patch_path.write_text(patch, encoding="utf-8")
-            print(f"[INFO] Auto-fix patch written to: {patch_path}")
-        else:
-            print("[INFO] No auto-fixable issues found.")
+    patch_data = load_result
+
+    if args.validate_only:
+        validation = validator.validate_patch(patch_data)
+        print(f"[PATCH-VALIDATOR] 驗證狀態: {validation['status']}")
+        if validation.get('errors'):
+            for err in validation['errors']:
+                print(f"  ❌ {err}")
+        if validation.get('warnings'):
+            for warn in validation['warnings']:
+                print(f"  ⚠️  {warn}")
+        if validation['status'] == 'valid':
+            print(f"  ✅ 驗證通過，{validation['changes_count']} 個變更可應用")
+        return
+
+    # 應用 patch
+    result = validator.apply_patch(patch_data, dry_run=args.dry_run)
+    print(f"[PATCH-VALIDATOR] 應用狀態: {result['status']}")
+
+    if result['status'] == 'success':
+        print(f"  ✅ 全部變更應用成功")
+        if result.get('integrity_check'):
+            ic = result['integrity_check']
+            print(f"  完整性檢查: {ic['status']} (returncode={ic.get('returncode', 'N/A')})")
+    elif result['status'] == 'dry_run_complete':
+        print(f"  🔍 預覽完成，未修改文件")
+        for r in result.get('results', []):
+            print(f"    {r['file']}: {r['msg']}")
+    else:
+        print(f"  ❌ 應用失敗")
+        for r in result.get('results', []):
+            status = "✅" if r['ok'] else "❌"
+            print(f"    {status} {r['file']}: {r['msg']}")
 
 
 if __name__ == "__main__":
