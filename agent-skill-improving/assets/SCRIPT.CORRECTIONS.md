@@ -5,7 +5,7 @@ description: "腳本錯誤修正指令集。當腳本無法執行、執行中卡
 version: "v2.2.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-21T15:28:00+08:00"
+updated_at: "2026-05-22T01:02:00+08:00"
 
 auth_config:
   provider: "github"
@@ -119,5 +119,5 @@ file_mapping:
 
 ---
 
-*最後更新：2026-05-21*
-*本文件為LLM執行指令集，人類可讀解釋請參考readme/SCRIPT.CORRECTIONS.README.md*
+*最後更新：2026-05-22*
+*本文件為LLM執行指令集，人類可讀解釋請參考README.md*
