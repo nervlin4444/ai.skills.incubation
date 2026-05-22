@@ -8,7 +8,7 @@ description: "趨勢分析、patch 生成、回滾保護、版本管理。配套
 version: "v1.0.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-21T15:28:00+08:00"
+updated_at: "2026-05-22T01:02:00+08:00"
 auth_config:
   provider: "github"
   auth_method: "token"
