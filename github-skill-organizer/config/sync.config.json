@@ -3,7 +3,7 @@
     "title": "Sync Configuration for GitHub Skill Organizer",
     "name": "github-skill-organizer",
     "description": "Daemon sync rules, version bump policies, upload gate checks, and workstation defaults. This file is part of the github-skill-organizer skill package.",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "github_repository": "nervlin4444/ai.skills.incubation",
     "target_branch": "main",
     "auth_config": {
@@ -21,19 +21,19 @@
   "skill_name": "github-skill-organizer",
   "workstation_defaults": {
     "linux": {
-      "download_folder": "~/Downloads/skills-inbox",
+      "download_folder": "~/Downloads",
       "skills_folder": "~/.local/share/openclaw/skills",
       "log_dir": "~/.local/share/openclaw/logs"
     },
     "macos": {
-      "download_folder": "~/Downloads/skills-inbox",
-      "skills_folder": "~/Library/Application Support/openclaw/skills",
-      "log_dir": "~/Library/Logs/openclaw"
+      "download_folder": "~/Downloads",
+      "skills_folder": "~/.workbuddy/skills",
+      "log_dir": "~/.workbuddy/logs"
     },
     "windows": {
-      "download_folder": "%USERPROFILE%\\Downloads\\skills-inbox",
-      "skills_folder": "%APPDATA%\\openclaw\\skills",
-      "log_dir": "%APPDATA%\\openclaw\\logs"
+      "download_folder": "%USERPROFILE%\\Downloads",
+      "skills_folder": "%APPDATA%\\.workbuddy\\skills",
+      "log_dir": "%APPDATA%\\.workbuddy\\logs"
     }
   },
   "frontmatter_required_fields": [
