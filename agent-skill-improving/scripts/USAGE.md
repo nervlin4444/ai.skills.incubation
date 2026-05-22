@@ -1,354 +1,289 @@
 ---
-title: "Skill Improvement Scripts Usage Guide"
-name: "agent-skill-improving"
-description: "agent-skill-improving 腳本用法總覽：skill_improving.py + skill_validate.py"
-version: "v1.1.0"
+title: "Agent Skill Improving - Scripts Usage Guide"
+name: agent-skill-improving
+description: 技能改進腳本使用教程。涵蓋合規檢查器、Patch驗證器、文件設計器、文件夾設計器、Issue報告器。人類可讀的操作指南。
+version: "v1.2.5"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T01:02:00+08:00"
-
+updated_at: "2026-05-22T16:25:32+08:00"
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
-  env_file_path: "{baseDir}/.env"
-
+  env_file_path: ".env"
 file_mapping:
-  - local_path: "{baseDir}/scripts/USAGE.md"
-    github_path: "agent-skill-improving/scripts/USAGE.md"
+  local_path: "scripts/USAGE.md"
+  github_path: "agent-skill-improving/scripts/USAGE.md"
 ---
 
-# scripts/USAGE.md — 技能改進與合規驗證腳本用法總覽
+# Agent Skill Improving — 腳本使用教程 v1.2.5
 
-> 版本：v1.1.0（對齊 agent-skill-improving v1.2.4）
-> 位置：`scripts/USAGE.md`
+> 本文件是給人類閱讀的腳本使用教程。
+> LLM 應該閱讀 SKILL.md（執行指令），而非本文件。
+> v1.2.5 更新：腳本全面更名，新增 skill_issue_reporter.py。
 
 ---
 
-## 版本對齊表
+## 腳本清單
 
-| 文件 | 版本 | 用途 |
+| 腳本 | 功能 | 觸發時機 |
+|------|------|----------|
+| skill_integrity_checker.py | 合規檢查（28+ 項 + 8 項紅線） | 改進前後必須執行 |
+| skill_patch_validator.py | Patch 應用、驗證、回滾 | 主人確認改進後 |
+| skill_files_designer.py | 文件 frontmatter 生成 + 攔截寫入 | 創建/修改任何技能文件時 |
+| skill_folder_designer.py | 初始化技能目錄結構 | 創建新技能時 |
+| skill_issue_reporter.py | 標準 Issue 報告生成 | 發現問題需報告時 |
+
+---
+
+## 1. skill_integrity_checker.py（合規檢查器）
+
+### 功能
+掃描技能目錄，執行 28+ 項合規檢查 + 8 項架構紅線。
+
+### 檢查項（v1.2.5）
+- frontmatter 字段完整性（title, name, description, version, github_repository, target_branch, updated_at, auth_config, file_mapping）
+- github_path 前導 "/" 檢查（禁止前導斜杠）
+- updated_at ISO 8601 格式驗證
+- version 一致性（所有文件 version 必須相同）
+- file_mapping 完整性（local_path 和 github_path 必須成對）
+- 文件名規範（xxx.yyy.zzz.ext，禁止 - 和 _）
+- 必要文件結構（SKILL.md、README.md 等）
+
+### 用法
+
+```bash
+# 基礎檢查
+python skill_integrity_checker.py --skill-dir ./github-skill-organizer/
+
+# 嚴格模式（8 項紅線全部啟用）
+python skill_integrity_checker.py --skill-dir ./github-skill-organizer/ --strict
+
+# 輸出報告到文件
+python skill_integrity_checker.py --skill-dir ./github-skill-organizer/ --strict --report-path ./improve/VALIDATION_REPORT.md
+```
+
+### 參數
+
+| 參數 | 說明 | 必填 |
 |------|------|------|
-| skill_improving.py | v1.0.0 | 趨勢分析、patch 生成、回滾保護 |
-| skill_validate.py | v1.0.0 | 技能合規檢查器（23 項問題 + 8 項架構紅線） |
-| SKILL.md | v1.2.4 | Skill Improver 執行指令集（含驗證步驟） |
-| README.md | v1.2.4 | 人類可讀解釋書 |
-| USAGE.md | v1.1.0 | 本文件：雙腳本用法說明 |
+| --skill-dir | 技能目錄路徑 | 是 |
+| --strict | 啟用 8 項架構紅線 | 否 |
+| --report-path | 報告輸出路徑 | 否 |
 
 ---
 
-# 第一部分：skill_improving.py
+## 2. skill_patch_validator.py（Patch 驗證器）
 
-## 1. 讀取使用歷史
+### 功能
+讀取 Patch 文件，驗證合法性，應用變更，自動備份，支持回滾。
 
-    from skill_improving import load_correction_history
+### 策略分級
+| 策略 | 風險 | 說明 |
+|------|------|------|
+| A replace_in_file | 低 | 精確替換，可逆 |
+| B 多行插入 | 中 | 需確認上下文匹配 |
+| C write_to_file 覆蓋 | 高 | 強制備份，超過 3 次需主人確認 |
 
-    result = load_correction_history(
-        correction_path=Path("assets/SKILL.CORRECTION.md"),
-        skill_name="currency-exchange-tracker",
-        limit=10
-    )
+### 用法
 
-    print(result)
-    # {
-    #     "records": [...],
-    #     "total": 10,
-    #     "success_count": 7,
-    #     "failure_count": 3,
-    #     "warning": None
-    # }
+```bash
+# 應用 Patch
+python skill_patch_validator.py --skill-dir ./github-skill-organizer/ --patch-file ./improve/PATCH.md
 
-## 2. 趨勢分析
+# 預覽模式（不實際修改）
+python skill_patch_validator.py --skill-dir ./github-skill-organizer/ --patch-file ./improve/PATCH.md --dry-run
 
-    from skill_improving import analyze_trends
+# 回滾上一次 Patch
+python skill_patch_validator.py --skill-dir ./github-skill-organizer/ --rollback
 
-    result = analyze_trends(result["records"])
+# 僅驗證 Patch，不應用
+python skill_patch_validator.py --skill-dir ./github-skill-organizer/ --patch-file ./improve/PATCH.md --validate-only
+```
 
-    print(result)
-    # {
-    #     "success_rate_trend": "下降",
-    #     "error_distribution": {"計劃問題": 1, "評估問題": 0, "執行問題": 1, "技能自身問題": 1},
-    #     "version_stability": "穩定",
-    #     "coverage": "覆蓋",
-    #     "flags": ["[DEGRADED]", "[SKILL-DEFECT]"],
-    #     "warning": None
-    # }
+### 參數
 
-## 3. 生成 Patch
-
-    from skill_improving import generate_patch
-
-    result = generate_patch(
-        skill_name="currency-exchange-tracker",
-        current_version="v1.0.0",
-        patch_type="Minor",
-        trigger="連續 3 次 API 超時，成功率下降至 70%",
-        changes=["增加超時重試機制（最多 3 次）", "增加備用數據源切換"],
-        impact="僅影響 fetch_exchange_rate.py，不影響其他模組",
-        rollback="刪除重試邏輯，恢復單次請求"
-    )
-
-    print(result)
-    # {
-    #     "success": True,
-    #     "patch_content": "...",
-    #     "new_version": "v1.1.0",
-    #     "file_path": "improve/currency-exchange-tracker/PATCH_v1.0.0_to_v1.1.0.md",
-    #     "timestamp": "2026-05-11T15:00:00",
-    #     "warning": None
-    # }
-
-## 4. 應用 Patch（含備份）
-
-    from skill_improving import apply_patch
-
-    result = apply_patch(
-        skill_path=Path("skills/currency-exchange-tracker/SKILL.md"),
-        patch_file=Path("improve/currency-exchange-tracker/PATCH_v1.0.0_to_v1.1.0.md"),
-        backup_dir=Path("improve/backups")
-    )
-
-    print(result)
-    # {
-    #     "success": True,
-    #     "backup_path": "improve/backups/SKILL_20260511_150000.md",
-    #     "applied": True,
-    #     "timestamp": "2026-05-11T15:00:00",
-    #     "warning": None
-    # }
-
-## 5. 回滾技能
-
-    from skill_improving import rollback_skill
-
-    result = rollback_skill(
-        skill_path=Path("skills/currency-exchange-tracker/SKILL.md"),
-        backup_path=Path("improve/backups/SKILL_20260511_150000.md")
-    )
-
-    print(result)
-    # {
-    #     "success": True,
-    #     "rolled_back": True,
-    #     "timestamp": "2026-05-11T15:05:00",
-    #     "warning": None
-    # }
-
-## 6. 內容完整性預檢
-
-    from skill_improving import check_content_integrity
-
-    result = check_content_integrity(
-        content="這是準備寫入的完整內容...",
-        expected_length=500
-    )
+| 參數 | 說明 | 必填 |
+|------|------|------|
+| --skill-dir | 技能目錄路徑 | 是 |
+| --patch-file | Patch 文件路徑 | 是（--rollback 時不需要） |
+| --dry-run | 預覽模式 | 否 |
+| --rollback | 回滾上一次 Patch | 否 |
+| --validate-only | 僅驗證不應用 | 否 |
 
 ---
 
-# 第二部分：skill_validate.py
+## 3. skill_files_designer.py（文件設計器）
 
-## 7. 驗證改進後的技能合規性（新增）
+### 功能
+生成標準 frontmatter，攔截 Agent 直接寫入操作。
 
-在應用 Patch 後、交付前，必須調用 skill_validate.py 驗證改進後的技能是否符合 23 項已知問題與 8 項架構紅線。
+### 核心機制
+- Agent 禁止直接 `open()` / `write_text()` 創建 .md/.py/.json/.html
+- 必須通過 `SkillFileWriter` 上下文管理器生成
+- 自動填充 github_repository、target_branch、file_mapping
 
-### 7.1 驗證單一檔案
+### 用法（Python API）
 
-    import subprocess
+```python
+from skill_files_designer import SkillFileWriter
 
-    result = subprocess.run(
-        ["python", "skill_validate.py", "--file", "./skills/currency-exchange-tracker/SKILL.md", "--strict"],
-        capture_output=True,
-        text=True
-    )
+# 創建 .md 文件
+with SkillFileWriter(
+    file_path="scripts/new_module.md",
+    skill_name="github-skill-organizer",
+    description="Handles new feature"
+) as writer:
+    writer.write("# 業務代碼...")
+    # 自動在文件開頭插入 YAML frontmatter
 
-    if result.returncode != 0:
-        print("[VALIDATION-FAILED] 改進後的技能存在合規違規，禁止交付")
-        print(result.stdout)
-        # 觸發回滾
-    else:
-        print("[VALIDATION-PASSED] 合規檢查通過")
+# 創建 .py 文件（自動使用 docstring YAML 塊格式）
+with SkillFileWriter(
+    file_path="scripts/new_module.py",
+    skill_name="github-skill-organizer",
+    description="Core logic"
+) as writer:
+    writer.write("import os\n# 業務代碼...")
+    # 自動在文件開頭插入 docstring 包裹的 YAML frontmatter
+```
 
-### 7.2 驗證整個技能目錄
+### 用法（命令行）
 
-    result = subprocess.run(
-        ["python", "skill_validate.py",
-         "--skill-dir", "./skills/currency-exchange-tracker/",
-         "--strict",
-         "--report-path", "./improve/currency-exchange-tracker/VALIDATION_REPORT.md"],
-        capture_output=True,
-        text=True
-    )
+```bash
+# 驗證現有文件 frontmatter
+python skill_files_designer.py --validate-only --skill-dir ./github-skill-organizer/
 
-    if result.returncode != 0:
-        print("[VALIDATION-FAILED] 合規檢查失敗，查看 VALIDATION_REPORT.md")
-        # 觸發回滾
-
-### 7.3 在 Python 中直接調用
-
-    from skill_validate import SkillValidator
-
-    validator = SkillValidator(strict=True)
-    validator.validate_directory(Path("./skills/currency-exchange-tracker/"))
-    report = validator.generate_report(output_path=Path("./VALIDATION_REPORT.md"))
-
-    if validator.violations:
-        print(f"[VALIDATION-FAILED] 發現 {len(validator.violations)} 項違規")
-        for v in validator.violations:
-            print(f"  - {v['rule_id']}: {v['title']}")
-    else:
-        print("[VALIDATION-PASSED] 全部通過")
+# 生成單個文件的 frontmatter（不寫入，僅輸出到 stdout）
+python skill_files_designer.py --generate-frontmatter --file-type md --skill-name github-skill-organizer --title "New Module"
+```
 
 ---
 
-# 第三部分：標準整合模板（Agent 直接複用）
+## 4. skill_folder_designer.py（文件夾設計器）
 
-## 模板 A：純 skill_improving 流程（改進現有技能）
+### 功能
+初始化新技能目錄結構，自動生成所有必要文件並嵌入 frontmatter。
 
-    from pathlib import Path
-    from skill_improving import (
-        load_correction_history,
-        analyze_trends,
-        generate_patch,
-        apply_patch
-    )
+### 生成結構
 
-    # 步驟 1：讀取歷史
-    history = load_correction_history(
-        correction_path=Path("assets/SKILL.CORRECTION.md"),
-        skill_name="currency-exchange-tracker",
-        limit=10
-    )
+```
+new-skill/
+├── README.md              (含 frontmatter)
+├── SKILL.md               (含 frontmatter)
+├── .env.example           (含 frontmatter)
+├── scripts/
+│   ├── USAGE.md
+│   └── new_skill_core.py  (含 docstring frontmatter)
+└── assets/
+    └── .gitkeep
+```
 
-    if history["total"] < 5:
-        print("[NO-DATA] 累積不足 5 次，建議延後分析")
-        exit()
+### 用法
 
-    # 步驟 2：趨勢分析
-    trends = analyze_trends(history["records"])
+```bash
+# 創建新技能
+python skill_folder_designer.py --name "new-skill" --description "A new skill for ..."
 
-    # 步驟 3：識別改進點
-    for flag in trends["flags"]:
-        if flag == "[DEGRADED]":
-            patch_type = "Major"
-        elif flag == "[SKILL-DEFECT]":
-            patch_type = "Major"
-        elif flag in ["[UNSTABLE]", "[INSUFFICIENT-COVERAGE]"]:
-            patch_type = "Minor"
-        else:
-            patch_type = "Hotfix"
+# 指定基礎目錄（默認 ~/skills）
+python skill_folder_designer.py --name "new-skill" --description "..." --skills-dir ~/workbuddy/skills
 
-    # 步驟 4：生成 Patch
-    patch = generate_patch(
-        skill_name="currency-exchange-tracker",
-        current_version="v1.0.0",
-        patch_type=patch_type,
-        trigger=f"趨勢分析標記: {', '.join(trends['flags'])}",
-        changes=["根據趨勢分析結果調整"],
-        impact="待評估",
-        rollback="恢復上一版本"
-    )
+# 列出現有技能
+python skill_folder_designer.py --list --skills-dir ~/workbuddy/skills
+```
 
-    # 步驟 5：審核分級
-    if patch_type == "Major":
-        print("[PENDING-APPROVAL] 等待主人確認")
-    else:
-        apply_patch(
-            skill_path=Path("skills/currency-exchange-tracker/SKILL.md"),
-            patch_file=Path(patch["file_path"])
-        )
-        print(f"[PATCH-APPLIED] 已更新至 {patch['new_version']}")
+### 參數
 
-## 模板 B：改進 + 合規驗證完整流程（推薦）
-
-    from pathlib import Path
-    import subprocess
-    from skill_improving import (
-        load_correction_history,
-        analyze_trends,
-        generate_patch,
-        apply_patch,
-        rollback_skill
-    )
-
-    skill_name = "currency-exchange-tracker"
-    skill_path = Path(f"skills/{skill_name}/SKILL.md")
-    skill_dir = Path(f"skills/{skill_name}/")
-
-    # ========== 改進階段 ==========
-    history = load_correction_history(
-        correction_path=Path("assets/SKILL.CORRECTION.md"),
-        skill_name=skill_name,
-        limit=10
-    )
-
-    trends = analyze_trends(history["records"])
-    patch = generate_patch(
-        skill_name=skill_name,
-        current_version="v1.0.0",
-        patch_type="Minor",
-        trigger="趨勢分析結果",
-        changes=["調整內容"],
-        impact="影響範圍",
-        rollback="恢復上一版本"
-    )
-
-    # 應用 Patch
-    apply_result = apply_patch(
-        skill_path=skill_path,
-        patch_file=Path(patch["file_path"]),
-        backup_dir=Path("improve/backups")
-    )
-
-    # ========== 合規驗證階段（新增） ==========
-    print("[STEP-8.5] 執行合規驗證...")
-    val_result = subprocess.run(
-        ["python", "skill_validate.py", "--skill-dir", str(skill_dir), "--strict"],
-        capture_output=True,
-        text=True
-    )
-
-    if val_result.returncode != 0:
-        print("[VALIDATION-FAILED] 改進後技能存在合規違規")
-        print(val_result.stdout)
-        # 立即回滾
-        rollback_skill(skill_path, Path(apply_result["backup_path"]))
-        print("[ROLLBACK-EXECUTED] 已回滾到改進前版本")
-        print("[REPORT] 上報主人：改進方案導致合規違規，需重新評估")
-        exit(1)
-    else:
-        print("[VALIDATION-PASSED] 合規檢查通過，允許交付")
-        print(f"[PATCH-APPLIED] 技能已更新並通過驗證")
+| 參數 | 說明 | 必填 |
+|------|------|------|
+| --name | 技能名稱 | 是 |
+| --description | 技能描述 | 是 |
+| --skills-dir | 技能基礎目錄 | 否（默認 ~/skills） |
+| --author | 作者名 | 否 |
+| --list | 列出現有技能 | 否 |
 
 ---
 
-# 第四部分：輸出文件規範
+## 5. skill_issue_reporter.py（Issue 報告器）— v1.2.5 新增
 
-| 文件類型 | 命名格式 | 存放位置 | 說明 |
-|---------|---------|---------|------|
-| Patch 方案 | `PATCH_{舊版本}_to_{新版本}.md` | `improve/{技能名}/` | 改進方案 |
-| 備份檔案 | `{技能名}_{時間戳}.md` | `improve/backups/` | 舊版本備份 |
-| 改進記錄 | `SKILL_CORRECTION.md` | `assets/` | 累積追加 |
-| 合規報告 | `VALIDATION_REPORT_{時間戳}.md` | `improve/{技能名}/` | skill_validate 輸出 |
+### 功能
+強制按 CONTRIBUTING.md v1.2.5 規範生成標準 Issue 報告。
+
+### 核心機制
+- Agent 禁止自由發揮撰寫 Issue，必須通過此腳本生成
+- 自動分類 [FRAMEWORK] / [RUNTIME] / [AGENT-BUG]
+- 強制驗證每 Section >= 50 個中文字符
+- 輸出 Markdown + JSON 雙格式
+
+### 用法（程序化 — Agent 推薦）
+
+```bash
+# 從 stdin 讀取完整 JSON（Agent 生成後直接管道輸入）
+cat issue_input.json | python skill_issue_reporter.py \
+    --skill-dir ./github-skill-organizer/ \
+    --from-stdin \
+    --output-dir ./improve/issues
+```
+
+### 用法（交互式 — 人手觸發）
+
+```bash
+python skill_issue_reporter.py \
+    --skill-dir ./github-skill-organizer/ \
+    --interactive \
+    --output-dir ./improve/issues
+```
+
+### 用法（命令行參數模式）
+
+```bash
+python skill_issue_reporter.py \
+    --skill-dir ./github-skill-organizer/ \
+    --classification "[RUNTIME]" \
+    --summary "upload_skill 計數異常" \
+    --repro-json ./repro.json \
+    --root-cause-json ./root_cause.json \
+    --proposed-fix-json ./proposed_fix.json \
+    --output-dir ./improve/issues
+```
+
+### 參數
+
+| 參數 | 說明 | 必填 |
+|------|------|------|
+| --skill-dir | 技能目錄路徑（必須包含 SKILL.md） | 是 |
+| --output-dir | Issue 輸出目錄 | 否（默認 ./improve/issues） |
+| --interactive | 交互式模式 | 否 |
+| --dry-run | 預覽模式：驗證輸入但不寫入文件 | 否 |
+| --from-stdin | 從 stdin 讀取完整 JSON | 否 |
+| --classification | [FRAMEWORK] / [RUNTIME] / [AGENT-BUG] | 否（交互式/stdin 時不需要） |
+| --summary | 問題摘要 | 否（交互式/stdin 時不需要） |
+| --repro-json | 復現步驟 JSON 文件 | 否 |
+| --root-cause-json | 根因分析 JSON 文件 | 否 |
+| --proposed-fix-json | 建議修復 JSON 文件 | 否 |
+| --attempted-json | 已嘗試修復 JSON 文件（可選） | 否 |
+| --verification-json | 驗證結果 JSON 文件（可選） | 否 |
 
 ---
 
-# 第五部分：常見問題
+## 常見問題
 
-**Q：何時觸發 Skill Improving？**
-A：累積 5-10 次使用記錄後，或主人主動要求分析時。
+**Q1：舊腳本 skill_validate.py 和 skill_improving.py 還能用嗎？**
+A：不能。v1.2.5 已全面更名，舊腳本已廢棄。請使用 skill_integrity_checker.py 和 skill_patch_validator.py。
 
-**Q：Patch 應用失敗怎麼辦？**
-A：立即回滾到備份版本，輸出 [ROLLBACK-EXECUTED]，上報主人。
+**Q2：為什麼 Issue 必須通過腳本生成？**
+A：確保不同 LLM 輸出格式完全一致，減少主人審核成本。自由撰寫會導致格式、詳細程度、分類判斷不一致。
 
-**Q：Major 級 patch 主人長時間不回覆？**
-A：標記 [PENDING-APPROVAL]，繼續監控舊版本使用情況，不擅自應用。
+**Q3：skill_issue_reporter.py 生成的文件在哪裡？**
+A：默認輸出到 `./improve/issues/ISSUE_{標題}_{時間戳}.md` 和 `.json`。可以通過 `--output-dir` 指定其他目錄。
 
-**Q：skill_validate 何時調用？**
-A：應用 Patch 後、交付前必須調用。若驗證失敗，立即回滾並上報，禁止交付不合規技能。
-
-**Q：驗證失敗但改進內容正確怎麼辦？**
-A：違規項可能涉及架構紅線（如檔案命名、frontmatter 格式）。先修復違規項，重新驗證通過後方可交付。禁止繞過驗證。
+**Q4：交互式模式和程序化模式有什麼區別？**
+A：交互式模式通過問答收集信息，適合人手觸發。程序化模式通過 JSON 輸入，適合 Agent 自動化調用。
 
 ---
 
-*最後更新：2026-05-22（v1.1.0 對齊 v1.2.4，更新 frontmatter 規範）*
+## 版本記錄
+
+| 版本 | 日期 | 變更 |
+|------|------|------|
+| v1.1.0 | 2026-05-11 | 初始版本，涵蓋 skill_validate 和 skill_improving |
+| v1.2.5 | 2026-05-22 | 腳本全面更名，新增 skill_issue_reporter.py，更新所有用法說明 |
