@@ -8,7 +8,7 @@ description: "Agent Swarm 技能合規檢查器。檢查新技能是否違反 23
 version: "v1.0.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-21T15:28:00+08:00"
+updated_at: "2026-05-22T01:02:00+08:00"
 auth_config:
   provider: "github"
   auth_method: "token"
@@ -29,7 +29,7 @@ Agent Swarm 技能合規檢查器
 
 作者: Kevin Lin (Agent Swarm Architecture)
 版本: v1.0.0
-日期: 2026-05-21
+日期: 2026-05-22
 """
 
 import os
@@ -136,7 +136,7 @@ RULES = [
         "category": "通用",
         "title": "累積追加機制未聲明",
         "description": "累積型追加機制未在文件中明確聲明",
-        "fix": "在 readme/SKILL.md 中明確聲明「本技能採用累積追加機制，新舊版本共存，禁止覆蓋」。",
+        "fix": "在 README.md 中明確聲明「本技能採用累積追加機制，新舊版本共存，禁止覆蓋」。",
     },
     {
         "id": "AGENT-011",
@@ -266,7 +266,7 @@ ARCHITECTURE_RULES = [
         "id": "ARCH-001",
         "title": "SKILL.md 定位錯誤",
         "description": "SKILL.md 必須是給 LLM 直接執行的指令檔案，非人類說明書",
-        "fix": "readme/SKILL.md = 人類可讀說明書。SKILL.md = LLM 執行指令集。禁止混用。",
+        "fix": "README.md = 人類可讀說明書。SKILL.md = LLM 執行指令集。禁止混用。",
     },
     {
         "id": "ARCH-002",
@@ -394,7 +394,7 @@ class SkillValidator:
 
         # 檢查必要檔案結構
         required_files = [
-            "readme/SKILL.md",
+            "README.md",
             "SKILL.md",
         ]
         for req in required_files:
