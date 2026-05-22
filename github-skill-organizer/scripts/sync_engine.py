@@ -99,7 +99,9 @@ class SyncEngine:
         """Direct GitHub API call with SSL fallback for comparison operations."""
         if not self.token:
             return {"error": "No GITHUB_TOKEN available"}
-        url = f"{self.api_base}{endpoint}"
+        # DEFENSIVE: Normalize path to prevent double slashes from github_path
+        endpoint = self._normalize_github_path(endpoint)
+        url = f"{self.api_base}/{endpoint}"
         req = Request(url)
         req.add_header("Authorization", f"Bearer {self.token}")
         req.add_header("X-GitHub-Api-Version", "2022-11-28")
@@ -308,6 +310,24 @@ class SyncEngine:
             return None
 
     # ===== EXCLUSION HELPERS =====
+
+    @staticmethod
+    def _normalize_github_path(path: str) -> str:
+        """
+        DEFENSIVE: Remove leading/trailing slashes and collapse double slashes.
+        github_path in frontmatter may accidentally have a leading "/" which
+        causes GitHub API path errors (e.g. "//skill-name/file.py").
+        Also removes trailing "/" to prevent directory misidentification.
+        """
+        if not path:
+            return path
+        while path.startswith("/"):
+            path = path[1:]
+        while path.endswith("/"):
+            path = path[:-1]
+        while "//" in path:
+            path = path.replace("//", "/")
+        return path
 
     def _should_exclude(self, path: Path) -> bool:
         """Check if a file or directory should be excluded from upload."""
