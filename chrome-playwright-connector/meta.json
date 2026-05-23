@@ -1,0 +1,1795 @@
+{
+  "skill_name": "chrome-playwright-connector",
+  "classification": {
+    "status": "ok",
+    "owner": "nervlin4444",
+    "repo": "ai.skills.incubation",
+    "local_dir": "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector",
+    "action": "local_ahead",
+    "identical_count": 5,
+    "modified_count": 2,
+    "local_only_count": 245,
+    "github_only_count": 0,
+    "modified_files": [
+      "CHANGELOG.md",
+      "scripts/diagnostic_kit.py"
+    ],
+    "local_only_files": [
+      "diagnose/page_20260524_015309.html",
+      "diagnose/20260524_015351_page.html",
+      "diagnose/20260524_015351_elements.txt",
+      "diagnose/screenshot_20260524_015250.png",
+      "diagnose/screenshot_20260524_015308.png",
+      "diagnose/20260524_015351_screenshot.png",
+      "profiles/kimi_com/Default/DIPS",
+      "profiles/kimi_com/Default/Cookies",
+      "profiles/kimi_com/Default/Cookies-journal",
+      "profiles/kimi_com/Default/DawnGraphiteCache/data_1",
+      "profiles/kimi_com/Default/DawnGraphiteCache/data_0",
+      "profiles/kimi_com/Default/DawnGraphiteCache/index",
+      "profiles/kimi_com/Default/DawnGraphiteCache/data_2",
+      "profiles/kimi_com/Default/DawnGraphiteCache/data_3",
+      "profiles/kimi_com/Default/Session Storage/000003.log",
+      "profiles/kimi_com/Default/Session Storage/MANIFEST-000001",
+      "profiles/kimi_com/Default/Session Storage/LOCK",
+      "profiles/kimi_com/Default/Session Storage/CURRENT",
+      "profiles/kimi_com/Default/Session Storage/LOG",
+      "profiles/kimi_com/Default/Session Storage/LOG.old",
+      "profiles/kimi_com/Default/GPUCache/data_1",
+      "profiles/kimi_com/Default/GPUCache/data_0",
+      "profiles/kimi_com/Default/GPUCache/index",
+      "profiles/kimi_com/Default/GPUCache/data_2",
+      "profiles/kimi_com/Default/GPUCache/data_3",
+      "profiles/kimi_com/Default/PersistentOriginTrials/LOCK",
+      "profiles/kimi_com/Default/PersistentOriginTrials/LOG",
+      "profiles/kimi_com/Default/PersistentOriginTrials/LOG.old",
+      "profiles/kimi_com/Default/Shared Dictionary/db-journal",
+      "profiles/kimi_com/Default/Shared Dictionary/db",
+      "profiles/kimi_com/Default/shared_proto_db/000003.log",
+      "profiles/kimi_com/Default/shared_proto_db/MANIFEST-000001",
+      "profiles/kimi_com/Default/shared_proto_db/LOCK",
+      "profiles/kimi_com/Default/shared_proto_db/CURRENT",
+      "profiles/kimi_com/Default/shared_proto_db/LOG",
+      "profiles/kimi_com/Default/shared_proto_db/LOG.old",
+      "profiles/kimi_com/Default/DawnWebGPUCache/data_1",
+      "profiles/kimi_com/Default/DawnWebGPUCache/data_0",
+      "profiles/kimi_com/Default/DawnWebGPUCache/index",
+      "profiles/kimi_com/Default/DawnWebGPUCache/data_2",
+      "profiles/kimi_com/Default/DawnWebGPUCache/data_3",
+      "profiles/kimi_com/Default/Local Storage/leveldb/000003.log",
+      "profiles/kimi_com/Default/Local Storage/leveldb/MANIFEST-000001",
+      "profiles/kimi_com/Default/Local Storage/leveldb/LOCK",
+      "profiles/kimi_com/Default/Local Storage/leveldb/CURRENT",
+      "profiles/kimi_com/Default/Local Storage/leveldb/LOG",
+      "profiles/kimi_com/Default/Local Storage/leveldb/LOG.old",
+      "profiles/kimi_com/Default/Code Cache/js/369507891c929ef6_0",
+      "profiles/kimi_com/Default/Code Cache/js/e4825f2215cbfbe1_0",
+      "profiles/kimi_com/Default/Code Cache/js/fc8582f130449626_0",
+      "profiles/kimi_com/Default/Code Cache/js/125d8c33abe74b44_0",
+      "profiles/kimi_com/Default/Code Cache/js/94fd39e392f99950_0",
+      "profiles/kimi_com/Default/Code Cache/js/fb265bea6dec4cc3_0",
+      "profiles/kimi_com/Default/Code Cache/js/9132b3cdf3735e7e_0",
+      "profiles/kimi_com/Default/Code Cache/js/6efe2cff4dc3e2bb_0",
+      "profiles/kimi_com/Default/Code Cache/js/38888335a9be159b_0",
+      "profiles/kimi_com/Default/Code Cache/js/003118de8890b15b_0",
+      "profiles/kimi_com/Default/Code Cache/js/00f1a823c5906f34_0",
+      "profiles/kimi_com/Default/Code Cache/js/446433ecc21eb168_0",
+      "profiles/kimi_com/Default/Code Cache/js/608b694bb43cfabf_0",
+      "profiles/kimi_com/Default/Code Cache/js/bc9c7bebb101ed1f_0",
+      "profiles/kimi_com/Default/Code Cache/js/4c0ed6df5da166ec_0",
+      "profiles/kimi_com/Default/Code Cache/js/999e3a9fd132bf8e_0",
+      "profiles/kimi_com/Default/Code Cache/js/8f8d61d26446350c_0",
+      "profiles/kimi_com/Default/Code Cache/js/7d28133ea67d53a5_0",
+      "profiles/kimi_com/Default/Code Cache/js/4a302f6e2bd4d3bd_0",
+      "profiles/kimi_com/Default/Code Cache/js/f7746bf372dd199a_0",
+      "profiles/kimi_com/Default/Code Cache/js/173a452d4a0cc406_0",
+      "profiles/kimi_com/Default/Code Cache/js/69891c30d2d03918_0",
+      "profiles/kimi_com/Default/Code Cache/js/f849f418f2d60340_0",
+      "profiles/kimi_com/Default/Code Cache/js/5e05756a46e31108_0",
+      "profiles/kimi_com/Default/Code Cache/js/0848ac8182bf544a_0",
+      "profiles/kimi_com/Default/Code Cache/js/a792cbdb3ebd6a87_0",
+      "profiles/kimi_com/Default/Code Cache/js/5fffbca4362c2881_0",
+      "profiles/kimi_com/Default/Code Cache/js/817f7afb2d3be24f_0",
+      "profiles/kimi_com/Default/Code Cache/js/a8d1fdebc55295b3_0",
+      "profiles/kimi_com/Default/Code Cache/js/index",
+      "profiles/kimi_com/Default/Code Cache/js/c39d1b3c704f7316_0",
+      "profiles/kimi_com/Default/Code Cache/js/5ef4dbc66e503745_0",
+      "profiles/kimi_com/Default/Code Cache/js/a5b951aea13ed4cd_0",
+      "profiles/kimi_com/Default/Code Cache/js/36659a88765dbfab_0",
+      "profiles/kimi_com/Default/Code Cache/js/39619cdb61835ad5_0",
+      "profiles/kimi_com/Default/Code Cache/js/09c88f5f6e78fff1_0",
+      "profiles/kimi_com/Default/Code Cache/js/8b6459960f52b4c0_0",
+      "profiles/kimi_com/Default/Code Cache/wasm/index",
+      "profiles/kimi_com/Default/Code Cache/wasm/index-dir/the-real-index",
+      "profiles/kimi_com/Default/Code Cache/js/index-dir/the-real-index",
+      "profiles/kimi_com/Default/shared_proto_db/metadata/000003.log",
+      "profiles/kimi_com/Default/shared_proto_db/metadata/MANIFEST-000001",
+      "profiles/kimi_com/Default/shared_proto_db/metadata/LOCK",
+      "profiles/kimi_com/Default/shared_proto_db/metadata/CURRENT",
+      "profiles/kimi_com/Default/shared_proto_db/metadata/LOG",
+      "profiles/kimi_com/Default/shared_proto_db/metadata/LOG.old",
+      "profiles/kimi_com/Default/Shared Dictionary/cache/index",
+      "profiles/kimi_com/Default/Shared Dictionary/cache/index-dir/the-real-index",
+      "profiles/kimi_com/Default/Cache/Cache_Data/af8946f8a11c9d5a_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/c21c8cf0848f5087_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/c5da2a51017461cb_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/fe292d4b4f1843f8_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/b6d3911f7e86cf12_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/88d7bbaf2397bf2c_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/6d81292e95f9dee0_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/e34276d13d4a4abc_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/540ea14995b7f48c_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/fd4ea12f087499c8_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/d5f435ef7a364203_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/7a22c7ff26f952c4_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/ce0cac0572ef7ce5_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/ffd13d214ae8e397_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/780e8714736e073d_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/6484caa2f0d80e24_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/1144308100f6c60a_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/b4485be34e173d0d_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/10ab574d0071732d_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/ba6b80c7bea21831_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/2dd33390621ad41c_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/85f70e787d6a22c6_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/1b4f8396ccabff15_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/21ecd2b1d244ab37_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/06131a8f564f9986_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/c8f43584502ce5e9_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/45c7acb317196189_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/1f776acb1f192184_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/8ac0856ee3bdf2db_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/40d85698cfb689ad_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/1ef1c04efd672510_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/066841cc5fef4533_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/9393d52254516342_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/aba3452256b2dd2d_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/02a9f52e9a586bdf_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/c2fbc657118fbdd3_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/19cc306e154893e5_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/a98599bca2c269fc_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/74339a2e5fcc23f2_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/9e28f487cf4dd2e1_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/52131d6e350dd83a_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/37ba8a2d9dfb2186_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/266d14218e166bdb_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/index",
+      "profiles/kimi_com/Default/Cache/Cache_Data/e6fb781bdb0e235f_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/a055a110820fccbb_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/eb5b29df6a64a244_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/1e91f1e4d89773f6_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/9a94e754960271a0_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/5b2537f00ee4436a_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/4933b11352e8e8b6_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/e6ed065e92eceed2_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/831343c78ddcc7b2_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/33d48a7b2cf1835b_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/a143af844c5a9843_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/7c47bbad4c8aa89a_0",
+      "profiles/kimi_com/Default/Cache/Cache_Data/6baa9cae8e7e1e4a_0",
+      "profiles/kimi_com/Default/Cache/No_Vary_Search/journal.baj",
+      "profiles/kimi_com/Default/Cache/No_Vary_Search/snapshot.baf",
+      "profiles/kimi_com/Default/Cache/Cache_Data/index-dir/the-real-index",
+      "profiles/default/Default/DIPS",
+      "profiles/default/Default/Cookies",
+      "profiles/default/Default/Cookies-journal",
+      "profiles/default/Default/DawnGraphiteCache/data_1",
+      "profiles/default/Default/DawnGraphiteCache/data_0",
+      "profiles/default/Default/DawnGraphiteCache/index",
+      "profiles/default/Default/DawnGraphiteCache/data_2",
+      "profiles/default/Default/DawnGraphiteCache/data_3",
+      "profiles/default/Default/Session Storage/000003.log",
+      "profiles/default/Default/Session Storage/MANIFEST-000001",
+      "profiles/default/Default/Session Storage/LOCK",
+      "profiles/default/Default/Session Storage/CURRENT",
+      "profiles/default/Default/Session Storage/LOG",
+      "profiles/default/Default/Session Storage/LOG.old",
+      "profiles/default/Default/GPUCache/data_1",
+      "profiles/default/Default/GPUCache/data_0",
+      "profiles/default/Default/GPUCache/index",
+      "profiles/default/Default/GPUCache/data_2",
+      "profiles/default/Default/GPUCache/data_3",
+      "profiles/default/Default/PersistentOriginTrials/LOCK",
+      "profiles/default/Default/PersistentOriginTrials/LOG",
+      "profiles/default/Default/PersistentOriginTrials/LOG.old",
+      "profiles/default/Default/Shared Dictionary/db-journal",
+      "profiles/default/Default/Shared Dictionary/db",
+      "profiles/default/Default/shared_proto_db/000003.log",
+      "profiles/default/Default/shared_proto_db/MANIFEST-000001",
+      "profiles/default/Default/shared_proto_db/LOCK",
+      "profiles/default/Default/shared_proto_db/CURRENT",
+      "profiles/default/Default/shared_proto_db/LOG",
+      "profiles/default/Default/shared_proto_db/LOG.old",
+      "profiles/default/Default/DawnWebGPUCache/data_1",
+      "profiles/default/Default/DawnWebGPUCache/data_0",
+      "profiles/default/Default/DawnWebGPUCache/index",
+      "profiles/default/Default/DawnWebGPUCache/data_2",
+      "profiles/default/Default/DawnWebGPUCache/data_3",
+      "profiles/default/Default/Local Storage/leveldb/000003.log",
+      "profiles/default/Default/Local Storage/leveldb/MANIFEST-000001",
+      "profiles/default/Default/Local Storage/leveldb/LOCK",
+      "profiles/default/Default/Local Storage/leveldb/CURRENT",
+      "profiles/default/Default/Local Storage/leveldb/LOG",
+      "profiles/default/Default/Local Storage/leveldb/LOG.old",
+      "profiles/default/Default/Code Cache/js/3c39c06973e5f67f_0",
+      "profiles/default/Default/Code Cache/js/933e196fb64b4c60_0",
+      "profiles/default/Default/Code Cache/js/d9c8de542bbecac6_0",
+      "profiles/default/Default/Code Cache/js/23af5c7a232ba9ab_0",
+      "profiles/default/Default/Code Cache/js/0b93baa429a6b251_0",
+      "profiles/default/Default/Code Cache/js/7e4db27ad84d1a8c_0",
+      "profiles/default/Default/Code Cache/js/index",
+      "profiles/default/Default/Code Cache/js/1b8c6183fa705c35_0",
+      "profiles/default/Default/Code Cache/js/ff90beca6409c9a7_0",
+      "profiles/default/Default/Code Cache/wasm/index",
+      "profiles/default/Default/Code Cache/wasm/index-dir/the-real-index",
+      "profiles/default/Default/Code Cache/js/index-dir/the-real-index",
+      "profiles/default/Default/shared_proto_db/metadata/000003.log",
+      "profiles/default/Default/shared_proto_db/metadata/MANIFEST-000001",
+      "profiles/default/Default/shared_proto_db/metadata/LOCK",
+      "profiles/default/Default/shared_proto_db/metadata/CURRENT",
+      "profiles/default/Default/shared_proto_db/metadata/LOG",
+      "profiles/default/Default/shared_proto_db/metadata/LOG.old",
+      "profiles/default/Default/Shared Dictionary/cache/index",
+      "profiles/default/Default/Shared Dictionary/cache/index-dir/the-real-index",
+      "profiles/default/Default/Cache/Cache_Data/753546ce3be4c0b6_0",
+      "profiles/default/Default/Cache/Cache_Data/77654365719c2206_0",
+      "profiles/default/Default/Cache/Cache_Data/b412ebd1c2701ff5_0",
+      "profiles/default/Default/Cache/Cache_Data/af81fb877c6f81fd_0",
+      "profiles/default/Default/Cache/Cache_Data/c52daa311c152ecc_0",
+      "profiles/default/Default/Cache/Cache_Data/73cf9b0917d587a5_0",
+      "profiles/default/Default/Cache/Cache_Data/a3ea6f928fe6565e_0",
+      "profiles/default/Default/Cache/Cache_Data/1d19e74b6a3ead23_0",
+      "profiles/default/Default/Cache/Cache_Data/1def16a857db7e2f_0",
+      "profiles/default/Default/Cache/Cache_Data/d28bd65f004cf892_0",
+      "profiles/default/Default/Cache/Cache_Data/57bd1eb907e26842_0",
+      "profiles/default/Default/Cache/Cache_Data/95f2d83a13214d12_0",
+      "profiles/default/Default/Cache/Cache_Data/ddc33c9c0cac0bed_0",
+      "profiles/default/Default/Cache/Cache_Data/15f3f0c01f3046c4_0",
+      "profiles/default/Default/Cache/Cache_Data/22ac57ef425c7c21_0",
+      "profiles/default/Default/Cache/Cache_Data/55505e04731b98f7_0",
+      "profiles/default/Default/Cache/Cache_Data/index",
+      "profiles/default/Default/Cache/Cache_Data/aded314d7bd1ba44_0",
+      "profiles/default/Default/Cache/Cache_Data/0073f9d1007ab652_0",
+      "profiles/default/Default/Cache/Cache_Data/8e528506ecaf3c2a_0",
+      "profiles/default/Default/Cache/Cache_Data/630583125b2b7b0d_0",
+      "profiles/default/Default/Cache/Cache_Data/6104f697c2bda01f_0",
+      "profiles/default/Default/Cache/Cache_Data/e6dd437f3a97bae7_0",
+      "profiles/default/Default/Cache/No_Vary_Search/journal.baj",
+      "profiles/default/Default/Cache/No_Vary_Search/snapshot.baf",
+      "profiles/default/Default/Cache/Cache_Data/index-dir/the-real-index",
+      "scripts/__pycache__/diagnostic_kit.cpython-314.pyc",
+      "scripts/__pycache__/profile_manager.cpython-314.pyc",
+      "scripts/__pycache__/browser_connector.cpython-314.pyc"
+    ],
+    "github_only_files": [],
+    "comparisons": [
+      {
+        "file": "CHANGELOG.md",
+        "status": "modified",
+        "local_sha": "201346b68447e3bc4511641f8eec83c8059d472c",
+        "github_sha": "c3b314cdd6fe02e801b2e6da1c28fbc7ddfaa6ec"
+      },
+      {
+        "file": "README.md",
+        "status": "identical",
+        "sha": "255879e3472efb4df8228c1272ac22aba71c0e7f"
+      },
+      {
+        "file": "SKILL.md",
+        "status": "identical",
+        "sha": "7b191e302bb67d9d2d34f13c0e0407eaddd6432b"
+      },
+      {
+        "file": "diagnose/page_20260524_015309.html",
+        "status": "local_only",
+        "local_sha": "3e7ecb8c10b97ce098456098bd98734ffb2bea0a",
+        "github_sha": null
+      },
+      {
+        "file": "diagnose/20260524_015351_page.html",
+        "status": "local_only",
+        "local_sha": "3e7ecb8c10b97ce098456098bd98734ffb2bea0a",
+        "github_sha": null
+      },
+      {
+        "file": "diagnose/20260524_015351_elements.txt",
+        "status": "local_only",
+        "local_sha": "9188170eea48923c5e4b2ab9b651b84a49f55f42",
+        "github_sha": null
+      },
+      {
+        "file": "diagnose/screenshot_20260524_015250.png",
+        "status": "local_only",
+        "local_sha": "0f191a807e10d44a5cae14448544daccf92074af",
+        "github_sha": null
+      },
+      {
+        "file": "diagnose/screenshot_20260524_015308.png",
+        "status": "local_only",
+        "local_sha": "0f191a807e10d44a5cae14448544daccf92074af",
+        "github_sha": null
+      },
+      {
+        "file": "diagnose/20260524_015351_screenshot.png",
+        "status": "local_only",
+        "local_sha": "0f191a807e10d44a5cae14448544daccf92074af",
+        "github_sha": null
+      },
+      {
+        "file": "scripts/profile_manager.py",
+        "status": "identical",
+        "sha": "00e10a7983a61a64e1372c30ad0706932bcc99f2"
+      },
+      {
+        "file": "scripts/USAGE.md",
+        "status": "identical",
+        "sha": "f5c2311c0fb2e5fb3e47ab15339d52e760dbcf18"
+      },
+      {
+        "file": "scripts/diagnostic_kit.py",
+        "status": "modified",
+        "local_sha": "5a1db4d80716e60c539b5c7631505aa920be7dad",
+        "github_sha": "072c43c7af47c3e69674fd04868d3c609cf0cfd5"
+      },
+      {
+        "file": "scripts/browser_connector.py",
+        "status": "identical",
+        "sha": "61d8030fd23bfd5732e618e99d143ce689e86ea2"
+      },
+      {
+        "file": "profiles/kimi_com/Default/DIPS",
+        "status": "local_only",
+        "local_sha": "ef5db08464f280cf5131a1e9336232388a275f1a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cookies",
+        "status": "local_only",
+        "local_sha": "5d8b8a29156abe883f127cdb85070d724e28dec3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cookies-journal",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnGraphiteCache/data_1",
+        "status": "local_only",
+        "local_sha": "a6f997cb506874953ad5708e7edc40250e907f30",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnGraphiteCache/data_0",
+        "status": "local_only",
+        "local_sha": "d76fb77e93ac8a536b5dbade616d63abd00626c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnGraphiteCache/index",
+        "status": "local_only",
+        "local_sha": "e7084f769971233257d45c6fb3feb306091ae387",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnGraphiteCache/data_2",
+        "status": "local_only",
+        "local_sha": "c7e2eb9adcfb2d3313ec85f5c28cedda950a3f9b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnGraphiteCache/data_3",
+        "status": "local_only",
+        "local_sha": "5eec97358cf550862fd343fc9a73c159d4c0ab10",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Session Storage/000003.log",
+        "status": "local_only",
+        "local_sha": "fc875b3e5fd483a23962f946ff51ee6af21963a6",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Session Storage/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Session Storage/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Session Storage/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Session Storage/LOG",
+        "status": "local_only",
+        "local_sha": "a8f9de907e3ff2e511d4042d7827cf7711460a27",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Session Storage/LOG.old",
+        "status": "local_only",
+        "local_sha": "d97d5fff04e853e5b2befa0f5022d85b61add13e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/GPUCache/data_1",
+        "status": "local_only",
+        "local_sha": "e9cdd8444d8d1b60a6864fbb8bbef68867d85ca3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/GPUCache/data_0",
+        "status": "local_only",
+        "local_sha": "d76fb77e93ac8a536b5dbade616d63abd00626c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/GPUCache/index",
+        "status": "local_only",
+        "local_sha": "829e6a2ee60e938bae109f2b523905221dff201e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/GPUCache/data_2",
+        "status": "local_only",
+        "local_sha": "c7e2eb9adcfb2d3313ec85f5c28cedda950a3f9b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/GPUCache/data_3",
+        "status": "local_only",
+        "local_sha": "5eec97358cf550862fd343fc9a73c159d4c0ab10",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/PersistentOriginTrials/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/PersistentOriginTrials/LOG",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/PersistentOriginTrials/LOG.old",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Shared Dictionary/db-journal",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Shared Dictionary/db",
+        "status": "local_only",
+        "local_sha": "d97070388d70537f758efc0afcf220bdafdce695",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/000003.log",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/LOG",
+        "status": "local_only",
+        "local_sha": "223545a3943a6531906cc86ee3ede34b59c5e1c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/LOG.old",
+        "status": "local_only",
+        "local_sha": "a3546767ed9256c369171b1e92106f0d9bb9e181",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnWebGPUCache/data_1",
+        "status": "local_only",
+        "local_sha": "91100a2caee5c123d755e81fa46fcc8b93bd9dec",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnWebGPUCache/data_0",
+        "status": "local_only",
+        "local_sha": "d76fb77e93ac8a536b5dbade616d63abd00626c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnWebGPUCache/index",
+        "status": "local_only",
+        "local_sha": "ba96330911296e68b970c54879ee5ce9a890e1cb",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnWebGPUCache/data_2",
+        "status": "local_only",
+        "local_sha": "c7e2eb9adcfb2d3313ec85f5c28cedda950a3f9b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/DawnWebGPUCache/data_3",
+        "status": "local_only",
+        "local_sha": "5eec97358cf550862fd343fc9a73c159d4c0ab10",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Local Storage/leveldb/000003.log",
+        "status": "local_only",
+        "local_sha": "21c7fdbd35fab4249cd1ba4e50f36c9f3e123054",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Local Storage/leveldb/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Local Storage/leveldb/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Local Storage/leveldb/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Local Storage/leveldb/LOG",
+        "status": "local_only",
+        "local_sha": "f46c8ced3aab616d89b155c52a28bbe0363be387",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Local Storage/leveldb/LOG.old",
+        "status": "local_only",
+        "local_sha": "f8c77df515547fbae1543c1e0d05d571d67aa59f",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/369507891c929ef6_0",
+        "status": "local_only",
+        "local_sha": "08c7c9109bac9ccd617863bd3e2c327ddeb08322",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/e4825f2215cbfbe1_0",
+        "status": "local_only",
+        "local_sha": "74fea213a8b62934a8b4fe9a8ca6c100903db818",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/fc8582f130449626_0",
+        "status": "local_only",
+        "local_sha": "11f5e5b8f7e39e783fa66eb0b54ee1b36816ad8e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/125d8c33abe74b44_0",
+        "status": "local_only",
+        "local_sha": "819d2da60b8f1f86685ce2fd1b2ab8d7d9dac1ab",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/94fd39e392f99950_0",
+        "status": "local_only",
+        "local_sha": "9d3f327ddaeee98e57dded907317538d60d169e7",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/fb265bea6dec4cc3_0",
+        "status": "local_only",
+        "local_sha": "f5a111e2b04ab35800121adb9494e12b126c7f89",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/9132b3cdf3735e7e_0",
+        "status": "local_only",
+        "local_sha": "4e6bbdbc00b2fbd4faf8cb6e51d6a9ebd543f442",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/6efe2cff4dc3e2bb_0",
+        "status": "local_only",
+        "local_sha": "7acf491e3069661fc99c6b3853a7c5ebafac49e1",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/38888335a9be159b_0",
+        "status": "local_only",
+        "local_sha": "8e0810e08dcecaa528d8b846b77413078098c17c",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/003118de8890b15b_0",
+        "status": "local_only",
+        "local_sha": "e6e5d8fb40e7cd97e72a9dba96e82d25cda7284b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/00f1a823c5906f34_0",
+        "status": "local_only",
+        "local_sha": "d2c409e5dd49e4e568700fc580ba5a83221f0962",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/446433ecc21eb168_0",
+        "status": "local_only",
+        "local_sha": "32bb998b117b42b052755e15b99f43d8b0325a01",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/608b694bb43cfabf_0",
+        "status": "local_only",
+        "local_sha": "82f979add754b15466980c8b260cc346f33a1d87",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/bc9c7bebb101ed1f_0",
+        "status": "local_only",
+        "local_sha": "f89dc8c4ef35b2f855e8931be58e44307974ae91",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/4c0ed6df5da166ec_0",
+        "status": "local_only",
+        "local_sha": "87734b3df7d178fecda2df6b219396064a4190a3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/999e3a9fd132bf8e_0",
+        "status": "local_only",
+        "local_sha": "1214b8ebcd5f16a8bdf27f94a4920a433ea625eb",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/8f8d61d26446350c_0",
+        "status": "local_only",
+        "local_sha": "a4e4a13c95dd40335af93b91602d96dcfedda16b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/7d28133ea67d53a5_0",
+        "status": "local_only",
+        "local_sha": "0f1b293cd0fc466a3c5af457f4182395f7d3681a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/4a302f6e2bd4d3bd_0",
+        "status": "local_only",
+        "local_sha": "02b0ca8d5e806eaa1c3e65452e7eb617e1cd1620",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/f7746bf372dd199a_0",
+        "status": "local_only",
+        "local_sha": "4ec328fef4a12d46f9b728e3075afae004a77d9d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/173a452d4a0cc406_0",
+        "status": "local_only",
+        "local_sha": "a6d2daa6a299d81ba9f43a4fb536f397a9634e17",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/69891c30d2d03918_0",
+        "status": "local_only",
+        "local_sha": "e88672b5174009652f95df920bea83a927e015c9",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/f849f418f2d60340_0",
+        "status": "local_only",
+        "local_sha": "ce1d2e4f7191f2d4b42cabff733c719ea65c19d7",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/5e05756a46e31108_0",
+        "status": "local_only",
+        "local_sha": "f430f6bd9153e6121c843f18d20f6196a4b95343",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/0848ac8182bf544a_0",
+        "status": "local_only",
+        "local_sha": "3b75dda3492e442ca14818bf8bd02a75dc9d264e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/a792cbdb3ebd6a87_0",
+        "status": "local_only",
+        "local_sha": "af135fcc853df763f4827f3e7dcf498f9c8753e2",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/5fffbca4362c2881_0",
+        "status": "local_only",
+        "local_sha": "14c740c2d8ce02a5582e5050cbf57ad2819a78cc",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/817f7afb2d3be24f_0",
+        "status": "local_only",
+        "local_sha": "a273ebd02068b01e8b634a028d9115108b12b414",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/a8d1fdebc55295b3_0",
+        "status": "local_only",
+        "local_sha": "8a1f2f5256a5d5f83e6acd870eb5dd5ac4c123dd",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/c39d1b3c704f7316_0",
+        "status": "local_only",
+        "local_sha": "95fb78fca654a63bf6c275bb2b28bd67e66e76c3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/5ef4dbc66e503745_0",
+        "status": "local_only",
+        "local_sha": "35b198828f41d4d1ce31d8d298010e146df1fc23",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/a5b951aea13ed4cd_0",
+        "status": "local_only",
+        "local_sha": "b404da3e0bd00de75462f22b8ee41a0408a19931",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/36659a88765dbfab_0",
+        "status": "local_only",
+        "local_sha": "b0a27d1f6d0935eed0d6def79bb8204c417f5a7d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/39619cdb61835ad5_0",
+        "status": "local_only",
+        "local_sha": "ab020175aa5168502c2e5abdc517ead61bb9e577",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/09c88f5f6e78fff1_0",
+        "status": "local_only",
+        "local_sha": "cd791d48fac024c0c8837e6cc816887d13b198ed",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/8b6459960f52b4c0_0",
+        "status": "local_only",
+        "local_sha": "aba6d16e2d9ebc44a5c5891cb0a25dc7c2febd9c",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/wasm/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/wasm/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "37009936e516e3412cbcfcf98ddb06888ee37edb",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Code Cache/js/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "0661548f7b41fca1caa3de0779cf29d9656fe9c7",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/metadata/000003.log",
+        "status": "local_only",
+        "local_sha": "b16197d7a997962368b697b6544d607cf4acce1a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/metadata/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/metadata/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/metadata/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/metadata/LOG",
+        "status": "local_only",
+        "local_sha": "a1b705407876b4782f0b3b03a2803e6f3abba439",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/shared_proto_db/metadata/LOG.old",
+        "status": "local_only",
+        "local_sha": "291ae99aadfc1ab93e744008f15ec526afd6f294",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Shared Dictionary/cache/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Shared Dictionary/cache/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "39e67c7d566cd1809da8d02cdb13a3f52dd1d7db",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/af8946f8a11c9d5a_0",
+        "status": "local_only",
+        "local_sha": "9a2644896562e146711513c761df4af19945f559",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/c21c8cf0848f5087_0",
+        "status": "local_only",
+        "local_sha": "7faed2db8c13b7eafaccc397d0bfd32ac61f1056",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/c5da2a51017461cb_0",
+        "status": "local_only",
+        "local_sha": "7621ff108c4af3aada565a49ab88d7d6561bb1d6",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/fe292d4b4f1843f8_0",
+        "status": "local_only",
+        "local_sha": "10c2348b855f3282eedf7e89b1c69320436e9b2b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/b6d3911f7e86cf12_0",
+        "status": "local_only",
+        "local_sha": "6dc33cbc36ba6ef750b8a3fd87ef8f8b545b472b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/88d7bbaf2397bf2c_0",
+        "status": "local_only",
+        "local_sha": "2ff95e3b8f4aa8b56941347cda4163250dee0d19",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/6d81292e95f9dee0_0",
+        "status": "local_only",
+        "local_sha": "0ed4665c255f21bdbabf9ac1d454b994996674de",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/e34276d13d4a4abc_0",
+        "status": "local_only",
+        "local_sha": "69c2254be09f36cb24ec02ba5861167b1e97983b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/540ea14995b7f48c_0",
+        "status": "local_only",
+        "local_sha": "933b649fabc7488ce32948bd654844939f859033",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/fd4ea12f087499c8_0",
+        "status": "local_only",
+        "local_sha": "a837be5df5b4d40929f2a77ae0628bade586ef11",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/d5f435ef7a364203_0",
+        "status": "local_only",
+        "local_sha": "835fb0bb5a4ffb3456deb76f7541bc170b3cbae0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/7a22c7ff26f952c4_0",
+        "status": "local_only",
+        "local_sha": "f3eb9d9565328136bcf37a6713f48fde64d47a69",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/ce0cac0572ef7ce5_0",
+        "status": "local_only",
+        "local_sha": "090c4ecea9c30b1bdeb6cc49bfd3c84ad573626d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/ffd13d214ae8e397_0",
+        "status": "local_only",
+        "local_sha": "56b2afcfdd3eeadd95b4aa8a483dd5c53c035ec6",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/780e8714736e073d_0",
+        "status": "local_only",
+        "local_sha": "5e2b34fcb89571953d4b68ac4f2c2b65cc48cf49",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/6484caa2f0d80e24_0",
+        "status": "local_only",
+        "local_sha": "4758e8bc72e61a1be74d88c4d1e74aeb90015d64",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/1144308100f6c60a_0",
+        "status": "local_only",
+        "local_sha": "8fe6da8774d764b2e18d80599dc5046b07acae88",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/b4485be34e173d0d_0",
+        "status": "local_only",
+        "local_sha": "0c708650e5437e3a87bce3c19c469ae7bf109a4f",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/10ab574d0071732d_0",
+        "status": "local_only",
+        "local_sha": "c20d64bbbb6db68e489a53184353634eda801803",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/ba6b80c7bea21831_0",
+        "status": "local_only",
+        "local_sha": "b7ea3195b6a7f06fc47d276f6a9ae2ecb834408f",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/2dd33390621ad41c_0",
+        "status": "local_only",
+        "local_sha": "ea99262ad31f5f894610fd3049225db46bdcd2e0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/85f70e787d6a22c6_0",
+        "status": "local_only",
+        "local_sha": "5601579c08f58f0a109ee20cf3b9e17d99ba2464",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/1b4f8396ccabff15_0",
+        "status": "local_only",
+        "local_sha": "e7bf27111eca41cd0ac2075de349d9c0d9f4d0c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/21ecd2b1d244ab37_0",
+        "status": "local_only",
+        "local_sha": "95ac7d03197250d34e4f93be99983d722fab9f97",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/06131a8f564f9986_0",
+        "status": "local_only",
+        "local_sha": "f468c0426bbe22b8e4ed033addf6e07b43d6d67d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/c8f43584502ce5e9_0",
+        "status": "local_only",
+        "local_sha": "f6f3357d9d06ae020a0572e2dab4d2a28a255090",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/45c7acb317196189_0",
+        "status": "local_only",
+        "local_sha": "1cb31151f8e557315db74968ce3ca7ba2727e57b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/1f776acb1f192184_0",
+        "status": "local_only",
+        "local_sha": "5334f001a327df9e4cd92606d33c4deb59c4f745",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/8ac0856ee3bdf2db_0",
+        "status": "local_only",
+        "local_sha": "17c3421380082ecd4d820338d3df8bd883e9d77f",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/40d85698cfb689ad_0",
+        "status": "local_only",
+        "local_sha": "09564146ad306320d5e759d4e263c5c2a2df8746",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/1ef1c04efd672510_0",
+        "status": "local_only",
+        "local_sha": "94aa93455e49817959225c25c08d9203081a4cab",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/066841cc5fef4533_0",
+        "status": "local_only",
+        "local_sha": "30bda5ebc64e0fb35ce6feabe51f13e780bfda47",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/9393d52254516342_0",
+        "status": "local_only",
+        "local_sha": "0c59abe6e0036ae7435d980b2036f260c79860ea",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/aba3452256b2dd2d_0",
+        "status": "local_only",
+        "local_sha": "f5627e114cfec13fe0a427f4b65e069eca468e02",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/02a9f52e9a586bdf_0",
+        "status": "local_only",
+        "local_sha": "e50c4c870e98127097e9de03243fcf529eb8220a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/c2fbc657118fbdd3_0",
+        "status": "local_only",
+        "local_sha": "4e1e2cfccd24c357ae49176027f3e67dc4e15ba0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/19cc306e154893e5_0",
+        "status": "local_only",
+        "local_sha": "79b5d8d398bb433780264cb55c7de82962b9e55c",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/a98599bca2c269fc_0",
+        "status": "local_only",
+        "local_sha": "804d98d1312bfc31344c4e20afbfb68b75b08dea",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/74339a2e5fcc23f2_0",
+        "status": "local_only",
+        "local_sha": "bff2ebc13c97320c1575c947d4a2c4cfdaabe0c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/9e28f487cf4dd2e1_0",
+        "status": "local_only",
+        "local_sha": "30c1ef0b15e8533894bd1ca950e9c14bd4a40f04",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/52131d6e350dd83a_0",
+        "status": "local_only",
+        "local_sha": "a7a01fe2dc5211fef8670bf6f140cd2d39603d97",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/37ba8a2d9dfb2186_0",
+        "status": "local_only",
+        "local_sha": "e177e11f2fa9eb6e3b4301632c9016a9afc80c31",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/266d14218e166bdb_0",
+        "status": "local_only",
+        "local_sha": "d7590e71271810b6f3c9b6bc0c45ace16d273b66",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/e6fb781bdb0e235f_0",
+        "status": "local_only",
+        "local_sha": "c027c0fc787877665014e0f3162215575233bbd7",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/a055a110820fccbb_0",
+        "status": "local_only",
+        "local_sha": "f3e2418737762f6ec5666f8c72eea9f7f18d561a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/eb5b29df6a64a244_0",
+        "status": "local_only",
+        "local_sha": "7ada55510fb720d4bb4a33847ded237d39a5bd40",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/1e91f1e4d89773f6_0",
+        "status": "local_only",
+        "local_sha": "a51a9d2236338f524b52c65c5ad2fb3e58409e08",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/9a94e754960271a0_0",
+        "status": "local_only",
+        "local_sha": "26f80e46964d63574613c0c8b4f903f7bf095352",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/5b2537f00ee4436a_0",
+        "status": "local_only",
+        "local_sha": "bb22313111bdd8f7e8f7b13dd1bd69019c4a50cc",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/4933b11352e8e8b6_0",
+        "status": "local_only",
+        "local_sha": "8bfcc75b94c51240916f7e398f8215ab41d34d21",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/e6ed065e92eceed2_0",
+        "status": "local_only",
+        "local_sha": "f1e0f8340602740bf052d9209eb35a1542810f2a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/831343c78ddcc7b2_0",
+        "status": "local_only",
+        "local_sha": "7e2d19f54b5ecdaed43461b45833662222485d41",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/33d48a7b2cf1835b_0",
+        "status": "local_only",
+        "local_sha": "cc8a0ecfae76ad1242dd8fdd3bf5f8a1eca5043d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/a143af844c5a9843_0",
+        "status": "local_only",
+        "local_sha": "d3bed73996b307704a90ec20e225fe4130447fd2",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/7c47bbad4c8aa89a_0",
+        "status": "local_only",
+        "local_sha": "2bdd0bc977b019a1a6d4c30d013a02d2134a2f1c",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/6baa9cae8e7e1e4a_0",
+        "status": "local_only",
+        "local_sha": "39d021968f974e55489c440b80f27fdcc5acd0b3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/No_Vary_Search/journal.baj",
+        "status": "local_only",
+        "local_sha": "54fe66eb5b1e10ab864415337fc572163e66724e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/No_Vary_Search/snapshot.baf",
+        "status": "local_only",
+        "local_sha": "8912405f361089375a773ff93370d55411ac14de",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/kimi_com/Default/Cache/Cache_Data/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "404dde862857da864b4df95ab6494a511881cc80",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DIPS",
+        "status": "local_only",
+        "local_sha": "c7a4f167e07273ac3b20b077bc62f177b98fa08e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cookies",
+        "status": "local_only",
+        "local_sha": "6272bdc0e6b13867b5869865804a01c032635896",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cookies-journal",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnGraphiteCache/data_1",
+        "status": "local_only",
+        "local_sha": "dcaafa9740ee97afbdf50792612ef9f379e292dc",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnGraphiteCache/data_0",
+        "status": "local_only",
+        "local_sha": "d76fb77e93ac8a536b5dbade616d63abd00626c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnGraphiteCache/index",
+        "status": "local_only",
+        "local_sha": "0443dfcb429a881bc0cf9f111927376484b02d7c",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnGraphiteCache/data_2",
+        "status": "local_only",
+        "local_sha": "c7e2eb9adcfb2d3313ec85f5c28cedda950a3f9b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnGraphiteCache/data_3",
+        "status": "local_only",
+        "local_sha": "5eec97358cf550862fd343fc9a73c159d4c0ab10",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Session Storage/000003.log",
+        "status": "local_only",
+        "local_sha": "9fff251d0da7788da457b94e99ab741fe8b898aa",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Session Storage/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Session Storage/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Session Storage/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Session Storage/LOG",
+        "status": "local_only",
+        "local_sha": "1f033b0fac000b007db16258aa3a1eb8121f4813",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Session Storage/LOG.old",
+        "status": "local_only",
+        "local_sha": "dd515acdb08b241e2dc42c2fcd50179e07751137",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/GPUCache/data_1",
+        "status": "local_only",
+        "local_sha": "dcaafa9740ee97afbdf50792612ef9f379e292dc",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/GPUCache/data_0",
+        "status": "local_only",
+        "local_sha": "d76fb77e93ac8a536b5dbade616d63abd00626c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/GPUCache/index",
+        "status": "local_only",
+        "local_sha": "c4593e707a43a41b4093459510d05148d01a4f3a",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/GPUCache/data_2",
+        "status": "local_only",
+        "local_sha": "c7e2eb9adcfb2d3313ec85f5c28cedda950a3f9b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/GPUCache/data_3",
+        "status": "local_only",
+        "local_sha": "5eec97358cf550862fd343fc9a73c159d4c0ab10",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/PersistentOriginTrials/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/PersistentOriginTrials/LOG",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/PersistentOriginTrials/LOG.old",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Shared Dictionary/db-journal",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Shared Dictionary/db",
+        "status": "local_only",
+        "local_sha": "d97070388d70537f758efc0afcf220bdafdce695",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/000003.log",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/LOG",
+        "status": "local_only",
+        "local_sha": "d75abbef30b84c3e6b9800774c11a1134479cf14",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/LOG.old",
+        "status": "local_only",
+        "local_sha": "0861d5c2310e161bd79085101e7318e0a176774f",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnWebGPUCache/data_1",
+        "status": "local_only",
+        "local_sha": "dcaafa9740ee97afbdf50792612ef9f379e292dc",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnWebGPUCache/data_0",
+        "status": "local_only",
+        "local_sha": "d76fb77e93ac8a536b5dbade616d63abd00626c5",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnWebGPUCache/index",
+        "status": "local_only",
+        "local_sha": "f1a7bdc368d6ad4c5ec7ea9f00c66776f0c3550d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnWebGPUCache/data_2",
+        "status": "local_only",
+        "local_sha": "c7e2eb9adcfb2d3313ec85f5c28cedda950a3f9b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/DawnWebGPUCache/data_3",
+        "status": "local_only",
+        "local_sha": "5eec97358cf550862fd343fc9a73c159d4c0ab10",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Local Storage/leveldb/000003.log",
+        "status": "local_only",
+        "local_sha": "f41f38dcac00dc24b901ed2730c54f2bb1dc0389",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Local Storage/leveldb/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Local Storage/leveldb/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Local Storage/leveldb/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Local Storage/leveldb/LOG",
+        "status": "local_only",
+        "local_sha": "9a8dd1cfb7d6526605d637fa5e8c1ebcf1489698",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Local Storage/leveldb/LOG.old",
+        "status": "local_only",
+        "local_sha": "81c7a84c54bb4b29151b7ca3da182193e95e1ba8",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/3c39c06973e5f67f_0",
+        "status": "local_only",
+        "local_sha": "b891b4d0235563c34d9bfbdc52f424a9f38eea55",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/933e196fb64b4c60_0",
+        "status": "local_only",
+        "local_sha": "5738a116cbe44cec33eda43d66df7dac0c90adc0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/d9c8de542bbecac6_0",
+        "status": "local_only",
+        "local_sha": "2f34cf53ad1f08ccb8b464d6fb201ba86007406e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/23af5c7a232ba9ab_0",
+        "status": "local_only",
+        "local_sha": "f91d15de3fd7a5b6d95eed2689bda996059e26b6",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/0b93baa429a6b251_0",
+        "status": "local_only",
+        "local_sha": "6895202d3315083b096501a41807a24e7a0bef5e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/7e4db27ad84d1a8c_0",
+        "status": "local_only",
+        "local_sha": "efd8e5224b04b428ef27a80d74c65e9320193d6d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/1b8c6183fa705c35_0",
+        "status": "local_only",
+        "local_sha": "092f812e2239d5a50477c20638cdfa8a858185a1",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/ff90beca6409c9a7_0",
+        "status": "local_only",
+        "local_sha": "39afc89d8133e59f486974fc2d64a1416956a379",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/wasm/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/wasm/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "0bd70ff109bbd7fba918a354faf0eaa74fb0d546",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Code Cache/js/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "840e1f2a2a6e5a84b5208198c479ee5e104eba82",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/metadata/000003.log",
+        "status": "local_only",
+        "local_sha": "14d6462928f73eecdf389c3425e50142b68fa5bf",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/metadata/MANIFEST-000001",
+        "status": "local_only",
+        "local_sha": "18e5cab72c1550d8dc398e3413eea91bee24db77",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/metadata/LOCK",
+        "status": "local_only",
+        "local_sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/metadata/CURRENT",
+        "status": "local_only",
+        "local_sha": "7ed683d17118b70e46011ddc3562b455d0a4f866",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/metadata/LOG",
+        "status": "local_only",
+        "local_sha": "b6d4b3dd90156e88bdecfa1c7b0d48e1763b4490",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/shared_proto_db/metadata/LOG.old",
+        "status": "local_only",
+        "local_sha": "9012c31d0476931d7939e9109faf9206ca76db3b",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Shared Dictionary/cache/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Shared Dictionary/cache/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "6501fbc43e884b71bad256ec4349a3d0917add28",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/753546ce3be4c0b6_0",
+        "status": "local_only",
+        "local_sha": "45e61f558d2621c91fdd44ea25439541c0cbb70d",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/77654365719c2206_0",
+        "status": "local_only",
+        "local_sha": "612ad22a928e9da5553d49cf7388f9b53b4fa6c3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/b412ebd1c2701ff5_0",
+        "status": "local_only",
+        "local_sha": "9bf4e6fef9c8d36f404eb574449e5a4bf5f7c937",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/af81fb877c6f81fd_0",
+        "status": "local_only",
+        "local_sha": "644ea7bb1cd1649b2f5dc08b3b576ea7dd37f1f8",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/c52daa311c152ecc_0",
+        "status": "local_only",
+        "local_sha": "13fd909744abaf09bf44323761c5d896f0fd9411",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/73cf9b0917d587a5_0",
+        "status": "local_only",
+        "local_sha": "d03f3286dffd2a342311c5d1b0395ce1165c31d1",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/a3ea6f928fe6565e_0",
+        "status": "local_only",
+        "local_sha": "cf37bc523cc0d66311fe331a17bc87cb27f3b190",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/1d19e74b6a3ead23_0",
+        "status": "local_only",
+        "local_sha": "d8c9590bccb78b6db1fcdeab801c44816ddb12cc",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/1def16a857db7e2f_0",
+        "status": "local_only",
+        "local_sha": "d4495ba8572f211e2882ec15d4ec58fa7495533e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/d28bd65f004cf892_0",
+        "status": "local_only",
+        "local_sha": "ef482e802f70340d3b544d8dcaa324346c7f558e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/57bd1eb907e26842_0",
+        "status": "local_only",
+        "local_sha": "299a00d8571e62d012107519d51612a260b4e509",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/95f2d83a13214d12_0",
+        "status": "local_only",
+        "local_sha": "2c5abee6d793d1268ed207ef2e77c6828ecc63a8",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/ddc33c9c0cac0bed_0",
+        "status": "local_only",
+        "local_sha": "7e33f585ce4a1985c5b4c941d72aa1e73b5a2e26",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/15f3f0c01f3046c4_0",
+        "status": "local_only",
+        "local_sha": "5e40009673568216542a6101ba482ba45dd02caa",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/22ac57ef425c7c21_0",
+        "status": "local_only",
+        "local_sha": "28cf142d2fa8a5bc824ccc55bafedb839c85b574",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/55505e04731b98f7_0",
+        "status": "local_only",
+        "local_sha": "91a5900802cde0c2781082b5cd6aad9f7259299e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/index",
+        "status": "local_only",
+        "local_sha": "79bd403ac665228853dd8fa54b8f4427af1721c0",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/aded314d7bd1ba44_0",
+        "status": "local_only",
+        "local_sha": "36700f7f1047ba7d3ae566f2363600620ef9d834",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/0073f9d1007ab652_0",
+        "status": "local_only",
+        "local_sha": "11eca4b6c18b2245d8e423c3a16dc99039264039",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/8e528506ecaf3c2a_0",
+        "status": "local_only",
+        "local_sha": "738e930aca931cc13725373bf50eda16e206d928",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/630583125b2b7b0d_0",
+        "status": "local_only",
+        "local_sha": "ff430a72c8398870512ecca4b16c0b56ce87f664",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/6104f697c2bda01f_0",
+        "status": "local_only",
+        "local_sha": "e984454fd82124a0b4c03ee3d527ced907a0bbd3",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/e6dd437f3a97bae7_0",
+        "status": "local_only",
+        "local_sha": "0bfbdd352aa5e43048ff38f02ded63151240bafa",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/No_Vary_Search/journal.baj",
+        "status": "local_only",
+        "local_sha": "54fe66eb5b1e10ab864415337fc572163e66724e",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/No_Vary_Search/snapshot.baf",
+        "status": "local_only",
+        "local_sha": "8912405f361089375a773ff93370d55411ac14de",
+        "github_sha": null
+      },
+      {
+        "file": "profiles/default/Default/Cache/Cache_Data/index-dir/the-real-index",
+        "status": "local_only",
+        "local_sha": "c0571aba817d9872aa366ded22728e5b81d204e4",
+        "github_sha": null
+      },
+      {
+        "file": "scripts/__pycache__/diagnostic_kit.cpython-314.pyc",
+        "status": "local_only",
+        "local_sha": "40c9ad860c2b0255f3062b2940b451759c2f3ddd",
+        "github_sha": null
+      },
+      {
+        "file": "scripts/__pycache__/profile_manager.cpython-314.pyc",
+        "status": "local_only",
+        "local_sha": "f65a4eadafae0e930be577d9cbfa68846d8ba204",
+        "github_sha": null
+      },
+      {
+        "file": "scripts/__pycache__/browser_connector.cpython-314.pyc",
+        "status": "local_only",
+        "local_sha": "0e69e7a65d50a4693a35c925d5a1a59606d77339",
+        "github_sha": null
+      }
+    ],
+    "bump_type": "major",
+    "current_version": "1.0.0",
+    "new_version": "2.0.0",
+    "approval_required": true,
+    "reason": "Large change, forbidden file touched, or hardcoded paths detected",
+    "file_count": 247,
+    "has_forbidden": false,
+    "has_hardcode": false
+  },
+  "files": [
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/SKILL.md",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/README.md",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/.env.example",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/.releaserc.json",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/CHANGELOG.md",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/scripts/browser_connector.py",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/scripts/profile_manager.py",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/scripts/diagnostic_kit.py",
+    "/Users/kevinlinz/.workbuddy/skills/chrome-playwright-connector/scripts/USAGE.md"
+  ],
+  "timestamp": "2026-05-23T18:54:06.108446+00:00"
+}
