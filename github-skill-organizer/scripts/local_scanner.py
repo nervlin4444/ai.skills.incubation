@@ -172,13 +172,18 @@ class LocalScanner:
                 continue
 
             meta = self._extract_frontmatter(file_path)
+            # v1.0.8: Distinguish unclassified vs invalid
+            is_invalid = isinstance(meta, dict) and meta.get("_invalid", False)
+            is_classified = meta is not None and "name" in meta and not is_invalid
             new_files.append({
                 "path": str(file_path),
                 "relative_path": str(file_path.relative_to(self.download_path)),
                 "original_name": file_path.name,
                 "mtime": mtime.isoformat(),
-                "frontmatter": meta,
-                "classified": meta is not None and "name" in meta,
+                "frontmatter": meta if not is_invalid else None,
+                "invalid_info": meta if is_invalid else None,
+                "classified": is_classified,
+                "is_invalid": is_invalid,
                 "source": "direct",
             })
 
@@ -209,6 +214,12 @@ class LocalScanner:
             except json.JSONDecodeError:
                 pass
 
+        # v1.0.8: Check if file has frontmatter traces but unparseable
+        if file_path.suffix == ".md" and "---" in content[:500]:
+            return {"_invalid": True, "reason": "md_frontmatter_unparseable", "path": str(file_path)}
+        if file_path.suffix == ".py" and (dq+dq+dq in content[:500] or q+q+q in content[:500]):
+            if "---" in content[:500]:
+                return {"_invalid": True, "reason": "py_docstring_frontmatter_unparseable", "path": str(file_path)}
         return None
 
     def _parse_simple_yaml(self, yaml_text):
