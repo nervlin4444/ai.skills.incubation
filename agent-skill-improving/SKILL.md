@@ -1,7 +1,7 @@
 ---
 title: "Agent Skill Improving Execution Guide"
 name: agent-skill-improving
-description: "技能改進執行指令。當發現技能有缺陷時，按指令執行改進流程。融入conversation_append.py v1.4.0長文件經驗：跨平台兼容、臨時JSON文件管理、命令行長度限制。禁止擅自改進，必須建議主人確認。配合SOUL.md v5.0 + IDENTITY.md v5.0。v1.2.5新增Guardian Pattern、腳本更名、標準Issue報告器。"
+description: "技能改進執行指令。當發現技能有缺陷時，按指令執行改進流程。融入conversation_append.py v1.4.0長文件經驗：跨平台兼容、臨時JSON文件管理、命令行長度限制。禁止擅自改進，必須建議主人確認。配合SOUL.md v5.0 + IDENTITY.md v5.0。v1.2.5新增Guardian Pattern、腳本更名、fixes欄位規範（必須存在，可為空列表[]）。"
 version: "v1.2.5"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
@@ -107,6 +107,19 @@ python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict
 ### LOCK-012: 禁止修改 github_repository / target_branch
 frontmatter 中的 github_repository 和 target_branch 是全局配置，禁止任何 Agent 修改。
 如需變更倉庫，必須上報主人決策。
+
+### LOCK-013: 禁止 frontmatter 缺少 fixes 欄位（v1.2.5 新增）
+所有技能文件的 frontmatter 必須包含 `fixes` 欄位。
+- `fixes: []` → 正常（無關聯 Issue）
+- `fixes: [5]` → 正常（修復 Issue #5）
+- **無 fixes 欄位** → ❌ 報錯拒絕上傳
+- `fixes: "new"` / `fixes: 5` → ❌ 報錯（類型錯誤）
+
+修復 Issue 時，在代碼註釋中寫入 `# Fixes #5`，`skill_files_designer.py` 會自動檢測並寫入 frontmatter。
+
+### LOCK-014: 禁止代碼 Fixes 聲明與 frontmatter 不一致（v1.2.5 新增）
+代碼中寫了 `# Fixes #5` 但 frontmatter 沒有 `fixes: [5]` → 報錯。
+這防止 Agent 聲稱修復了 Issue 但沒有記錄，導致上傳後 Issue 無法自動關閉。
 
 ---
 
