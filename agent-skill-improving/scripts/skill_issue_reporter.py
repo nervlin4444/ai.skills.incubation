@@ -3,15 +3,16 @@
 title: "Skill Issue Reporter - 標準 Issue 報告生成器"
 name: agent-skill-improving
 description: "強制按 CONTRIBUTING.md v1.2.5 規範生成標準 Issue 報告。交互式收集問題信息、自動分類、強制驗證每 Section 字數、輸出 Markdown + JSON 雙格式。禁止 Agent 自由發揮撰寫 Issue。"
-version: "1.2.5"
+version: "1.3.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T16:17:25+08:00"
+updated_at: "2026-05-23T17:07:00+08:00"
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
+fixes: []
 file_mapping:
   local_path: "scripts/skill_issue_reporter.py"
   github_path: "agent-skill-improving/scripts/skill_issue_reporter.py"
