@@ -3,30 +3,31 @@
 ---
 title: "Repo Sync Tool"
 name: "github-restful-api-connector"
-description: "批量目錄同步上傳：本地技能目錄 → GitHub 倉庫子目錄。自動讀取 github_repository、自動創建倉庫、衝突檢測、安全克隆。v0.4.0 新增自動讀倘倉庫、dry-run 預覽、.backups 排除。"
-version: "0.4.0"
+description: "批量目錄同步上傳：本地技能目錄 → GitHub 倉庫子目錄。自動讀取 github_repository、自動創建倉庫、衝突檢測、安全克隆。v0.3.2 修復 Issue #4 計數異常（upload_file 返回明確狀態字典），統一 frontmatter 格式。"
+version: "0.3.2"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-20T00:55:00+08:00"
+updated_at: "2026-05-23T10:55:00+08:00"
+fixes: [4]
 
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: ".env"
 
 file_mapping:
-  - local_path: "{baseDir}/scripts/github_repo_sync.py"
-    github_path: "/github-restful-api-connector/scripts/github_repo_sync.py"
+  local_path: "scripts/github_repo_sync.py"
+  github_path: "github-restful-api-connector/scripts/github_repo_sync.py"
 ---
 
 github_repo_sync.py — F-005 批量目錄同步上傳
-版本：v0.3.1
-生成日期：2026-05-20 00:55:00
+版本：v0.3.2
+生成日期：2026-05-23 10:55:00
 核心修復：
-  1. exclude_patterns 加入 .backups / .backup（防止備份檔案洩漏到 GitHub）
-  2. 新增 --test-conventional-commit 參數，生成 feat: 格式 commit 以測試 semantic-release
-  3. test mode 自動創建 .semantic-release-test trigger 檔案，確保強制生成 commit
+  1. Issue #4: upload_file() 返回明確狀態字典 {"status": "uploaded|skipped|warned|failed"}
+  2. Issue #4: sync_directory() 直接讀取狀態計數，移除內部二次 GET 檢查
+  3. 統一 frontmatter 格式（fixes 欄位、移除 {baseDir}、單一 file_mapping）
 """
 
 import os
@@ -45,7 +46,7 @@ scripts_dir = Path(__file__).parent
 sys.path.insert(0, str(scripts_dir))
 from github_restful_core import rest_request, load_env, logger, get_owner, get_token
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 # ============================================
 # 排除規則（v0.3.1 修復：加入 .backups / .backup）
@@ -120,15 +121,16 @@ def detect_github_repository(local_dir: str) -> tuple:
     )
 
 # ============================================
-# Commit Message 生成（v0.3.1 新增）
+# Commit Message 生成（v0.3.2 新增 fixes 支持）
 # ============================================
 
-def generate_commit_message(repo_path: str, skill_name: str, test_conventional_commit: bool = False) -> str:
+def generate_commit_message(repo_path: str, skill_name: str, test_conventional_commit: bool = False, fixes: list = None) -> str:
     """
     生成上傳用的 commit message。
 
     正常模式：Sync {path} via github_repo_sync.py v{VERSION}
     測試模式（--test-conventional-commit）：feat({scope}): {description}
+    fixes 模式：在末尾附加 Fixes #N（自動從文件 frontmatter 讀取）
     """
     if test_conventional_commit:
         # Conventional Commits format for semantic-release testing
@@ -137,7 +139,12 @@ def generate_commit_message(repo_path: str, skill_name: str, test_conventional_c
         return f"feat({skill_name}): sync {filename} for semantic-release automation test\n\nThis commit tests whether semantic-release correctly detects\nConventional Commits format and generates a release.\n\n- Uses angular preset configuration\n- Expects minor version bump (feat:)\n- Validates end-to-end release workflow"
     else:
         # Legacy format (does NOT trigger semantic-release)
-        return f"Sync {repo_path} via github_repo_sync.py v{VERSION}"
+        base_msg = f"Sync {repo_path} via github_repo_sync.py v{VERSION}"
+        # v0.3.2: 自動附加 Fixes #N
+        if fixes:
+            fixes_str = ", ".join(f"Fixes #{f}" for f in fixes)
+            base_msg += f"\n\n{fixes_str}"
+        return base_msg
 
 # ============================================
 # 倉庫自動創建
@@ -172,15 +179,18 @@ def create_repo_if_not_exists(owner: str, repo: str, private: bool = True):
             raise
 
 # ============================================
-# 文件上傳（帶路徑前綴）
+# 文件上傳（帶路徑前綴）— v0.3.2 Issue #4 修復
 # ============================================
 
 def upload_file(owner: str, repo: str, local_path: Path, repo_path: str,
                 dry_run: bool = False, force: bool = False,
-                test_conventional_commit: bool = False, skill_name: str = "") -> bool:
+                test_conventional_commit: bool = False, skill_name: str = "") -> dict:
     """
     上傳單個文件到倉庫指定路徑。
     repo_path 已包含技能名稱前綴（如 github-restful-api-connector/scripts/xxx.py）。
+
+    v0.3.2 修復：返回明確狀態字典 {"status": "uploaded|skipped|warned|failed", "message": "..."}
+    取代籠統的 True/False，解決 Issue #4 計數異常。
     """
     content = local_path.read_bytes()
     content_b64 = base64.b64encode(content).decode("utf-8")
@@ -193,21 +203,21 @@ def upload_file(owner: str, repo: str, local_path: Path, repo_path: str,
         repo_sha = existing.get("sha", "")
     except RuntimeError as e:
         if "404" not in str(e):
-            raise
+            return {"status": "failed", "message": f"{repo_path}: GET error: {e}"}
 
     # 內容相同則跳過
     if repo_sha == local_sha:
         logger.info(f"[SKIP] {repo_path} (identical)")
-        return True
+        return {"status": "skipped", "message": f"{repo_path} identical"}
 
     # 衝突檢測：倉庫文件較新時警告
     if repo_sha and not force:
         logger.warning(f"[WARN] {repo_path} exists with different content. Use --force to overwrite.")
-        return False
+        return {"status": "warned", "message": f"{repo_path} exists with different content"}
 
     if dry_run:
         logger.info(f"[DRY-RUN] Would upload: {repo_path}")
-        return True
+        return {"status": "uploaded", "message": f"{repo_path} (dry-run)"}
 
     # 執行上傳
     commit_msg = generate_commit_message(repo_path, skill_name, test_conventional_commit)
@@ -218,16 +228,19 @@ def upload_file(owner: str, repo: str, local_path: Path, repo_path: str,
     if repo_sha:
         payload["sha"] = repo_sha  # 更新現有文件
 
-    rest_request("PUT", f"/repos/{owner}/{repo}/contents/{repo_path}", payload)
-    logger.info(f"[UPLOAD] {repo_path}")
-    return True
+    try:
+        rest_request("PUT", f"/repos/{owner}/{repo}/contents/{repo_path}", payload)
+        logger.info(f"[UPLOAD] {repo_path}")
+        return {"status": "uploaded", "message": f"{repo_path}"}
+    except RuntimeError as e:
+        return {"status": "failed", "message": f"{repo_path}: PUT error: {e}"}
 
 # ============================================
 # 觸發檔案上傳（v0.3.1-fix 新增）
 # ============================================
 
 def upload_trigger_file(owner: str, repo: str, skill_name: str,
-                        dry_run: bool = False, test_conventional_commit: bool = False) -> bool:
+                        dry_run: bool = False, test_conventional_commit: bool = False) -> dict:
     """
     當 test-conventional-commit 模式且所有檔案都 identical 時，
     創建一個 .semantic-release-test 觸發檔案強制生成 commit。
@@ -243,11 +256,11 @@ def upload_trigger_file(owner: str, repo: str, skill_name: str,
         repo_sha = existing.get("sha", "")
     except RuntimeError as e:
         if "404" not in str(e):
-            raise
+            return {"status": "failed", "message": f"{trigger_path}: GET error: {e}"}
 
     if dry_run:
         logger.info(f"[DRY-RUN] Would create trigger file: {trigger_path}")
-        return True
+        return {"status": "uploaded", "message": f"{trigger_path} (dry-run)"}
 
     commit_msg = generate_commit_message(trigger_path, skill_name, test_conventional_commit)
     payload = {
@@ -257,12 +270,15 @@ def upload_trigger_file(owner: str, repo: str, skill_name: str,
     if repo_sha:
         payload["sha"] = repo_sha
 
-    rest_request("PUT", f"/repos/{owner}/{repo}/contents/{trigger_path}", payload)
-    logger.info(f"[TRIGGER] Created {trigger_path} to force commit generation")
-    return True
+    try:
+        rest_request("PUT", f"/repos/{owner}/{repo}/contents/{trigger_path}", payload)
+        logger.info(f"[TRIGGER] Created {trigger_path} to force commit generation")
+        return {"status": "uploaded", "message": f"{trigger_path}"}
+    except RuntimeError as e:
+        return {"status": "failed", "message": f"{trigger_path}: PUT error: {e}"}
 
 # ============================================
-# 批量同步（核心函數）
+# 批量同步（核心函數）— v0.3.2 Issue #4 修復
 # ============================================
 
 def sync_directory(owner: str, repo: str, local_dir: str,
@@ -275,6 +291,11 @@ def sync_directory(owner: str, repo: str, local_dir: str,
     核心規則：
     - 默認自動檢測技能名稱，所有文件上傳到 {skill_name}/ 子目錄
     - --no-auto-name 時上傳到根目錄（僅用於倉庫級 README 等特殊場景）
+
+    v0.3.2 修復：
+    - upload_file 返回明確狀態字典
+    - 直接根據狀態計數，不再內部二次 GET 檢查
+    - 解決 Issue #4（Uploaded: 0 誤報）
     """
     local_root = Path(local_dir).resolve()
 
@@ -315,38 +336,38 @@ def sync_directory(owner: str, repo: str, local_dir: str,
             repo_path = rel_path
 
         try:
-            ok = upload_file(owner, repo, local_file, repo_path, dry_run, force,
-                           test_conventional_commit=test_conventional_commit,
-                           skill_name=skill_name or repo_base_path)
-            if ok:
-                # 區分 skip 和 upload
-                try:
-                    existing = rest_request("GET", f"/repos/{owner}/{repo}/contents/{repo_path}")
-                    repo_sha = existing.get("sha", "")
-                    content = local_file.read_bytes()
-                    local_sha = hashlib.sha1(f"blob {len(content)}\0".encode() + content).hexdigest()
-                    if repo_sha == local_sha:
-                        results["skipped"] += 1
-                    else:
-                        results["uploaded"] += 1
-                except:
-                    results["uploaded"] += 1
-            else:
+            result = upload_file(owner, repo, local_file, repo_path, dry_run, force,
+                               test_conventional_commit=test_conventional_commit,
+                               skill_name=skill_name or repo_base_path)
+            status = result.get("status", "failed")
+
+            if status == "uploaded":
+                results["uploaded"] += 1
+            elif status == "skipped":
+                results["skipped"] += 1
+            elif status == "warned":
                 results["warned"] += 1
-            results["files"].append({"path": repo_path, "status": "ok" if ok else "warn"})
+            elif status == "failed":
+                results["failed"] += 1
+
+            results["files"].append({"path": repo_path, "status": status, "message": result.get("message", "")})
         except Exception as e:
             logger.error(f"[FAIL] {repo_path}: {e}")
             results["failed"] += 1
-            results["files"].append({"path": repo_path, "status": "fail", "error": str(e)})
+            results["files"].append({"path": repo_path, "status": "fail", "message": str(e)})
 
     # v0.3.1-fix: 如果 test mode 且沒有實際上傳，創建 trigger 檔案強制生成 commit
     if test_conventional_commit and results["uploaded"] == 0 and not dry_run:
         logger.info("[TEST MODE] No files changed. Creating trigger file to force commit generation...")
         try:
-            upload_trigger_file(owner, repo, skill_name or repo_base_path,
+            trigger_result = upload_trigger_file(owner, repo, skill_name or repo_base_path,
                               dry_run=dry_run, test_conventional_commit=test_conventional_commit)
-            results["uploaded"] += 1
-            results["files"].append({"path": ".semantic-release-test", "status": "trigger"})
+            if trigger_result.get("status") == "uploaded":
+                results["uploaded"] += 1
+                results["files"].append({"path": ".semantic-release-test", "status": "trigger", "message": trigger_result.get("message", "")})
+            else:
+                results["failed"] += 1
+                results["files"].append({"path": ".semantic-release-test", "status": "fail", "message": trigger_result.get("message", "")})
         except Exception as e:
             logger.error(f"[FAIL] Trigger file creation failed: {e}")
             results["failed"] += 1
@@ -477,7 +498,7 @@ def main():
             logger.error(str(e))
             sys.exit(1)
 
-    # dry-run 預覽倨錯
+    # dry-run 預覽
     if args.dry_run:
         print(f"\n[DRY-RUN] Preview Mode")
         print(f"  Target Repository: {owner}/{repo_name}")
