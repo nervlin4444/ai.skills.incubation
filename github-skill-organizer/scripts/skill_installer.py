@@ -269,6 +269,20 @@ class SkillInstaller:
         source_path = Path(file_info["path"])
         frontmatter = file_info.get("frontmatter", {})
 
+        # === OUTCOME: Invalid (has frontmatter traces but unparseable) ===
+        invalid_info = file_info.get("invalid_info")
+        if invalid_info:
+            reason = invalid_info.get("reason", "unknown")
+            archived_to = self._archive_file(source_path, ".invalid_files", f"invalid frontmatter: {reason}")
+            # v1.0.7: Log invalid file for auto-notification
+            self._log_invalid_file(file_info, reason)
+            return {
+                "status": "invalid",
+                "reason": f"Invalid frontmatter structure: {reason}",
+                "archived_to": archived_to,
+                "invalid_info": invalid_info,
+            }
+
         # === OUTCOME: Unclassified (no frontmatter or no name) ===
         if not frontmatter or "name" not in frontmatter:
             archived_to = self._archive_file(source_path, ".unclassified", "no frontmatter/name")
@@ -407,6 +421,24 @@ class SkillInstaller:
         cleaned = re.sub(r'\s*\(\d+\)\s*(?=\.[^.]+$)', "", filename)
         cleaned = re.sub(r'\s*\(\d+\)$', "", cleaned)
         return cleaned
+
+    def _log_invalid_file(self, file_info, reason):
+        """Log invalid file for auto-notification daemon."""
+        invalid_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "invalid_files"
+        invalid_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        log_file = invalid_dir / f"invalid_{ts}.json"
+        record = {
+            "original_name": file_info.get("original_name", "unknown"),
+            "path": file_info.get("path", "unknown"),
+            "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notification_status": "pending",  # pending | notified | fixed
+        }
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(record, f, indent=2, ensure_ascii=False)
+        print(f"[INVALID_LOGGED] {file_info.get('original_name', 'unknown')} -> {log_file}")
+        print(f"[INVALID_LOGGED] Auto-notification daemon will pick this up and create GitHub Issue")
 
     def _log_rejected_install(self, file_info, reason):
         rejected_dir = Path(self.cfg.user_skills_folder).parent / "logs" / "rejected"
