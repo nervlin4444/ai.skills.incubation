@@ -1,7 +1,7 @@
 ---
 title: Skill Improvement Operations Manual
 name: agent-skill-improving
-description: 技能改進操作手冊。涵蓋Guardian Pattern事前強制架構、腳本更名規範、Patch應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查。融入conversation_append.py v1.4.0長文件經驗及github-skill-organizer v1.0.4-v1.0.12教訓。
+description: 技能改進操作手冊。涵蓋Guardian Pattern事前強制架構、腳本更名規範、Patch應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查、fixes欄位規範（必須存在，可為空列表[]）。融入conversation_append.py v1.4.0長文件經驗及github-skill-organizer v1.0.4-v1.0.12教訓。
 version: v1.2.5
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
@@ -199,6 +199,8 @@ python skill_patch_validator.py --skill-dir ./{skill_name}/ --patch-file PATCH.m
 - Agent 禁止直接 `open()` / `write_text()` 創建 .md/.py/.json/.html
 - 必須通過 `skill_files_designer.py` 生成 frontmatter 後再寫入
 - 自動填充 github_repository、target_branch、file_mapping
+- **自動檢測代碼中的 Fixes 聲明**（如 `# Fixes #5`）並寫入 frontmatter `fixes` 欄位
+- `fixes` 欄位必須存在（key 必須在），值可為空列表 `[]` 或整數列表 `[5, 6]`
 - 支持 .py 文件的 docstring YAML 塊格式
 
 **用法**：
@@ -244,7 +246,7 @@ python skill_folder_designer.py --name "new-skill" --description "..." --version
 | v1.2.2 | 2026-05-12 | Patch 應用策略細化（replace_in_file vs write_to_file）|
 | v1.2.3 | 2026-05-13 | 新增跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查 |
 | v1.2.4 | 2026-05-13 | 新增強制合規驗證、frontmatter 統一規範、身份證制度 |
-| **v1.2.5** | **2026-05-22** | **引入 Guardian Pattern 事前強制架構、腳本全面更名、github_path 前導 "/" 防禦處理。注意：Issue 報告器後續遷移至 github-skill-organizer** |
+| **v1.2.5** | **2026-05-22** | **引入 Guardian Pattern 事前強制架構、腳本全面更名、github_path 前導 "/" 防禦處理、fixes 欄位規範（必須存在，可為空列表[]）。注意：Issue 報告器後續遷移至 github-skill-organizer** |
 
 ---
 
