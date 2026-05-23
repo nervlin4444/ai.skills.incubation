@@ -3,15 +3,16 @@
 title: "Skill Patch Validator - 技能補丁驗證與應用器"
 name: agent-skill-improving
 description: "讀取、驗證、應用技能補丁（Patch），支持干跑預覽與自動回滾。禁止直接手動修改技能文件。"
-version: "1.2.5"
+version: "1.3.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T22:38:00+08:00"
+updated_at: "2026-05-23T17:07:00+08:00"
 auth_config:
   provider: "github"
   auth_method: "personal_access_token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
+fixes: []
 file_mapping:
   local_path: "scripts/skill_patch_validator.py"
   github_path: "agent-skill-improving/scripts/skill_patch_validator.py"
