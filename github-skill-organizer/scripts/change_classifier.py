@@ -2,18 +2,20 @@
 ---
 title: Change Classifier
 name: github-skill-organizer
-description: Determines version bump type (patch/minor/major) and approval requirements based on deterministic rules.
-version: 1.0.0
+description: Determines version bump type (patch/minor/major) and approval requirements based on deterministic rules. v1.0.1 adds classify_change() wrapper for backward compatibility (Issue #16).
+version: 1.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
+updated_at: 2026-05-23T13:45:00+08:00
+fixes: [16]
 auth_config:
   provider: github
   auth_method: personal_access_token
   token_env_var: GITHUB_TOKEN
   env_file_path: ../.env
 file_mapping:
-  local_path: "{baseDir}/scripts/change_classifier.py"
-  github_path: "github-skill-organizer/scripts/change_classifier.py"
+  local_path: scripts/change_classifier.py
+  github_path: github-skill-organizer/scripts/change_classifier.py
 ---
 """
 
@@ -122,7 +124,57 @@ class ChangeClassifier:
         return f"{major}.{minor}.{patch}"
 
 
+def classify_change(comparison):
+    """
+    Wrapper function for backward compatibility (Issue #16).
+    Extracts parameters from comparison dict and calls ChangeClassifier.classify().
+    Merges result with original comparison to preserve all fields.
+
+    Args:
+        comparison: dict returned by compare_skill()
+
+    Returns:
+        dict: merged comparison + classification fields
+    """
+    local_dir = comparison.get("local_dir", "")
+    skill_name = Path(local_dir).name if local_dir else "unknown-skill"
+
+    changed_files = (
+        comparison.get("modified_files", [])
+        + comparison.get("local_only_files", [])
+    )
+
+    diff_summary = (
+        f"action={comparison.get('action', 'unknown')}, "
+        f"modified={comparison.get('modified_count', 0)}, "
+        f"local_only={comparison.get('local_only_count', 0)}"
+    )
+
+    classifier = ChangeClassifier()
+    classification = classifier.classify(skill_name, changed_files, diff_summary)
+
+    # Merge: original comparison fields + new classification fields
+    # Classification fields take precedence on overlap
+    return {**comparison, **classification}
+
+
 if __name__ == "__main__":
+    # Test 1: direct classify()
     classifier = ChangeClassifier()
     result = classifier.classify("test-skill", ["test.py", "README.md"])
+    print("=== classify() ===")
     print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    # Test 2: wrapper classify_change()
+    comparison = {
+        "status": "ok",
+        "action": "local_ahead",
+        "local_dir": "/tmp/test-skill",
+        "modified_files": ["test.py"],
+        "local_only_files": ["README.md"],
+        "modified_count": 1,
+        "local_only_count": 1,
+    }
+    result2 = classify_change(comparison)
+    print("\n=== classify_change() ===")
+    print(json.dumps(result2, indent=2, ensure_ascii=False))
