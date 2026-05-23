@@ -118,6 +118,42 @@ class SkillOrganizerConfig:
             return ""
         return os.path.expanduser(os.path.expandvars(path_str.strip()))
 
+    def _parse_env_file_manually(self, filepath):
+        """
+        Manually parse .env file, skipping frontmatter (between --- markers) and comments.
+        Returns a dictionary of KEY=VALUE pairs.
+        Used for dependency .env files that contain YAML frontmatter.
+        """
+        result = {}
+        in_frontmatter = False
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+
+                # Skip empty lines
+                if not line:
+                    continue
+
+                # Handle frontmatter (between --- markers)
+                if line == '---':
+                    in_frontmatter = not in_frontmatter
+                    continue
+
+                if in_frontmatter:
+                    continue
+
+                # Skip comments
+                if line.startswith('#'):
+                    continue
+
+                # Parse KEY=VALUE
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    result[key.strip()] = value.strip()
+
+        return result
+
     def get_state_file(self, filename):
         return self.state_dir / filename
 
@@ -146,8 +182,8 @@ class SkillOrganizerConfig:
         """
         dep_env = self.get_dependency_env_path()
         if dep_env:
-            load_dotenv(dep_env, override=False)
-            owner = os.getenv("GITHUB_OWNER", "").strip()
+            env_vars = self._parse_env_file_manually(dep_env)
+            owner = env_vars.get("GITHUB_OWNER", "").strip()
             if owner:
                 return owner
         return None
@@ -159,8 +195,8 @@ class SkillOrganizerConfig:
         """
         dep_env = self.get_dependency_env_path()
         if dep_env:
-            load_dotenv(dep_env, override=False)
-            token = os.getenv("GITHUB_TOKEN", "").strip()
+            env_vars = self._parse_env_file_manually(dep_env)
+            token = env_vars.get("GITHUB_TOKEN", "").strip()
             if token:
                 return token
         return None
