@@ -1,16 +1,19 @@
 ---
 title: "GitHub Skill Organizer"
 name: github-skill-organizer
-description: "GitHub 技能倉庫同步管理工具。批量上傳、比對、同步技能目錄到 GitHub。支持自動創建倉庫、衝突檢測、安全克隆、CHANGELOG 同步、標準 Issue 報告。v1.0.12 新增 skill_issue_reporter.py 和 CONTRIBUTING.md。"
-version: "1.0.12"
+description: "GitHub 技能倉庫同步管理工具。批量上傳、比對、同步技能目錄到 GitHub。支持自動創建倉庫、衝突檢測、安全克隆、CHANGELOG 同步、標準 Issue 報告。v1.0.13 統一 frontmatter 格式並新增 fixes 欄位支持。"
+version: "1.0.13"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T16:47:15+08:00"
+updated_at: "2026-05-23T10:55:00+08:00"
+fixes: []
+
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
+
 file_mapping:
   local_path: "README.md"
   github_path: "github-skill-organizer/README.md"
@@ -18,8 +21,8 @@ file_mapping:
 
 # github-skill-organizer
 
-> 當前版本：1.0.12
-> 核心變更：v1.0.12 新增標準 Issue 報告器（skill_issue_reporter.py）和 Issue 格式規範（CONTRIBUTING.md），從 agent-skill-improving 遷移至此。
+> 當前版本：1.0.13
+> 核心變更：v1.0.13 統一 frontmatter 格式，新增 fixes 欄位支持，skill_issue_reporter.py 改為調用 github-restful-api-connector 統一接口。
 
 ---
 
@@ -36,7 +39,8 @@ file_mapping:
 | 子目錄過濾 | compare_skill 只比對該技能子目錄 | ✅ v1.0.11 |
 | 文件排除 | 自動排除 .backups、__pycache__、LICENSE | ✅ v1.0.11 |
 | CHANGELOG 同步 | 檢查並同步 CHANGELOG.md frontmatter | ✅ v1.0.11 |
-| **標準 Issue 報告** | **skill_issue_reporter.py 強制格式輸出** | **✅ v1.0.12** |
+| 標準 Issue 報告 | skill_issue_reporter.py 強制格式輸出 | ✅ v1.0.12 |
+| **fixes 欄位支持** | **自動讀取文件 frontmatter fixes 生成 Fixes #N commit** | **✅ v1.0.13** |
 
 ---
 
@@ -53,17 +57,17 @@ export GITHUB_OWNER="nervlin4444"
 
 ```bash
 python scripts/github_repo_sync.py \
-    --local-dir ~/.workbuddy/skills/my-skill \
-    --repo-name ai.skills.incubation
+  --local-dir ~/.workbuddy/skills/my-skill \
+  --repo-name ai.skills.incubation
 ```
 
 ### 3. 克隆倉庫到本地
 
 ```bash
 python scripts/github_repo_sync.py \
-    --clone \
-    --repo-name ai.skills.incubation \
-    --clone-method credential
+  --clone \
+  --repo-name ai.skills.incubation \
+  --clone-method credential
 ```
 
 ### 4. 查看同步狀態
@@ -80,18 +84,18 @@ python scripts/sync_engine.py compare --skill-dir ~/.workbuddy/skills/my-skill
 ```bash
 # 交互式生成 Issue
 python scripts/skill_issue_reporter.py \
-    --skill-dir ~/.workbuddy/skills/my-skill \
-    --interactive \
-    --output-dir ./improve/issues
+  --skill-dir ~/.workbuddy/skills/my-skill \
+  --interactive \
+  --output-dir ./improve/issues
 
 # 程序化生成（Agent 推薦）
 cat issue_input.json | python scripts/skill_issue_reporter.py \
-    --skill-dir ~/.workbuddy/skills/my-skill \
-    --from-stdin
+  --skill-dir ~/.workbuddy/skills/my-skill \
+  --from-stdin
 ```
 
 **配套文件**：
-- `CONTRIBUTING.md` — 標準 Issue 報告格式規範（結構化模板 + JSON）
+- `references/CONTRIBUTING.md` — 標準 Issue 報告格式規範（結構化模板 + JSON）
 - `scripts/skill_issue_reporter.py` — Issue 報告生成器（強制格式、自動分類、字數驗證）
 
 **分類標準**：
@@ -103,10 +107,25 @@ cat issue_input.json | python scripts/skill_issue_reporter.py \
 
 ---
 
+## fixes 欄位說明（v1.0.13 新增）
+
+所有技能文件的 frontmatter 必須包含 `fixes` 欄位：
+
+```yaml
+fixes: []        # 無關聯 Issue（新增/優化/文檔）
+fixes: [4]       # 修復 Issue #4
+fixes: [4, 5]    # 一次修復多個 Issue
+```
+
+上傳腳本會自動掃描所有文件的 fixes，合併去重後在 commit message 中附加 `Fixes #N`，GitHub 自動關閉對應 Issue。
+
+---
+
 ## 版本記錄
 
 | 版本 | 日期 | 變更 | 作者 | 驗證 |
 |------|------|------|------|------|
+| 1.0.13 | 2026-05-23 | 統一 frontmatter 格式（fixes 欄位、移除 {baseDir}、單一 file_mapping）；skill_issue_reporter.py 改為調用 github-restful-api-connector 統一接口 | Kevin Lin | ✅ |
 | 1.0.12 | 2026-05-22 | 新增 skill_issue_reporter.py（標準 Issue 報告器）和 CONTRIBUTING.md（Issue 格式規範），從 agent-skill-improving 遷移至此 | Kevin Lin | ✅ |
 | 1.0.11 | 2026-05-22 | 新增 compare_skill 子目錄過濾、local_only 判定、強制 CLI 上傳、skill_dir_name 修正、expanduser 路徑展開、_is_excluded_path 過濾、CHANGELOG 同步、LICENSE 排除 | Kevin Lin | ✅ |
 | 1.0.10 | 2026-05-21 | 修復 local_dir 指向 skills 父目錄導致上傳所有技能 bug | Kevin Lin | ✅ |
@@ -123,9 +142,9 @@ cat issue_input.json | python scripts/skill_issue_reporter.py \
 
 | 文件 | 說明 |
 |------|------|
-| scripts/github_repo_sync.py | 批量同步上傳腳本 |
+| scripts/github_repo_sync.py | 批量同步上傳腳本（github-restful-api-connector 技能） |
 | scripts/sync_engine.py | 核心同步引擎（compare/upload/sync） |
-| scripts/skill_issue_reporter.py | 標準 Issue 報告生成器（v1.0.12 新增） |
-| CONTRIBUTING.md | 標準 Issue 報告格式規範（v1.0.12 新增） |
+| scripts/skill_issue_reporter.py | 標準 Issue 報告生成器（v1.0.12 新增，v1.0.13 改為調用統一接口） |
+| references/CONTRIBUTING.md | 標準 Issue 報告格式規範（v1.0.12 新增） |
 | .github/workflows/release.yml | semantic-release 配置 |
 | .releaserc.json | 版本發布規則 |
