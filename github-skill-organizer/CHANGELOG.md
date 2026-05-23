@@ -1,21 +1,3 @@
----
-title: Changelog
-name: github-skill-organizer
-description: Automated release history for github-skill-organizer.
-version: 
-github_repository: nervlin4444/ai.skills.incubation
-target_branch: main
-updated_at: 2026-05-23T10:57:24+00:00
-auth_config:
-  provider: github
-  auth_method: token
-  token_env_var: GITHUB_TOKEN
-  env_file_path: {baseDir}/.env
-file_mapping:
-  - local_path: {baseDir}/CHANGELOG.md
-    github_path: github-skill-organizer/CHANGELOG.md
----
-
 # [1.1.0](https://github.com/nervlin4444/ai.skills.incubation/compare/v1.0.0...v1.1.0) (2026-05-19)
 
 
