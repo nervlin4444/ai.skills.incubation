@@ -1,17 +1,20 @@
 """
 ---
-title: "Skill Issue Reporter - 標準 Issue 報告生成與上傳器"
+title: "Skill Issue Reporter - Standard Issue Report Generator & Uploader"
 name: github-skill-organizer
-description: "強制按 CONTRIBUTING.md 規範生成標準 Issue 報告，支持本地預覽與直接上傳 GitHub Issues。使用標準庫 urllib.request 獨立實現，不依賴 github-restful-api-connector。"
-version: "1.0.12"
+description: "強制按 CONTRIBUTING.md 規範生成標準 Issue 報告，支持本地預覽與直接上傳 GitHub Issues。調用 github-restful-api-connector 的 rest_request() 統一接口，符合接口隔離架構決策。"
+version: "1.0.13"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T17:13:09+08:00"
+updated_at: "2026-05-23T10:55:00+08:00"
+fixes: []
+
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
+
 file_mapping:
   local_path: "scripts/skill_issue_reporter.py"
   github_path: "github-skill-organizer/scripts/skill_issue_reporter.py"
@@ -23,16 +26,13 @@ import sys
 import json
 import re
 import argparse
-import urllib.request
-import urllib.error
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-
 class SkillIssueReporter:
     """
-    LOCK v1.0.12: 標準 Issue 報告生成與上傳器
+    LOCK v1.0.13: 標準 Issue 報告生成與上傳器
 
     核心原則：
     1. Agent 禁止自由發揮撰寫 Issue，必須通過此腳本生成
@@ -41,15 +41,15 @@ class SkillIssueReporter:
     4. 強制驗證每 Section >= 50 個中文字符
     5. 支持本地生成（默認）或直接上傳 GitHub Issues（--upload）
 
-    上傳實現：使用標準庫 urllib.request，不依賴 github-restful-api-connector。
-    只共享環境變數 GITHUB_TOKEN。
+    上傳實現：調用 github-restful-api-connector 的 rest_request() 統一接口。
+    符合接口隔離架構決策：所有 github.com API 調用必須通過 connector。
     """
 
     CLASSIFICATIONS = ["[FRAMEWORK]", "[RUNTIME]", "[AGENT-BUG]"]
     MIN_CHINESE_CHARS = 50
     MIN_ENGLISH_CHARS = 100
     MAX_TITLE_LEN = 80
-    TEMPLATE_VERSION = "v1.0.12"
+    TEMPLATE_VERSION = "v1.0.13"
 
     def __init__(self, skill_dir: str, output_dir: str = "./improve/issues"):
         self.skill_dir = Path(os.path.expanduser(str(skill_dir))).resolve()
@@ -124,38 +124,36 @@ class SkillIssueReporter:
 
     def _create_github_issue(self, owner: str, repo: str, title: str, body: str) -> Dict:
         """
-        使用標準庫 urllib.request 直接創建 GitHub Issue。
-        不依賴 github-restful-api-connector，只共享 GITHUB_TOKEN 環境變數。
+        調用 github-restful-api-connector 的 rest_request() 統一接口創建 GitHub Issue。
+        符合接口隔離架構決策：所有 github.com API 調用必須通過 connector。
         """
-        token = os.environ.get("GITHUB_TOKEN", "")
-        if not token:
-            return {"status": "error", "reason": "[UPLOAD] GITHUB_TOKEN not set"}
-
-        url = f"https://api.github.com/repos/{owner}/{repo}/issues"
-        headers = {
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github.v3+json",
-            "Content-Type": "application/json",
-            "User-Agent": "skill_issue_reporter/1.0.12"
-        }
-        payload = json.dumps({"title": title, "body": body}).encode("utf-8")
-
-        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        # 動態導入 connector
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            from github_restful_core import rest_request
+        except ImportError:
+            connector_dir = Path(__file__).parent.parent.parent / "github-restful-api-connector" / "scripts"
+            if connector_dir.exists():
+                sys.path.insert(0, str(connector_dir))
+            try:
+                from github_restful_core import rest_request
+            except ImportError:
                 return {
-                    "status": "created",
-                    "issue_number": data.get("number"),
-                    "issue_url": data.get("html_url"),
-                    "issue_id": data.get("id")
+                    "status": "error",
+                    "reason": f"[UPLOAD] github-restful-api-connector not found at {connector_dir}. "
+                              f"Please ensure github-restful-api-connector/scripts/github_restful_core.py exists."
                 }
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8") if hasattr(e, "read") else ""
+
+        payload = {"title": title, "body": body}
+        try:
+            result = rest_request("POST", f"/repos/{owner}/{repo}/issues", payload)
             return {
-                "status": "failed",
-                "reason": f"[UPLOAD] GitHub API error {e.code}: {error_body[:200]}"
+                "status": "created",
+                "issue_number": result.get("number"),
+                "issue_url": result.get("html_url"),
+                "issue_id": result.get("id")
             }
+        except RuntimeError as e:
+            return {"status": "failed", "reason": f"[UPLOAD] GitHub API error: {e}"}
         except Exception as e:
             return {"status": "failed", "reason": f"[UPLOAD] Network error: {e}"}
 
@@ -236,9 +234,9 @@ class SkillIssueReporter:
 
         # 構建 Markdown
         md_lines = [
-            f"<!-- Issue Template Version: {self.TEMPLATE_VERSION} -->",
-            f"<!-- Generated by: skill_issue_reporter.py -->",
-            f"<!-- Timestamp: {timestamp} -->",
+            f"",
+            f"",
+            f"",
             "",
             f"# {title}",
             "",
@@ -272,8 +270,8 @@ class SkillIssueReporter:
             for i, af in enumerate(attempted_fixes, 1):
                 md_lines.extend([
                     f"嘗試 {i}:",
-                    f"  方法: {af.get('method', '無')}",
-                    f"  結果: {af.get('result', '無')}",
+                    f"   方法: {af.get('method', '無')}",
+                    f"   結果: {af.get('result', '無')}",
                     "",
                 ])
         else:
@@ -390,7 +388,7 @@ class SkillIssueReporter:
                     f"3. Issue 已創建: #{upload_result['issue_number']} {upload_result['issue_url']}"
                 )
                 result["next_steps"].append(
-                    f"4. 修復後 Commit 包含 Fixes #{upload_result['issue_number']} 自動關閉"
+                    f"4. 修復後在文件 frontmatter 加入 fixes: [{upload_result['issue_number']}]，上傳時自動關閉"
                 )
             else:
                 result["next_steps"].append(
@@ -401,7 +399,7 @@ class SkillIssueReporter:
                 )
         else:
             result["next_steps"].append("3. 在 GitHub 上創建 Issue（貼上 Markdown 內容）")
-            result["next_steps"].append("4. 修復後 Commit 包含 Fixes #{issue_number} 自動關閉")
+            result["next_steps"].append("4. 修復後在文件 frontmatter 加入 fixes: [{issue_number}]，上傳時自動關閉")
 
         return result
 
@@ -474,7 +472,6 @@ class SkillIssueReporter:
             attempted_fixes=attempted,
             proposed_fix=proposed_fix
         )
-
 
 def main():
     parser = argparse.ArgumentParser(description="Skill Issue Reporter - 標準 Issue 報告生成與上傳器")
@@ -572,10 +569,9 @@ def main():
         if 'validations' in result:
             for v in result['validations']:
                 status = "✅" if v['ok'] else "❌"
-                print(f"    {status} {v['msg']}")
+                print(f"  {status} {v['msg']}")
         if 'notice' in result:
             print(f"  提示: {result['notice']}")
-
 
 if __name__ == "__main__":
     main()
