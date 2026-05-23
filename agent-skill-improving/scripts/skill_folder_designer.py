@@ -3,15 +3,16 @@
 title: "Skill Folder Designer - Initialize New Skill Directory Structure"
 name: "agent-skill-improving"
 description: "Bootstrap a new skill bundle with standard directory layout, all files pre-populated with unified frontmatter templates. Enforces naming conventions, generates placeholder content for README.md, SKILL.md, USAGE.md, scripts, and configuration files. Requires user confirmation before any disk write operation."
-version: "1.2.5"
+version: "1.3.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T18:26:00+08:00"
+updated_at: "2026-05-23T17:07:00+08:00"
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
+fixes: []
 file_mapping:
   local_path: "{baseDir}/skill_folder_designer.py"
   github_path: "agent-skill-improving/scripts/skill_folder_designer.py"
@@ -88,40 +89,41 @@ auth_config:
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
+fixes: []
 file_mapping:
   local_path: "{local_path}"
   github_path: "{github_path}"
 ---"""
         if file_type == "py":
             # For .py files, wrap in docstring
-            return f'"""
-{fm}
----
-"""'
+            q = chr(34) * 3
+            return q + "\n" + fm + "\n---\n" + q
         return fm
 
     def _generate_py_docstring_frontmatter(self, title: str, description: str, version: str,
                                            local_path: str, github_path: str) -> str:
         """Generate frontmatter embedded in Python docstring."""
-        return f
----
-title: "{title}"
-name: "{self.skill_name}"
-description: "{description}"
-version: "{version}"
-github_repository: "{self.DEFAULT_REPO_OWNER}/{self.DEFAULT_REPO_NAME}"
-target_branch: "{self.DEFAULT_BRANCH}"
-updated_at: "{self.timestamp}"
-auth_config:
-  provider: "github"
-  auth_method: "token"
-  token_env_var: "GITHUB_TOKEN"
-  env_file_path: ".env"
-file_mapping:
-  local_path: "{local_path}"
-  github_path: "{github_path}"
----
-
+        q = chr(34) * 3
+        lines = [q, "---"]
+        lines.append("title: " + chr(34) + title + chr(34))
+        lines.append("name: " + chr(34) + self.skill_name + chr(34))
+        lines.append("description: " + chr(34) + description + chr(34))
+        lines.append("version: " + chr(34) + version + chr(34))
+        lines.append("github_repository: " + chr(34) + self.DEFAULT_REPO_OWNER + "/" + self.DEFAULT_REPO_NAME + chr(34))
+        lines.append("target_branch: " + chr(34) + self.DEFAULT_BRANCH + chr(34))
+        lines.append("updated_at: " + chr(34) + self.timestamp + chr(34))
+        lines.append("fixes: []")
+        lines.append("auth_config:")
+        lines.append("  provider: " + chr(34) + "github" + chr(34))
+        lines.append("  auth_method: " + chr(34) + "token" + chr(34))
+        lines.append("  token_env_var: " + chr(34) + "GITHUB_TOKEN" + chr(34))
+        lines.append("  env_file_path: " + chr(34) + ".env" + chr(34))
+        lines.append("file_mapping:")
+        lines.append("  local_path: " + chr(34) + local_path + chr(34))
+        lines.append("  github_path: " + chr(34) + github_path + chr(34))
+        lines.append("---")
+        lines.append(q)
+        return "\n".join(lines)
 
     def generate_readme_md(self, description: str = "") -> Tuple[str, str]:
         """Generate README.md content (human-readable guide)."""
