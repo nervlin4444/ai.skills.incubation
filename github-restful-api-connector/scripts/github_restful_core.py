@@ -3,27 +3,30 @@
 ---
 title: "RESTful Core Connector"
 name: "github-restful-api-connector"
-description: "統一 HTTP 客戶端：認證、分頁、速率限制、錯誤重試"
-version: "0.1.1"
+description: "Unified HTTP client: auth, pagination, rate limiting, error retry. v0.1.2 unified frontmatter format (fixes field, removed {baseDir}, single file_mapping)."
+version: "0.1.2"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-17T17:38:00+08:00"
+updated_at: "2026-05-23T11:28:00+08:00"
+fixes: []
 
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: ".env"
 
 file_mapping:
-  - local_path: "{baseDir}/scripts/github_restful_core.py"
-    github_path: "/github-restful-api-connector/scripts/github_restful_core.py"
+  local_path: "scripts/github_restful_core.py"
+  github_path: "github-restful-api-connector/scripts/github_restful_core.py"
 ---
-
-生成日期：2026-05-17 17:38:00
-版本：v0.1.1
-修復：load_env() 改用 os.environ[key]=val 取代 setdefault，確保 .env 文件優先於系統環境變數
 """
+
+# github_restful_core.py - F-001 Unified HTTP Client
+# Version: v0.1.2
+# Generated: 2026-05-23 11:28:00
+# Core changes: unified frontmatter format (fixes field, removed {baseDir}, single file_mapping).
+# Features unchanged: auth, pagination, rate limiting, error retry, PAT diagnostics.
 
 import os
 import sys
@@ -38,15 +41,15 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # ============================================
-# 配置與常量
+# Configuration & Constants
 # ============================================
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 API_VERSION = "2022-11-28"
 BASE_REST_URL = "https://api.github.com"
 BASE_GRAPHQL_URL = "https://api.github.com/graphql"
 
 # ============================================
-# 日誌設定
+# Logging Setup
 # ============================================
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +59,7 @@ logging.basicConfig(
 logger = logging.getLogger("github_restful_core")
 
 # ============================================
-# 環境載入（延遲調用，禁止模組級執行）
+# Environment Loading (lazy call, prohibit module-level execution)
 # ============================================
 _ENV_LOADED = False
 _TOKEN = None
@@ -65,7 +68,7 @@ _REPO = None
 _PROJECT_NUMBER = None
 
 def load_env():
-    """從 .env 檔案載入環境變數。延遲調用，禁止在模組導入時執行。"""
+    """Load environment variables from .env file. Lazy call, prohibit module-level execution."""
     global _ENV_LOADED, _TOKEN, _OWNER, _REPO, _PROJECT_NUMBER
     if _ENV_LOADED:
         return
@@ -85,7 +88,7 @@ def load_env():
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         key, val = line.split("=", 1)
-                        # 修復：直接賦值，確保 .env 優先於系統環境變數
+                        # Fix: direct assignment, ensure .env overrides system env vars
                         os.environ[key] = val
             logger.info(f"Loaded env from: {p}")
             break
@@ -118,7 +121,7 @@ def get_project_number() -> str:
     return _PROJECT_NUMBER
 
 # ============================================
-# HTTP Session（懶加載，禁止模組級創建）
+# HTTP Session (lazy load, prohibit module-level creation)
 # ============================================
 _SESSION = None
 
@@ -142,19 +145,19 @@ def get_session() -> requests.Session:
     return _SESSION
 
 # ============================================
-# 核心函數
+# Core Functions
 # ============================================
 def graphql_query(query: str, variables: dict = None) -> dict:
     """
-    統一 GraphQL 調用。
-    處理分頁與速率限制。
+    Unified GraphQL call.
+    Handles pagination and rate limiting.
     """
     payload = {"query": query}
     if variables:
         payload["variables"] = variables
     resp = get_session().post(BASE_GRAPHQL_URL, json=payload)
     if resp.status_code == 401:
-        logger.error("401 Unauthorized — PAT invalid or expired. Stop.")
+        logger.error("401 Unauthorized - PAT invalid or expired. Stop.")
         sys.exit(1)
     if resp.status_code == 403:
         reset_time = int(resp.headers.get("X-RateLimit-Reset", 0))
@@ -171,8 +174,10 @@ def graphql_query(query: str, variables: dict = None) -> dict:
 
 def rest_request(method: str, endpoint: str, payload: dict = None) -> dict:
     """
-    統一 REST 調用。
-    method 限於 GET / POST / PUT / PATCH / DELETE。
+    Unified REST call.
+    Method limited to GET / POST / PUT / PATCH / DELETE.
+    This is the core interface of github-restful-api-connector. All github.com API calls must go through this function.
+    Complies with interface isolation decision: prohibit any skill script from directly using urllib.request or requests to access GitHub API.
     """
     method = method.upper()
     if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
@@ -183,7 +188,7 @@ def rest_request(method: str, endpoint: str, payload: dict = None) -> dict:
         kwargs["json"] = payload
     resp = get_session().request(method, url, **kwargs)
     if resp.status_code == 401:
-        logger.error("401 Unauthorized — PAT invalid or expired. Stop.")
+        logger.error("401 Unauthorized - PAT invalid or expired. Stop.")
         sys.exit(1)
     if resp.status_code == 403:
         reset_time = int(resp.headers.get("X-RateLimit-Reset", 0))
@@ -204,7 +209,7 @@ def rest_request(method: str, endpoint: str, payload: dict = None) -> dict:
 
 def get_rate_limit_status() -> dict:
     """
-    返回剩餘配額與重置時間，供上游決策是否繼續調用。
+    Returns remaining quota and reset time, for upstream decision on whether to continue calling.
     """
     data = rest_request("GET", "/rate_limit")
     core = data.get("resources", {}).get("core", {})
@@ -216,12 +221,12 @@ def get_rate_limit_status() -> dict:
     }
 
 # ============================================
-# PAT 測試診斷（供 verify 腳本調用）
+# PAT Test Diagnostics (for verify script)
 # ============================================
 def test_pat_diagnostic() -> dict:
     """
-    全面診斷 PAT 有效性。
-    返回結構化報告，供上游判斷問題根因。
+    Comprehensive PAT validity diagnosis.
+    Returns structured report, for upstream root cause analysis.
     """
     report = {
         "token_loaded": False,
@@ -239,7 +244,7 @@ def test_pat_diagnostic() -> dict:
         "errors": [],
     }
 
-    # Step 1: 載入 .env
+    # Step 1: Load .env
     try:
         load_env()
         token = get_token()
@@ -254,16 +259,16 @@ def test_pat_diagnostic() -> dict:
         report["errors"].append(f"Token load failed: {e}")
         return report
 
-    # Step 2: 測試 API 連通性（不用認證的端點）
+    # Step 2: Test API connectivity (unauthenticated endpoint)
     try:
-        # 先測試不帶認證的 /rate_limit（公開端點）
+        # Test unauthenticated /rate_limit first (public endpoint)
         resp = requests.get("https://api.github.com/rate_limit", timeout=10)
         report["api_reachable"] = resp.status_code == 200
     except Exception as e:
         report["errors"].append(f"API unreachable: {e}")
         return report
 
-    # Step 3: 測試認證（/user）
+    # Step 3: Test authentication (/user)
     try:
         user = rest_request("GET", "/user")
         report["auth_success"] = True
@@ -271,9 +276,9 @@ def test_pat_diagnostic() -> dict:
     except RuntimeError as e:
         err_str = str(e)
         if "401" in err_str:
-            report["errors"].append("401 Unauthorized — Token invalid or expired")
+            report["errors"].append("401 Unauthorized - Token invalid or expired")
         elif "403" in err_str:
-            report["errors"].append("403 Forbidden — Token lacks required scope (need 'repo')")
+            report["errors"].append("403 Forbidden - Token lacks required scope (need 'repo')")
         else:
             report["errors"].append(f"Auth test failed: {e}")
         return report
@@ -281,13 +286,13 @@ def test_pat_diagnostic() -> dict:
         report["errors"].append(f"Auth test exception: {e}")
         return report
 
-    # Step 4: 速率限制
+    # Step 4: Rate limit
     try:
         report["rate_limit"] = get_rate_limit_status()
     except Exception as e:
         report["errors"].append(f"Rate limit check failed: {e}")
 
-    # Step 5: 倉庫檢查
+    # Step 5: Repository check
     owner = get_owner()
     repo = get_repo()
     report["repo_name"] = f"{owner}/{repo}" if owner and repo else ""
@@ -300,20 +305,20 @@ def test_pat_diagnostic() -> dict:
             err_str = str(e)
             if "404" in err_str:
                 report["repo_exists"] = False
-                report["errors"].append(f"Repo '{owner}/{repo}' not found — will auto-create on sync")
+                report["errors"].append(f"Repo '{owner}/{repo}' not found - will auto-create on sync")
             elif "401" in err_str or "403" in err_str:
-                report["errors"].append(f"No access to repo '{owner}/{repo}' — check PAT 'repo' scope")
+                report["errors"].append(f"No access to repo '{owner}/{repo}' - check PAT 'repo' scope")
             else:
                 report["errors"].append(f"Repo check failed: {e}")
 
     return report
 
 # ============================================
-# CLI 入口
+# CLI Entry
 # ============================================
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="GitHub RESTful Core — F-001")
+    parser = argparse.ArgumentParser(description="GitHub RESTful Core - F-001")
     parser.add_argument("--version", action="store_true", help="Show version")
     parser.add_argument("--test-connection", action="store_true", help="Test API connection")
     args = parser.parse_args()
@@ -344,13 +349,13 @@ def main():
                 print("[INFO] GITHUB_REPO not set. Skipping repo access test.")
             project_number = get_project_number()
             if owner and project_number:
-                q = """
-                query($owner: String!, $number: Int!) {
-                  userOrOrganization(login: $owner) {
-                    projectV2(number: $number) { id title }
-                  }
-                }
-                """
+                q = (
+                    "query($owner: String!, $number: Int!) {"
+                    "  userOrOrganization(login: $owner) {"
+                    "    projectV2(number: $number) { id title }"
+                    "  }"
+                    "}"
+                )
                 result = graphql_query(q, {"owner": owner, "number": int(project_number)})
                 proj = result.get("userOrOrganization", {}).get("projectV2")
                 if proj:
