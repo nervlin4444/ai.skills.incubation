@@ -1,7 +1,7 @@
 ---
 title: Changelog
-name: github-skill-organizer
-description: Automated release history for github-skill-organizer.
+name: kimi-agent-tracker
+description: Automated release history for kimi-agent-tracker.
 version: 
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
@@ -13,7 +13,7 @@ auth_config:
   env_file_path: {baseDir}/.env
 file_mapping:
   - local_path: {baseDir}/CHANGELOG.md
-    github_path: github-skill-organizer/CHANGELOG.md
+    github_path: kimi-agent-tracker/CHANGELOG.md
 ---
 
 # [1.1.0](https://github.com/nervlin4444/ai.skills.incubation/compare/v1.0.0...v1.1.0) (2026-05-19)
