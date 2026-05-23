@@ -1,11 +1,12 @@
 ---
 title: "Script Error Correction Checklist"
 name: agent-skill-improving
-description: "腳本錯誤修正指令集。當腳本無法執行、執行中卡住、產出異常時，LLM必須逐條執行本檢查清單。融入SOUL v5.0經驗：禁止臨時腳本、CLI唯一方式、bootstrap.py廢棄。v2.3.0新增接口隔離規則：所有github.com API調用必須走connector，本地管理由organizer處理，技能之間不共享API訪問。"
-version: "v2.3.0"
+description: "腳本錯誤修正指令集。當腳本無法執行、執行中卡住、產出異常時，LLM必須逐條執行本檢查清單。v2.4.0新增分階段組裝策略、frontmatter解析器測試規範、Fixes一致性邊界檢查。"
+version: "v2.4.0"
 github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: main
-updated_at: "2026-05-22T17:29:50+08:00"
+target_branch: "main"
+updated_at: "2026-05-23T16:20:00+08:00"
+fixes: []
 auth_config:
   provider: "github"
   auth_method: "token"
@@ -50,6 +51,10 @@ file_mapping:
 - [ ] **CLI唯一方式**：是否嘗試寫臨時腳本來調用conversation_append.py？
   - 禁止：寫backup_*.py / write_*.py / test_*.py / append_temp.py等臨時腳本。
   - 必須：直接使用conversation_append.py CLI的 `--user-input` 和 `--agent-response` 參數。
+- [ ] **分階段組裝策略（v2.4.0 新增）**：生成 .py 文件時是否嘗試在字符串內部嵌套 `"""` 或 `'''`？
+  - 禁止：在單一字符串塊中同時包含外層 docstring 和內層示例代碼（引號嵌套地獄）。
+  - 必須：採用「階段 1 寫業務代碼 → 階段 2 寫 frontmatter → 階段 3 join 合併」。
+  - 檢查項：若發現自己在字符串內部寫 `"""` 或 `chr(34)*3`，立即停止，改用分階段組裝。
 
 ## 卡。殼。檢查清單
 
@@ -71,6 +76,13 @@ file_mapping:
   - 禁止：無限重試replace_in_file，導致時間浪費和token消耗。
   - 必須：3次失敗後確認已備份舊版本，降級使用write_to_file重寫整個文件。
   - 檢查項：記錄[PATCH-APPLIED-VIA-WRITE]到改進歷史。
+- [ ] **frontmatter 解析器測試（v2.4.0 新增）**：修改 `_parse_yaml` 後是否測試了多種 file_mapping 格式？
+  - 禁止：僅測試單一格式（如 dict）就認為通過。
+  - 必須：測試三種格式：
+    1. dict 格式（`local_path: "..."` 直接縮進）
+    2. list-of-dict 格式（`- local_path: "..."` 列表項）
+    3. 空值嵌套格式（`file_mapping:` 無值後接縮進行）
+  - 原因：v1.3.0 前 `_parse_yaml` 對空值後的縮進行處理有缺陷，導致 file_mapping 被解析為空字符串。
 
 ## 漏。油。檢查清單
 
@@ -95,8 +107,12 @@ file_mapping:
 - [ ] **CLI參數完整性**：調用conversation_append.py時是否忘記 `--conv-id` 和 `--date`？
   - 禁止：省略歸檔參數，導致備份丟失歸屬信息。
   - 必須：每次調用都傳遞 `--conv-id` 和 `--date`。
+- [ ] **Fixes 一致性邊界（v2.4.0 新增）**：`check_fixes_consistency` 的正則是否會匹配 markdown 說明文字？
+  - 禁止：使用全局正則搜索任意文本中的 'Fixes #N'（會誤判 README.md 說明文字）。
+  - 必須：僅檢測以 `#` 開頭的行（代碼註釋），排除 markdown 列表項 `- **Fixes**`。
+  - 原因：README.md 中「自動檢測代碼中的 Fixes 聲明（如 `# Fixes #5`）」會被舊版正則誤判為代碼註釋。
 
-## 越。界。檢查清單（v2.3.0 新增）
+## 越。界。檢查清單（v2.3.0）
 
 執行條件：腳本涉及 github.com API 調用、跨技能網絡訪問、或接口與本地管理職責混用。
 
@@ -141,6 +157,10 @@ file_mapping:
 | 13 | 2026-05-12 | 卡。殼。 | replace_in_file因全形標點反覆失敗，Agent陷入無限分析循環 | 已解決 |
 | 14 | 2026-05-22 | 越。界。 | skill_issue_reporter.py 使用 urllib.request 直接調用 GitHub API，繞過 connector。後修正為調用 github_restful_core.rest_request() | 已解決 |
 | 15 | 2026-05-22 | 越。界。 | skill_issue_reporter.py 和 CONTRIBUTING.md 錯誤放在 agent-skill-improving，職責歸屬錯誤。後遷移至 github-skill-organizer | 已解決 |
+| 16 | 2026-05-23 | 啞。火。 | 在 Python 字符串中生成 .py 文件，內部 `"""` 與外層字符串衝突導致 SyntaxError。後改用分階段組裝策略（業務代碼與 frontmatter 分離，逐行 add() 後 join）| 已解決 |
+| 17 | 2026-05-23 | 卡。殼。 | `_parse_yaml` 解析器無法處理 `file_mapping:` 空值後的列表項/字典項嵌套，導致 file_mapping 被解析為空字符串。後修正為自動初始化列表/字典 | 已解決 |
+| 18 | 2026-05-23 | 絆。腳。 | `check_fixes_consistency` 正則匹配了 README.md 說明文字中的 'Fixes #5'，誤判為代碼註釋。後修正為僅檢測 `#` 開頭行（代碼註釋），排除 markdown 列表項 | 已解決 |
+| 19 | 2026-05-23 | 絆。腳。 | 未採用分階段組裝策略，導致反覆出現引號嵌套問題，浪費大量 token 和時間。後建立「階段 1 寫業務代碼 → 階段 2 寫 frontmatter → 階段 3 join 合併」標準流程 | 已解決 |
 
 ---
 
