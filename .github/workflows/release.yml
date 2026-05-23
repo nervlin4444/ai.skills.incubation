@@ -76,30 +76,30 @@ jobs:
               date=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 
               # DYNAMIC frontmatter: name = skill_name, github_path = "{skill_name}/CHANGELOG.md"
-              cat > /tmp/fm_${skill_name}.md << EOF
----
-title: Changelog
-name: ${skill_name}
-description: Automated release history for ${skill_name}.
-version: ${version}
-github_repository: nervlin4444/ai.skills.incubation
-target_branch: main
-updated_at: ${date}
-auth_config:
-  provider: github
-  auth_method: token
-  token_env_var: GITHUB_TOKEN
-  env_file_path: "{baseDir}/.env"
-file_mapping:
-  - local_path: "{baseDir}/CHANGELOG.md"
-    github_path: "${skill_name}/CHANGELOG.md"
----
-
-EOF
+              {
+                echo "---"
+                echo "title: Changelog"
+                echo "name: ${skill_name}"
+                echo "description: Automated release history for ${skill_name}."
+                echo "version: ${version}"
+                echo "github_repository: nervlin4444/ai.skills.incubation"
+                echo "target_branch: main"
+                echo "updated_at: ${date}"
+                echo "auth_config:"
+                echo "  provider: github"
+                echo "  auth_method: token"
+                echo "  token_env_var: GITHUB_TOKEN"
+                echo "  env_file_path: "{baseDir}/.env""
+                echo "file_mapping:"
+                echo "  - local_path: "{baseDir}/CHANGELOG.md""
+                echo "    github_path: "${skill_name}/CHANGELOG.md""
+                echo "---"
+                echo ""
+              } > "/tmp/fm_${skill_name}.md"
 
               # Prepend frontmatter to CHANGELOG.md
-              cat /tmp/fm_${skill_name}.md "$changelog_path" > /tmp/new_${skill_name}_changelog.md
-              mv /tmp/new_${skill_name}_changelog.md "$changelog_path"
+              cat "/tmp/fm_${skill_name}.md" "$changelog_path" > "/tmp/new_${skill_name}_changelog.md"
+              mv "/tmp/new_${skill_name}_changelog.md" "$changelog_path"
 
               git add "$changelog_path"
               changed=1
