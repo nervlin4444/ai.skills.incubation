@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/nervlin4444/ai.skills.incubation/compare/v1.1.0...v1.2.0) (2026-05-23)
+
+
+### Features
+
+* 令 semantic-release 會觸發新版本 ([27755af](https://github.com/nervlin4444/ai.skills.incubation/commit/27755af0258462f481c2d213e3ccc8993ae85a4d))
+
 # [1.1.0](https://github.com/nervlin4444/ai.skills.incubation/compare/v1.0.0...v1.1.0) (2026-05-19)
 
 
