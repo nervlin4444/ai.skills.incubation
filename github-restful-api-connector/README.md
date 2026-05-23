@@ -1,38 +1,40 @@
 ---
 title: "GitHub RESTful API Connector"
 name: "github-restful-api-connector"
-description: "人類閱讀版。連接 GitHub RESTful API，將本地技能包自動同步到 GitHub 倉庫的同名子目錄。支援 PAT 診斷、雙向驗證、衝突檢測與安全克隆。"
-version: "0.3.0"
+description: "人類閱讀版。連接 GitHub RESTful API，將本地技能包自動同步到 GitHub 倉庫的同名子目錄。支援 PAT 診斷、雙向驗證、衝突檢測與安全克隆。v0.3.2 修復 Issue #4 計數異常，統一 frontmatter 格式。"
+version: "0.3.2"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-17T20:50:00+08:00"
+updated_at: "2026-05-23T11:28:00+08:00"
+fixes: [4]
 
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: ".env"
 
 file_mapping:
-  - local_path: "{baseDir}/README.md"
-    github_path: "/github-restful-api-connector/README.md"
+  local_path: "README.md"
+  github_path: "github-restful-api-connector/README.md"
 ---
 
 # GitHub RESTful API Connector
 
-版本：v0.3.0
-更新時間：2026-05-17 20:50:00
+版本：v0.3.2
+更新時間：2026-05-23 11:28:00
+核心修復：Issue #4 計數異常（upload_file 返回明確狀態字典），統一 frontmatter 格式（fixes 欄位、移除 {baseDir}）。
 
 ## 這是什麼？
 
 這個技能包讓 AI Agent 能夠將本地的技能目錄（如 `github-restful-api-connector/`）自動同步到 GitHub 倉庫的**同名子目錄**下。
 
-設計目標是「一個大貨倉，多個技能」——所有技能放在同一個倉庫 `ai.skills.devops` 中，各自獨立子目錄，互不干擾。
+設計目標是「一個大貨倉，多個技能」——所有技能放在同一個倉庫 `ai.skills.incubation` 中，各自獨立子目錄，互不干擾。
 
 ## 倉庫結構範例
 
-    nervlin4444/ai.skills.devops/          ← 大貨倉（一個 GitHub repo）
-    ├── github-restful-api-connector/      ← 技能 A 子目錄
+    nervlin4444/ai.skills.incubation/ ← 大貨倉（一個 GitHub repo）
+    ├── github-restful-api-connector/ ← 技能 A 子目錄
     │   ├── SKILL.md
     │   ├── README.md
     │   ├── scripts/
@@ -44,10 +46,10 @@ file_mapping:
     │   └── references/
     │       ├── API.SCOPE.md
     │       └── MAPPING.md
-    ├── jira-project-report/               ← 技能 B 子目錄（日後新增）
+    ├── jira-project-report/ ← 技能 B 子目錄（日後新增）
     │   ├── SKILL.md
     │   └── ...
-    └── another-skill/                     ← 技能 C 子目錄（日後新增）
+    └── another-skill/ ← 技能 C 子目錄（日後新增）
         ├── SKILL.md
         └── ...
 
@@ -63,6 +65,7 @@ file_mapping:
 | **雙向驗證** | 本地 → 倉庫、倉庫 → 本地，兩方向比對確保同步完整 |
 | **安全克隆** | Token 通過環境變數傳遞，不暴露於 Shell 歷史 |
 | **懶加載設計** | `load_env()` 和 `get_session()` 首次調用時才執行，避免模組導入時崩潰 |
+| **fixes 欄位支持** | 文件 frontmatter 中 `fixes: [N]` 自動生成 `Fixes #N` commit message |
 
 ## 快速開始
 
@@ -72,7 +75,7 @@ file_mapping:
 
     GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     GITHUB_OWNER=nervlin4444
-    GITHUB_REPO=ai.skills.devops
+    GITHUB_REPO=ai.skills.incubation
 
 Token 需要 `repo` scope。
 
@@ -91,20 +94,20 @@ Token 需要 `repo` scope。
 
 ### 3. 同步上傳
 
-    python scripts/github_repo_sync.py       --repo-name ai.skills.devops       --local-dir .
+    python scripts/github_repo_sync.py --repo-name ai.skills.incubation --local-dir .
 
-文件會自動上傳到 `ai.skills.devops/github-restful-api-connector/` 子目錄。
+文件會自動上傳到 `ai.skills.incubation/github-restful-api-connector/` 子目錄。
 
 ### 4. 雙向驗證
 
-    python scripts/github_repo_verify.py       --repo-name ai.skills.devops       --local-dir .       --direction both
+    python scripts/github_repo_verify.py --repo-name ai.skills.incubation --local-dir . --direction both
 
 ## 腳本清單
 
 | 腳本 | 版本 | 職責 |
 |------|------|------|
-| `github_restful_core.py` | 0.1.1 | 統一 HTTP 客戶端、認證、分頁、速率限制、錯誤重試 |
-| `github_repo_sync.py` | 0.3.0 | 批量上傳（本地 → 倉庫）。強制子目錄、自動創建倉庫、衝突檢測 |
+| `github_restful_core.py` | 0.1.2 | 統一 HTTP 客戶端、認證、分頁、速率限制、錯誤重試 |
+| `github_repo_sync.py` | 0.3.2 | 批量上傳（本地 → 倉庫）。強制子目錄、自動創建倉庫、衝突檢測、fixes 欄位支持 |
 | `github_repo_verify.py` | 0.2.0 | 雙向驗證 + PAT 診斷。`--test-pat` 獨立診斷 Token |
 | `github_repo_pull.py` | 0.1.0 | 下載同步（倉庫 → 本地）。拉取更新、初始化本地目錄 |
 
@@ -112,16 +115,16 @@ Token 需要 `repo` scope。
 
 ### Q: 為什麼文件必須放在子目錄？
 
-大貨倉 `ai.skills.devops` 容納多個技能。如果所有文件放在根目錄，不同技能的 `SKILL.md`、`scripts/` 會互相覆蓋。子目錄隔離確保每個技能獨立。
+大貨倉 `ai.skills.incubation` 容納多個技能。如果所有文件放在根目錄，不同技能的 `SKILL.md`、`scripts/` 會互相覆蓋。子目錄隔離確保每個技能獨立。
 
 ### Q: 如何新增第二個技能？
 
 1. 本地準備新技能目錄（如 `jira-project-report/`），內含 `SKILL.md`（frontmatter 有 `name: "jira-project-report"`）
 2. 執行：
 
-       python scripts/github_repo_sync.py          --repo-name ai.skills.devops          --local-dir ./jira-project-report
+    python scripts/github_repo_sync.py --repo-name ai.skills.incubation --local-dir ./jira-project-report
 
-3. 自動上傳到 `ai.skills.devops/jira-project-report/`
+3. 自動上傳到 `ai.skills.incubation/jira-project-report/`
 
 ### Q: 更新已上傳的文件？
 
@@ -136,12 +139,14 @@ Token 需要 `repo` scope。
 
 ### Q: 排除哪些文件？
 
-自動跳過：`.git`, `__pycache__`, `.env`, `*.pyc`, `.DS_Store`, `temp`, `tmp`, `cache`, `logs`, `.gitkeep`, `.env.template`
+自動跳過：`.git`, `__pycache__`, `.env`, `*.pyc`, `.DS_Store`, `temp`, `tmp`, `cache`, `logs`, `.gitkeep`, `.env.template`, `.backups`, `.backup`
 
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| 0.3.2 | 2026-05-23 | 修復 Issue #4 計數異常（upload_file 返回明確狀態字典）；統一 frontmatter 格式（fixes 欄位、移除 {baseDir}、單一 file_mapping） |
+| 0.3.1 | 2026-05-20 | 加入 .backups / .backup 排除；新增 --test-conventional-commit 參數 |
 | 0.3.0 | 2026-05-17 | 強制子目錄上傳、自動檢測技能名稱、PAT 診斷、setdefault bug 修復 |
 | 0.2.0 | 2026-05-17 | 新增 F-007 下載同步、拆分驗證腳本、安全克隆 |
 | 0.1.0 | 2026-05-16 | 初始框架：core / agent / task / session / sync |
