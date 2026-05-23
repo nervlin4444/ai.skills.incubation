@@ -2,20 +2,21 @@
 title: "Skill Error Correction Checklist"
 name: "agent-skill-improving"
 description: "技能錯誤修正指令集。當技能載入失敗、工作流偏離、版本號錯誤時，LLM必須逐條執行本檢查清單。融入SOUL v5.0經驗：SOUL先注入、bootstrap不在對話開始時加載、技能改進是操作手冊。"
-version: "v2.5.0"
+version: "2.5.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-22T01:02:00+08:00"
+updated_at: "2026-05-23T10:18:00+08:00"
+fixes: []
 
 auth_config:
   provider: "github"
   auth_method: "token"
   token_env_var: "GITHUB_TOKEN"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: ".env"
 
 file_mapping:
-  - local_path: "{baseDir}/assets/SKILL.CORRECTIONS.md"
-    github_path: "agent-skill-improving/assets/SKILL.CORRECTIONS.md"
+  local_path: "assets/SKILL.CORRECTIONS.md"
+  github_path: "agent-skill-improving/assets/SKILL.CORRECTIONS.md"
 ---
 
 # 技能錯誤修正指令集
@@ -70,7 +71,7 @@ file_mapping:
 
 執行條件：版本號錯誤、臨時腳本、格式違規、名稱特化、或擅自改進。
 
-- [ ] **版本號格式**：所有版本號是否為 `v<major>.<minor>.<patch>` 格式？
+- [ ] **版本號格式**：所有版本號是否為 `v..` 格式？
   - 例：v2.5.0（正確），v2.5（錯誤）。
 - [ ] **版本號規則**：
   - 重大改進：major +1（v2.5.0 → v3.0.0）
@@ -150,5 +151,5 @@ LOCK v2.5.0 PERMANENT — 檢查清單內容禁止修改。
 
 ---
 
-*最後更新：2026-05-22*
+*最後更新：2026-05-23*
 *本文件為LLM執行指令集，人類可讀解釋請參考README.md*
