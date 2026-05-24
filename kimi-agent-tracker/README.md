@@ -1,56 +1,53 @@
 ---
 title: "Kimi Agent Tracker - Usage Guide"
 name: "kimi-agent-tracker"
-description: "Kimi 平台專用自動化追蹤器的人類可讀說明書。負責對話列表提取、sandbox 文件下載、SHA256 去重歸檔。包含獨立 daemon 模式。"
-version: "1.0.0"
+description: "Kimi platform automation tracker human-readable guide. Handles conversation list extraction, sandbox file download, SHA256 deduplication archive. Includes standalone daemon mode. v1.0.2 hotfix: F-001 login validation false-positive fixed, loop detection for login completion, diagnose directory isolation."
+version: "1.0.2"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-21T17:15:00+08:00"
+updated_at: "2026-05-25T00:10:00+08:00"
+fixes: [24]
 auth_config:
-  provider: "github"
-  auth_method: "token"
-  token_env_var: "GITHUB_TOKEN"
+  provider: "local"
+  auth_method: "none"
+  token_env_var: "N/A"
   env_file_path: "{baseDir}/.env"
 file_mapping:
   local_path: "{baseDir}/README.md"
   github_path: "kimi-agent-tracker/README.md"
 ---
 
-Kimi Agent Tracker
-==================
+# Kimi Agent Tracker
 
-Kimi 平台專用自動化追蹤器。
+Version: 1.0.2 | Updated: 2026-05-25
+Core Fix: v1.0.2 — F-001 login validation false-positive fixed. validate_login() now uses avatar/conversation-item selectors instead of sidebar container. login() uses loop detection instead of blind sleep.
 
-Version: 1.0.0 | Updated: 2026-05-21
+## Table of Contents
 
-Table of Contents
------------------
+1. [Background & Motivation](#1-background--motivation)
+2. [Architecture Overview](#2-architecture-overview)
+3. [File Inventory](#3-file-inventory)
+4. [Installation](#4-installation)
+5. [Usage Guide](#5-usage-guide)
+6. [Download Mechanisms](#6-download-mechanisms)
+7. [Deduplication & File Handling](#7-deduplication--file-handling)
+8. [Diagnostic Mode](#8-diagnostic-mode)
+9. [Sandbox Version Behavior](#9-sandbox-version-behavior)
+10. [Daemon Mode](#10-daemon-mode)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Directory Structure](#12-directory-structure)
+13. [Version History](#13-version-history)
 
-1.  Background & Motivation
-2.  Architecture Overview
-3.  File Inventory
-4.  Installation
-5.  Usage Guide
-6.  Download Mechanisms
-7.  Deduplication & File Handling
-8.  Sandbox Version Behavior
-9.  Daemon Mode
-10. Troubleshooting
-11. Directory Structure
-12. Author
+## 1. Background & Motivation
 
-Background & Motivation
------------------------
+When collaborating with Kimi AI long-term, files generated across multiple conversations (skill packs, reports, scripts) need automated collection. This tracker encapsulates Kimi-specific logic as an independent skill, depending on chrome-playwright-connector for browser capabilities.
 
-當與 Kimi AI 長期協作時，多個對話中產生的文件（技能包、報告、腳本）需要自動化收集。本追蹤器將 Kimi 專用邏輯封裝為獨立技能，依賴 chrome-playwright-connector 提供瀏覽器能力。
-
-Architecture Overview
----------------------
+## 2. Architecture Overview
 
     +-------------------+        +-------------------------+
     | kimi-agent-tracker|  -->   | chrome-playwright-      |
-    | (Kimi 專用邏輯)    |        | connector               |
-    +-------------------+        | (通用瀏覽器能力)         |
+    | (Kimi logic)      |        | connector               |
+    +-------------------+        | (Generic browser)       |
                                  +-------------------------+
                                           |
                                           v
@@ -60,108 +57,133 @@ Architecture Overview
                                  | ├── .duplicate/         |
                                  | ├── .config/            |
                                  | │   └── downloads.json  |
-                                 | └── .logs/              |
+                                 | ├── .logs/              |
+                                 | │   └── diagnose/       |
+                                 | └── scripts/            |
                                  +-------------------------+
 
-File Inventory
---------------
+## 3. File Inventory
 
-| File | Purpose |
-|------|---------|
-| kimi_login_manager.py | SMS 登入與 persistent profile 維護 |
-| kimi_conversation_lister.py | 對話列表提取 |
-| kimi_downloader.py | 自動下載核心 |
-| state_manager.py | SHA256 去重與狀態追蹤 |
-| tracker_daemon.py | 獨立守護程序 |
+| File | Version | Purpose |
+|------|---------|---------|
+| kimi_login_manager.py | v1.0.2 | SMS login and persistent profile maintenance |
+| kimi_conversation_lister.py | v1.0.2 | Conversation list extraction from sidebar |
+| kimi_downloader.py | v1.0.2 | Auto-download core |
+| state_manager.py | v1.0.2 | SHA256 deduplication and state tracking |
+| tracker_daemon.py | v1.0.2 | Standalone daemon |
 
-Installation
-------------
+## 4. Installation
 
-    # 1. 安裝依賴（connector 已安裝則跳過）
-    pip3 install playwright
-    python3 -m playwright install chromium
+    # 1. Install dependencies (skip if connector already installed)
+    /Users/kevinlinz/.workbuddy/binaries/python/versions/3.13.12/bin/python3 -m pip install playwright --user
+    /Users/kevinlinz/.workbuddy/binaries/python/versions/3.13.12/bin/python3 -m playwright install chromium
 
-    # 2. 確保 connector 已部署於同級目錄
+    # 2. Ensure connector is deployed in sibling directory
     ls ../chrome-playwright-connector/scripts/browser_connector.py
 
-Usage Guide
------------
+## 5. Usage Guide
 
-### Step 1: 登入（一次性）
+### Step 1: Login (one-time)
 
-    python scripts/kimi_login_manager.py --visible --stay-open 30
+    python scripts/kimi_login_manager.py --visible --stay-open 300
 
-### Step 2: 提取對話列表
+### Step 2: Validate Login
+
+    python scripts/kimi_login_manager.py --validate
+
+### Step 3: Extract Conversation List
 
     python scripts/kimi_conversation_lister.py --count 4 --visible
 
-### Step 3: 批量下載（單次）
+### Step 4: Batch Download (single)
 
     python scripts/kimi_downloader.py --from-list .config/conversations.json --visible
 
-### Step 4: 啟動守護程序（自動定時）
+### Step 5: Start Daemon (auto-timed)
 
     python scripts/tracker_daemon.py --start
 
-    # 查看狀態
+    # Check status
     python scripts/tracker_daemon.py --status
 
-    # 停止守護程序
+    # Stop daemon
     python scripts/tracker_daemon.py --stop
 
-    # 單次測試（前台）
+    # Single test (foreground)
     python scripts/tracker_daemon.py --run-once
 
-Download Mechanisms
--------------------
+## 6. Download Mechanisms
 
 | File Type | Kimi Behavior | Agent Strategy |
-|-----------|--------------|----------------|
-| .zip, .py, .csv | 直接瀏覽器下載 | expect_download() 捕獲 |
-| .md, .txt | 預覽面板 → 下載圖標 → 格式選擇 | 直接點擊優先 + 重試 + 預覽面板備用 |
+|-----------|---------------|----------------|
+| .zip, .py, .csv | Direct browser download | expect_download() capture |
+| .md, .txt | Preview panel -> download icon -> format select | Direct click first + retry + preview panel fallback |
 
-Deduplication & File Handling
------------------------------
+## 7. Deduplication & File Handling
 
-- SHA256 去重，狀態保存於 .config/downloads.json
-- 重複檔案移入 .duplicate/，永不刪除
-- 唯一文件名機制（_1, _2, _3...）
+- SHA256 deduplication, state saved in .config/downloads.json
+- Duplicate files moved to .duplicate/, NEVER deleted
+- Unique filename mechanism (_1, _2, _3...)
 
-Sandbox Version Behavior
-------------------------
+## 8. Diagnostic Mode
 
-Kimi 不保留歷史版本。同一 sandbox 路徑在不同對話中始終指向最新版本。
-「舊檔案覆蓋新檔案」風險在 Kimi → 下載方向不存在。
+When extraction or download fails, diagnostic results print DIRECTLY to terminal.
+Success/failure visible at a glance.
 
-Daemon Mode
------------
+    Example output:
+    [DIAGNOSE] Conversation: "POS Terminal Fix"
+    [OK]     Sidebar detected: 12 nodes
+    [OK]     Download: skill.py (SHA256: a1b2c3...)
+    [FAIL]   Download: report.md (timeout)
+    [INFO]   HTML dump: .logs/diagnose/sidebar_20260524_105600.html
 
-獨立守護程序，無需外部 cron/launchd。
+Diagnostic HTML dumps saved to .logs/diagnose/ (skill-level folder).
 
-| 參數 | 說明 |
-|------|------|
-| --start | 後台啟動 |
-| --stop | 停止 |
-| --status | 查看狀態 |
-| --run-once | 前台單次執行 |
-| --interval N | 循環間隔（默認 900 秒） |
-| --count N | 每次提取對話數（默認 10） |
+## 9. Sandbox Version Behavior
 
-Troubleshooting
----------------
+Kimi does NOT retain historical versions. Same sandbox path in different conversations always points to the latest version.
+
+    00:00 Conversation A -> skill.py (v1)
+    00:25 Conversation B -> skill.py (v2) -> overwrites same path
+    00:35 Conversation C -> skill.py (v3) -> overwrites again
+
+"Old overwrites new" risk does NOT exist in Kimi -> download direction.
+
+## 10. Daemon Mode
+
+Standalone daemon, no external cron/launchd needed.
+
+| Parameter | Description |
+|-----------|-------------|
+| --start | Background start |
+| --stop | Stop |
+| --status | Terminal status output |
+| --run-once | Foreground single execution |
+| --interval N | Cycle interval (default 900s) |
+| --count N | Conversations per extraction (default 10) |
+
+Status output example:
+    [DAEMON] Status: RUNNING
+    [DAEMON] PID: 12345
+    [DAEMON] Last cycle: 2026-05-24 10:30:00
+    [DAEMON] Downloaded: 27 | Duplicates: 8
+
+## 11. Troubleshooting
 
 | Symptom | Cause | Solution |
 |---------|-------|----------|
-| Login failed | Session expired | Re-run kimi_login_manager.py |
-| No conversations | Sidebar DOM changed | Use --diagnose |
+| Login failed / validate returns True but not logged in | validate_login() false-positive (sidebar skeleton) | v1.0.2 fixed: uses avatar selector. If still fails, use --force-login |
+| Browser closes before SMS input | stay_open too short or blind sleep | v1.0.2 fixed: loop detection. Use --stay-open 300 |
+| No conversations | Sidebar DOM changed | Use --diagnose, check .logs/diagnose/ |
 | Download timeout | expect_download missed | Check .logs/ for retry record |
 | Daemon already running | PID file exists | Check --status or --stop |
+| ModuleNotFoundError: playwright | Managed Python missing package | Run: python3 -m pip install playwright --user |
 
-Directory Structure
--------------------
+## 12. Directory Structure
 
     {baseDir}/
     ├── .logs/
+    │   └── diagnose/
     ├── .config/
     │   ├── downloads.json
     │   └── conversations.json
@@ -169,7 +191,14 @@ Directory Structure
     ├── .duplicate/
     └── scripts/
 
-Author
-------
+## 13. Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.2 | 2026-05-25 | Hotfix: F-001 validate_login() false-positive fixed (avatar selector). login() loop detection replaces blind sleep. Diagnose files saved to skill-level .logs/diagnose/. Added playwright dependency check. |
+| 1.0.1 | 2026-05-24 | Fix Issue #24: Synchronize all script versions, add version column to file inventory table |
+| 1.0.0 | 2026-05-21 | Initial version |
+
+## Author
 
 Kevin Lin (nervlin4444)
