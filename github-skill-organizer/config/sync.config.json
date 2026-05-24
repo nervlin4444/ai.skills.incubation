@@ -2,10 +2,11 @@
   "_meta": {
     "title": "Sync Configuration for GitHub Skill Organizer",
     "name": "github-skill-organizer",
-    "description": "Daemon sync rules, version bump policies, upload gate checks, and workstation defaults. This file is part of the github-skill-organizer skill package.",
-    "version": "1.0.2",
+    "description": "Unified configuration: sync rules, version bump policies, upload gate checks, workstation defaults, exclusion rules, error codes, and script profiles. v1.0.3 added repo_issue_finder + issue_extractor profiles.",
+    "version": "1.2.0",
     "github_repository": "nervlin4444/ai.skills.incubation",
     "target_branch": "main",
+    "updated_at": "2026-05-24T20:14:00+08:00",
     "auth_config": {
       "provider": "github",
       "auth_method": "personal_access_token",
@@ -17,7 +18,7 @@
       "github_path": "github-skill-organizer/config/sync.config.json"
     }
   },
-  "version": "1.0.1",
+  "version": "1.2.0",
   "skill_name": "github-skill-organizer",
   "workstation_defaults": {
     "linux": {
@@ -75,5 +76,172 @@
       "/Users/"
     ]
   },
-  "commit_message_template": "[{bump_type}] {skill_name} v{new_version} by {agent_name}({model}) - {summary}"
+  "commit_message_template": "[{bump_type}] {skill_name} v{new_version} by {agent_name}({model}) - {summary}",
+  "global_excludes": {
+    "description": "All scripts share these base exclusion rules. NOTE: Removed '.' prefix to prevent false positives on .workbuddy/.config directories.",
+    "directories": [
+      ".backups",
+      ".backup",
+      ".git",
+      ".github",
+      "logs",
+      "pending_approval",
+      "__pycache__",
+      "node_modules",
+      "Thumbs.db",
+      ".vscode",
+      ".idea",
+      "improve"
+    ],
+    "files": [
+      "LICENSE",
+      "LICENSE.md",
+      "LICENSE.txt",
+      ".releaserc.json",
+      ".semantic-release-test",
+      ".env.backup.20260523_212318",
+      ".DS_Store",
+      ".env",
+      ".env.local"
+    ],
+    "suffixes": [
+      ".pyc",
+      ".pyo",
+      ".so",
+      ".zip.moved",
+      ".bak"
+    ],
+    "prefixes": [
+      "temp_",
+      "tmp_"
+    ]
+  },
+  "script_profiles": {
+    "skill_uploader": {
+      "description": "Upload profile: requires parent-directory recursion + base_path boundary to prevent .workbuddy false exclusion",
+      "inherit_global": true,
+      "check_parents": true,
+      "base_path_boundary": true,
+      "extra_directories": [
+        ".invalid_files"
+      ],
+      "extra_files": [],
+      "skip_frontmatter_validation": [
+        "CHANGELOG.md",
+        "CHANGELOG",
+        ".env.example",
+        "sync.config.json"
+      ]
+    },
+    "skill_syncer": {
+      "description": "Sync profile: download/compare exclusion rules",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    },
+    "file_scouter": {
+      "description": "Scan profile: checks file itself only, no parent recursion",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [
+        ".unclassified",
+        ".identical",
+        ".invalid_files"
+      ],
+      "extra_files": []
+    },
+    "repo_skill_finder": {
+      "description": "Repo discovery profile",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    },
+    "repo_skill_validator": {
+      "description": "Repo validation profile",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    },
+    "repo_skill_migrator": {
+      "description": "Repo migration profile: scans skill directory files",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    },
+    "version_manager": {
+      "description": "Version management profile: scans skill directory files",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    },
+    "repo_issue_finder": {
+      "description": "Issue download profile: pure data fetcher, no local file operations",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    },
+    "issue_extractor": {
+      "description": "Issue analysis profile: scans local skills, no GitHub API calls",
+      "inherit_global": true,
+      "check_parents": false,
+      "base_path_boundary": false,
+      "extra_directories": [],
+      "extra_files": []
+    }
+  },
+  "error_codes": {
+    "PARAM_MISSING_SKILL_NAME": {
+      "reason": "skill_name is empty",
+      "hint": "Provide skill directory name, e.g. skill_name='github-skill-organizer'",
+      "fix_action": "Check local_dir path and confirm directory name"
+    },
+    "PARAM_INVALID_FILES": {
+      "reason": "File path does not exist or cannot be resolved",
+      "hint": "Provide absolute path or path relative to USER_SKILLS_FOLDER",
+      "fix_action": "Check path correctness, both Path() and str are accepted"
+    },
+    "CLASSIFICATION_INCOMPLETE": {
+      "reason": "classification missing required fields (bump_type / approval_required)",
+      "hint": "Pass compare_skill() return value directly, system auto-calls change_classifier",
+      "fix_action": "No need to manually call classify_change(), auto-complete is built-in"
+    },
+    "EXCLUDE_ALL_FILES": {
+      "reason": "All files blocked by exclusion rules",
+      "hint": "Check global_excludes for false positives (e.g. .workbuddy)",
+      "fix_action": "Verify global_excludes.prefixes does not contain '.', or adjust script_profiles boundary"
+    },
+    "CLI_NOT_FOUND": {
+      "reason": "github_repo_sync.py not found",
+      "hint": "Confirm github-restful-api-connector skill installed at DEPENDENCY_SKILL_PATH",
+      "fix_action": "Install dependency skill and verify DEPENDENCY_SKILL_PATH in .env"
+    },
+    "GITHUB_AUTH_FAIL": {
+      "reason": "GitHub Token invalid or expired",
+      "hint": "Check GITHUB_TOKEN in dependency skill .env",
+      "fix_action": "Update GITHUB_TOKEN and retest"
+    },
+    "CLEAN_DIR_EMPTY": {
+      "reason": "Clean temp directory is empty after exclusion",
+      "hint": "All files excluded by _is_excluded_path, check base_path_boundary setting",
+      "fix_action": "Confirm skill_uploader script_profiles.base_path_boundary = true"
+    },
+    "FRONTMATTER_MISSING": {
+      "reason": "File missing frontmatter (identity card)",
+      "hint": "Use skill_files_designer to regenerate files with frontmatter",
+      "fix_action": "Add unified frontmatter to file, or move it out of skill directory"
+    }
+  }
 }
