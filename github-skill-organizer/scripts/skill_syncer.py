@@ -2,11 +2,11 @@
 ---
 title: Skill Syncer
 name: github-skill-organizer
-description: Handles compare and download operations between local skills and GitHub. v1.0.0 refactored from sync_engine.py.
-version: "1.2.0"
+description: Handles compare and download operations between local skills and GitHub. v1.2.1 adds download authorization: when local file mtime is newer than GitHub last commit date, requires user approval before overwrite.
+version: "1.2.1"
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: "2026-05-24T09:22:14+08:00"
+updated_at: "2026-05-26T01:15:00+08:00"
 fixes: []
 auth_config:
   provider: github
@@ -24,6 +24,7 @@ import json
 import hashlib
 import base64
 from pathlib import Path
+from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -31,19 +32,20 @@ try:
     from skill_organizer_config import load_config
     from core_frontmatter import FrontmatterExtractor
     from core_path_utils import normalize_path
-    from core_logger import log
+    from core_logger import log, log_error
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.absolute()))
     from skill_organizer_config import load_config
     from core_frontmatter import FrontmatterExtractor
     from core_path_utils import normalize_path
-    from core_logger import log
+    from core_logger import log, log_error
 
 
 class SkillSyncer:
     """
     Skill comparison and download handler.
     Separated from upload logic for clarity.
+    v1.2.1: Added download authorization based on file date comparison.
     """
 
     def __init__(self):
@@ -142,12 +144,29 @@ class SkillSyncer:
             "comparisons": comparisons,
         }
 
-    def download_from_github(self, owner, repo, target_dir, files_to_download=None):
-        """Download files from GitHub repository to local directory."""
+    def download_from_github(self, owner, repo, target_dir, files_to_download=None, force=False):
+        """
+        Download files from GitHub repository to local directory.
+
+        v1.2.1 CHANGE: Added authorization check. If local file mtime is newer
+        than GitHub last commit date, requires user approval (force=True) to overwrite.
+
+        Args:
+            owner: GitHub repository owner
+            repo: GitHub repository name
+            target_dir: Local directory to download to
+            files_to_download: Optional list of specific files to download
+            force: If True, skip authorization check and overwrite local files
+
+        Returns:
+            dict with status, downloaded list, failed list, or pending_approval info
+        """
         target_path = normalize_path(target_dir)
         target_path.mkdir(parents=True, exist_ok=True)
         downloaded = []
         failed = []
+        needs_approval = []
+        skipped = []
 
         contents = self._github_api_call(f"/repos/{owner}/{repo}/contents?ref=main")
         if isinstance(contents, dict) and contents.get("error"):
@@ -161,23 +180,75 @@ class SkillSyncer:
             file_path = item["path"]
             if files_to_download and file_path not in files_to_download:
                 continue
+
             download_url = item.get("download_url")
             if not download_url:
                 failed.append({"file": file_path, "reason": "No download_url"})
                 continue
+
+            local_file = target_path / file_path
+
+            # v1.2.1: Authorization check - compare local mtime with GitHub commit date
+            if local_file.exists() and not force:
+                local_mtime = local_file.stat().st_mtime
+                github_date = self._get_github_file_date(owner, repo, file_path)
+
+                if github_date:
+                    local_dt = datetime.fromtimestamp(local_mtime, tz=timezone.utc)
+                    if local_dt > github_date:
+                        needs_approval.append({
+                            "file": file_path,
+                            "local_mtime": local_dt.isoformat(),
+                            "github_date": github_date.isoformat(),
+                            "reason": "Local file is newer than GitHub version. User approval required to overwrite."
+                        })
+                        skipped.append(file_path)
+                        continue  # Skip download, wait for user approval
+
+            # Proceed with download
             try:
                 req = Request(download_url)
                 req.add_header("Authorization", f"Bearer {self.token}")
                 with urlopen(req, timeout=30) as resp:
                     content = resp.read()
-                local_file = target_path / file_path
                 local_file.parent.mkdir(parents=True, exist_ok=True)
                 local_file.write_bytes(content)
                 downloaded.append(file_path)
             except Exception as e:
                 failed.append({"file": file_path, "reason": str(e)})
 
+        # If any files need approval, return pending_approval status
+        if needs_approval and not force:
+            return {
+                "status": "pending_approval",
+                "reason": f"{len(needs_approval)} local file(s) are newer than GitHub versions",
+                "needs_approval": needs_approval,
+                "downloaded": downloaded,
+                "skipped": skipped,
+                "failed": failed,
+                "hint": "Review the files above. If you want to overwrite local files with GitHub versions, call download_from_github(..., force=True)",
+                "fix_action": "Call download_from_github(..., force=True) after user confirms overwrite",
+            }
+
         return {"downloaded": downloaded, "failed": failed}
+
+    def _get_github_file_date(self, owner, repo, file_path):
+        """
+        Get the last commit date for a specific file on GitHub.
+        Returns datetime in UTC, or None if unable to fetch.
+        """
+        try:
+            commits_data = self._github_api_call(
+                f"/repos/{owner}/{repo}/commits?path={file_path}&per_page=1"
+            )
+            if isinstance(commits_data, list) and len(commits_data) > 0:
+                commit_date_str = commits_data[0].get("commit", {}).get("committer", {}).get("date")
+                if commit_date_str:
+                    # Parse ISO 8601 format: 2026-05-24T20:14:00Z
+                    return datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
+        except Exception as e:
+            log("SYNCER", f"Failed to get GitHub date for {file_path}: {e}", "WARN")
+        return None
 
     def sync_changelog(self, skill_name, local_dir=None):
         """Sync CHANGELOG.md frontmatter between local and GitHub."""
@@ -243,9 +314,10 @@ class SkillSyncer:
             if comparison["status"] == "ok" and comparison["action"] in ("github_ahead", "diverged"):
                 result = self.download_from_github(owner, comparison["repo"], skill_dir)
                 results[skill_name] = {
-                    "status": "downloaded",
+                    "status": result.get("status", "downloaded"),
                     "downloaded": result.get("downloaded", []),
                     "failed": result.get("failed", []),
+                    "needs_approval": result.get("needs_approval", []),
                 }
             elif comparison["status"] == "ok":
                 results[skill_name] = {"status": comparison["action"]}
