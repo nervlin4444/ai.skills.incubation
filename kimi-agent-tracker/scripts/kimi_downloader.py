@@ -2,11 +2,11 @@
 ---
 title: Kimi Conversation File Downloader
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations. v1.1.3 adds MD preview screenshot diagnostics and enhanced format dialog handling.
-version: "1.1.3"
+description: F-003 Auto-download files from Kimi chat conversations. v1.1.4 fixes viewport scroll, hover+click sequence, and extended wait for sandbox:// links.
+version: "1.1.4"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T12:54:00+00:00"
+updated_at: "2026-05-25T13:15:00+00:00"
 auth_config:
   provider: kimi
   auth_method: persistent_profile
@@ -99,7 +99,7 @@ class KimiDownloader:
         self.download_dir = expand_path(config.get("daemon", {}).get("download_dir", "~/Downloads"))
         self.duplicate_dir = expand_path(config.get("daemon", {}).get("duplicate_dir", "~/skills_moved/.duplicate_downloads"))
         self.browser_default_dir = Path.home() / "Downloads"
-        self.diag_dir = get_base_dir() / ".logs" / "diagnose" / "md_download"
+        self.diag_dir = get_base_dir() / ".logs" / "diagnose" / "download"
         ensure_dir(self.download_dir)
         ensure_dir(self.duplicate_dir)
         ensure_dir(self.diag_dir)
@@ -114,10 +114,8 @@ class KimiDownloader:
     def _capture(self, page, step_name):
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         png_path = self.diag_dir / f"{step_name}_{ts}.png"
-        html_path = self.diag_dir / f"{step_name}_{ts}.html"
         try:
             page.screenshot(path=str(png_path), full_page=True)
-            html_path.write_text(page.content(), encoding="utf-8")
             log_event(f"[DIAG] Screenshot: {png_path.name}")
         except Exception as e:
             log_event(f"[DIAG] Screenshot failed: {e}")
@@ -143,7 +141,7 @@ class KimiDownloader:
         except Exception:
             pass
 
-    def _safe_evaluate_click(self, page, href):
+    def _safe_js_click(self, page, href):
         safe = href.replace("\\\\", "\\\\\\\\").replace('"', '\\"').replace("\n", "")
         js_parts = [
             "(function() {",
@@ -200,7 +198,7 @@ class KimiDownloader:
             log_event(f"[SAVED] {dest_path}")
             return {"status": "success", "file": filename, "hash": file_hash, "path": str(dest_path)}
 
-    def _wait_for_browser_download(self, filename_hint, max_wait_sec=10):
+    def _wait_for_browser_download(self, filename_hint, max_wait_sec=15):
         if not self.browser_default_dir.exists():
             return None
         start_time = time.time()
@@ -231,17 +229,42 @@ class KimiDownloader:
             filename = f"{safe_title}_{filename}"
         dest_path = Path(self.download_dir) / filename
 
+        # Setup download listener
         downloads_collected = []
         def on_download(download):
             downloads_collected.append(download)
         page.on("download", on_download)
 
+        # Also listen for popup/new page (some sandbox:// links open new tab)
+        popups_collected = []
+        def on_popup(popup):
+            popups_collected.append(popup)
+        page.on("popup", on_popup)
+
+        result = None
         try:
             self._dismiss_overlay(page)
-            result = self._safe_evaluate_click(page, href)
-            log_event(f"[CLICK] {filename} -> {result}")
-            page.wait_for_timeout(5000)
 
+            # STRATEGY 1: Playwright locator with scroll + hover + click (most realistic)
+            try:
+                safe_href = href.replace('"', '\\"')
+                locator = page.locator(f'a[href="{safe_href}"]').first
+                locator.scroll_into_view_if_needed()
+                page.wait_for_timeout(500)
+                locator.hover()
+                page.wait_for_timeout(300)
+                locator.click()
+                log_event(f"[CLICK-v1] locator.click() for {filename}")
+            except Exception as e1:
+                log_event(f"[CLICK-v1-FAILED] {filename}: {e1}")
+                # STRATEGY 2: JS evaluate click fallback
+                result = self._safe_js_click(page, href)
+                log_event(f"[CLICK-v2] JS click for {filename} -> {result}")
+
+            # Extended wait for download to trigger (Kimi sandbox:// can be slow)
+            page.wait_for_timeout(10000)
+
+            # Check Playwright download event
             if downloads_collected:
                 download = downloads_collected[-1]
                 tmp_path = Path(download.path())
@@ -250,19 +273,69 @@ class KimiDownloader:
                     file_hash = compute_sha256(dest_path)
                     return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=5)
+            # Check popup/new page (some links open file in new tab)
+            if popups_collected:
+                popup = popups_collected[-1]
+                log_event(f"[POPUP] New page opened for {filename}: {popup.url}")
+                # If popup has a download link, try to trigger it
+                try:
+                    popup_links = popup.query_selector_all('a[href*="download"], button:has-text("download")')
+                    if popup_links:
+                        popup_links[0].click()
+                        popup.wait_for_timeout(5000)
+                except Exception:
+                    pass
+                popup.close()
+
+            # Check browser default download directory
+            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=15)
             if browser_file and browser_file.exists():
                 shutil.copy2(str(browser_file), str(dest_path))
                 file_hash = compute_sha256(dest_path)
                 return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            log_event(f"[SKIP] No download captured for {filename}")
+            # STRATEGY 3: Retry once after dismissing any overlay/dialog
+            log_event(f"[RETRY] First attempt failed for {filename}, retrying...")
+            self._dismiss_overlay(page)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
+            try:
+                locator = page.locator(f'a[href="{safe_href}"]').first
+                locator.scroll_into_view_if_needed()
+                page.wait_for_timeout(500)
+                locator.click(force=True)
+                log_event(f"[CLICK-v3] force click retry for {filename}")
+            except Exception as e3:
+                self._safe_js_click(page, href)
+                log_event(f"[CLICK-v3] JS click retry for {filename}")
+            page.wait_for_timeout(10000)
+
+            # Re-check after retry
+            if downloads_collected:
+                download = downloads_collected[-1]
+                tmp_path = Path(download.path())
+                if tmp_path.exists():
+                    shutil.move(str(tmp_path), str(dest_path))
+                    file_hash = compute_sha256(dest_path)
+                    return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=15)
+            if browser_file and browser_file.exists():
+                shutil.copy2(str(browser_file), str(dest_path))
+                file_hash = compute_sha256(dest_path)
+                return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+            # All strategies exhausted
+            log_event(f"[SKIP] No download captured for {filename} after all strategies")
+            self._capture(page, f"skip_{filename[:30]}")
             return {"status": "skipped", "file": filename, "reason": "No download captured after click"}
         except Exception as e:
             log_event(f"[ERROR] Direct download failed for {filename}: {e}")
+            self._capture(page, f"error_{filename[:30]}")
             return {"status": "error", "file": filename, "error": str(e)}
         finally:
             page.remove_listener("download", on_download)
+            page.remove_listener("popup", on_popup)
 
     def _download_md_preview(self, page, link, conversation_title):
         href = link["href"]
@@ -273,7 +346,7 @@ class KimiDownloader:
 
         try:
             self._dismiss_overlay(page)
-            self._safe_evaluate_click(page, href)
+            self._safe_js_click(page, href)
             log_event(f"[MD-STEP1] Opened preview for {filename}")
             page.wait_for_timeout(3000)
             self._capture(page, f"md_step1_{filename_base}")
@@ -307,7 +380,6 @@ class KimiDownloader:
             page.wait_for_timeout(2000)
             self._capture(page, f"md_step2_{filename_base}")
 
-            # Try multiple strategies to select Markdown format
             md_selectors = [
                 "text=Markdown", "text=Save as Markdown",
                 '[class*="markdown"]', "button:has-text(\"Markdown\")",
@@ -326,7 +398,6 @@ class KimiDownloader:
                 except Exception:
                     continue
             else:
-                # Fallback: try pressing Down arrow + Enter to navigate dialog
                 try:
                     page.keyboard.press("ArrowDown")
                     page.wait_for_timeout(300)
@@ -362,7 +433,7 @@ class KimiDownloader:
                 page.wait_for_load_state("networkidle", timeout=self.timeout * 1000)
                 page.wait_for_timeout(3000)
 
-                # Try to extract title from page if unknown
+                # Extract title from page if unknown
                 if title == "unknown":
                     try:
                         title_el = page.query_selector(".chat-name, .conversation-title, h1, title")
@@ -375,7 +446,6 @@ class KimiDownloader:
                 log_event(f"[DOWNLOAD] Found {len(links)} file links in '{title}'")
                 for link in links:
                     href = link["href"]
-                    # KEY FIX: sandbox:// links are direct downloads regardless of extension
                     is_sandbox = href.startswith("sandbox://")
                     is_md = ".md" in href.lower() or href.endswith(".md")
                     is_direct = is_sandbox or not is_md or "github.com" in href or "raw.githubusercontent" in href
@@ -425,7 +495,7 @@ class KimiDownloader:
         return all_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.3")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.4")
     parser.add_argument("--url", help="Single conversation URL to download from")
     parser.add_argument("--from-list", help="Path to conversations.json for batch download")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
