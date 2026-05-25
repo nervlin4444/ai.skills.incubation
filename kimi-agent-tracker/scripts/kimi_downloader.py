@@ -1,31 +1,33 @@
-#!/usr/bin/env python3
 """
 ---
-title: "Kimi Downloader"
+title: "Kimi Downloader - F003"
 name: "kimi-agent-tracker"
-description: "Kimi Downloader，Kimi 平台專用自動化追蹤器組件。v1.0.2 hotfix: 同步版本與 auth_config。"
-version: "1.0.2"
+description: "Auto-download sandbox files. Fixed asyncio loop conflict with nest_asyncio."
+version: "1.1.1"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T00:10:00+08:00"
-fixes: [24]
+updated_at: "2026-05-25T11:25:00+08:00"
 auth_config:
   provider: "local"
   auth_method: "none"
   token_env_var: "N/A"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: "N/A"
 file_mapping:
-  local_path: "scripts/kimi_downloader.py"
+  local_path: "{baseDir}/scripts/kimi_downloader.py"
   github_path: "kimi-agent-tracker/scripts/kimi_downloader.py"
 ---
 """
 
-# -*- coding: utf-8 -*-
+# FIX: Apply nest_asyncio before any playwright import
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+    _NEST_OK = True
+except ImportError:
+    _NEST_OK = False
+    print("[WARN] nest_asyncio not installed. Run: python3 -m pip install nest-asyncio --user")
 
-import os
-import sys
-import json
-import time
+import sys, json, time, hashlib, argparse
 from pathlib import Path
 
 connector_path = Path(__file__).parent.parent.parent / "chrome-playwright-connector" / "scripts"
@@ -34,197 +36,134 @@ if str(connector_path) not in sys.path:
 
 from browser_connector import BrowserConnector
 
-
-def _default_download_dir() -> str:
-    base = Path(__file__).parent.parent
-    d = base / "downloads"
-    d.mkdir(parents=True, exist_ok=True)
-    return str(d)
-
-
-def download_from_url(url: str, profile_name: str = "kimi_com",
-                      visible: bool = False, diagnose: bool = False,
-                      screenshot_only: bool = False) -> dict:
-    """訪問單個對話 URL，掃描所有可下載文件並執行下載。"""
-    driver = BrowserConnector(profile_name=profile_name, visible=visible)
-    driver.launch()
-    page = driver.navigate(url)
-    time.sleep(3)
-
-    results = {"success": [], "duplicates": [], "errors": []}
-    try:
-        # v1.0.2: 擴展 selector 覆蓋更多文件連結模式
-        selectors = [
-            "a[href*='sandbox']",
-            "a[href*='download']",
-            "a[download]",
-            "[class*='file-link']",
-            "[class*='attachment']",
-        ]
-        links = []
-        for sel in selectors:
-            links.extend(page.query_selector_all(sel))
-
-        # 去重
-        seen = set()
-        unique_links = []
-        for link in links:
-            try:
-                href = link.get_attribute("href") or ""
-                if href and href not in seen:
-                    seen.add(href)
-                    unique_links.append(link)
-            except Exception:
-                unique_links.append(link)
-
-        for link in unique_links:
-            try:
-                href = link.get_attribute("href") or ""
-                text = link.inner_text().strip() if hasattr(link, "inner_text") else "unnamed"
-                if not href:
-                    continue
-
-                if screenshot_only:
-                    results["success"].append({"url": href, "name": text, "status": "screenshot_only"})
-                    continue
-
-                # 判斷文件類型並處理
-                if any(href.endswith(ext) for ext in [".zip", ".py", ".csv"]):
-                    result = _handle_direct_download(driver, link)
-                elif any(href.endswith(ext) for ext in [".md", ".txt"]):
-                    result = _handle_preview_panel_download(driver, link)
-                else:
-                    result = _handle_direct_download(driver, link)
-
-                if result.get("status") == "success":
-                    results["success"].append(result)
-                elif result.get("status") == "duplicate":
-                    results["duplicates"].append(result)
-                else:
-                    results["errors"].append(result)
-            except Exception as e:
-                results["errors"].append({"error": str(e)})
-
-        if diagnose:
-            diag_dir = Path(__file__).parent.parent / ".logs" / "diagnose"
-            diag_dir.mkdir(parents=True, exist_ok=True)
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            driver.dump_html(str(diag_dir / f"download_{ts}.html"))
-            driver.screenshot(str(diag_dir / f"download_{ts}.png"))
-
-    except Exception as e:
-        if diagnose:
-            diag_dir = Path(__file__).parent.parent / ".logs" / "diagnose"
-            diag_dir.mkdir(parents=True, exist_ok=True)
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            driver.dump_html(str(diag_dir / f"error_{ts}.html"))
-            driver.screenshot(str(diag_dir / f"error_{ts}.png"))
-
-    driver.close()
-    return results
-
-
-def download_from_list(list_path: str, profile_name: str = "kimi_com",
-                       visible: bool = False) -> dict:
-    """讀取 JSON 對話列表，逐個處理。重用同一 browser context。"""
-    with open(list_path, "r", encoding="utf-8") as f:
-        conversations = json.load(f)
-
-    all_results = {"success": [], "duplicates": [], "errors": []}
-    driver = BrowserConnector(profile_name=profile_name, visible=visible)
-    driver.launch()
-
-    for conv in conversations:
+def _load_config():
+    config_path = Path(__file__).parent.parent / ".config" / "kimi_tracker_config.json"
+    defaults = {
+        "platform": {"base_url": "https://www.kimi.com"},
+        "login": {"profile_name": "kimi_com"},
+        "download": {"download_timeout_ms": 10000},
+        "daemon": {"download_dir": "{baseDir}/downloads", "duplicate_dir": "{baseDir}/.duplicate"},
+        "state": {"state_file": "{baseDir}/.config/downloads.json"},
+        "diagnose": {"diagnose_dir": "{baseDir}/.logs/diagnose"}
+    }
+    if config_path.exists():
         try:
-            result = download_from_url(conv["url"], profile_name=profile_name, visible=visible)
-            all_results["success"].extend(result["success"])
-            all_results["duplicates"].extend(result["duplicates"])
-            all_results["errors"].extend(result["errors"])
+            with open(config_path, "r", encoding="utf-8") as f2:
+                user_cfg = json.load(f2)
+            for section in defaults:
+                if section in user_cfg and isinstance(user_cfg[section], dict):
+                    defaults[section].update(user_cfg[section])
         except Exception as e:
-            all_results["errors"].append({"conversation": conv.get("title"), "error": str(e)})
+            print(f"[WARN] Config load failed: {e}")
+    return defaults
 
-    driver.close()
-    return all_results
+CONFIG = _load_config()
 
+def _resolve_path(path_tpl: str) -> Path:
+    base = Path(__file__).parent.parent
+    return Path(path_tpl.replace("{baseDir}", str(base)))
 
-def _handle_direct_download(driver, link_element) -> dict:
-    """處理直接下載類型（.zip/.py/.csv）。使用 expect_download() 捕獲。"""
+def _find_file_links(page) -> list:
+    links = []
+    for link in page.query_selector_all("a[href*='sandbox://']"):
+        try:
+            href = link.get_attribute("href") or ""
+            text = link.inner_text().strip() or "unnamed"
+            if "sandbox://" in href:
+                links.append({"href": href, "text": text, "element": link})
+        except Exception:
+            continue
+    return links
+
+def download_from_url(url: str, profile_name=None, visible=False, diagnose=False):
+    profile = profile_name or CONFIG["login"]["profile_name"]
+    driver = BrowserConnector(profile_name=profile, visible=visible)
+    result = {"success": [], "duplicates": [], "errors": []}
+    download_dir = _resolve_path(CONFIG["daemon"]["download_dir"])
+    download_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        with driver._page.expect_download(timeout=10000) as download_info:
-            link_element.click()
-        download = download_info.value
-        path = download.path()
-        return {
-            "status": "success",
-            "path": str(path),
-            "name": download.suggested_filename,
-            "conversation": "unknown"
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+        context = driver.launch()
+        page = driver.navigate(url)
+        page.wait_for_load_state("networkidle", timeout=15000)
+        print(f"[DOWNLOAD] Navigated to: {url}")
 
+        file_links = _find_file_links(page)
+        print(f"[DOWNLOAD] Found {len(file_links)} file links")
 
-def _handle_preview_panel_download(driver, link_element) -> dict:
-    """處理預覽面板類型（.md/.txt）。直接點擊優先 + 重試 + 預覽面板備用。"""
-    try:
-        # 嘗試 1：直接點擊（部分 .md 直接觸發下載）
-        for attempt in range(2):
+        if not file_links:
+            print("[DOWNLOAD] No files found")
+            return result
+
+        for link_info in file_links:
             try:
-                with driver._page.expect_download(timeout=5000) as download_info:
-                    link_element.click()
-                download = download_info.value
-                path = download.path()
-                return {
-                    "status": "success",
-                    "path": str(path),
-                    "name": download.suggested_filename,
-                    "conversation": "unknown"
-                }
-            except Exception:
-                if attempt == 0:
-                    time.sleep(2)
+                href = link_info["href"]
+                text = link_info["text"]
+                file_name = href.split("/")[-1] or "download"
+                if "." not in file_name:
+                    file_name = f"download_{int(time.time())}.bin"
 
-        # 嘗試 2：預覽面板流程
-        link_element.click()
-        time.sleep(1)
-        # 點擊預覽面板下載圖標
-        driver.click("svg[name='Download']", force=True)
-        time.sleep(0.5)
-        # 選擇 Markdown 格式
-        driver.click("text=Save as Markdown", force=True)
+                link_info["element"].click()
+                time.sleep(2)
+                print(f"[DOWNLOAD] Triggered: {text} -> {href}")
+                result["success"].append({"file": file_name, "href": href})
+            except Exception as e:
+                result["errors"].append({"file": link_info.get("text", ""), "error": str(e)})
+                print(f"[DOWNLOAD] Error: {e}")
 
-        with driver._page.expect_download(timeout=10000) as download_info:
-            pass
-        download = download_info.value
-        path = download.path()
-        return {
-            "status": "success",
-            "path": str(path),
-            "name": download.suggested_filename,
-            "conversation": "unknown"
-        }
+        if diagnose:
+            diag_dir = _resolve_path(CONFIG["diagnose"]["diagnose_dir"])
+            diag_dir.mkdir(parents=True, exist_ok=True)
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            with open(diag_dir / f"download_page_{ts}.html", "w", encoding="utf-8") as f2:
+                f2.write(page.content())
+            page.screenshot(path=str(diag_dir / f"download_page_{ts}.png"))
+
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        print(f"[DOWNLOAD] Fatal error: {e}")
+        result["errors"].append({"fatal": str(e)})
+    finally:
+        try:
+            driver.close()
+        except Exception:
+            pass
 
+    print(f"[DOWNLOAD] Result: {len(result['success'])} success, {len(result['errors'])} errors")
+    return result
 
-if __name__ == "__main__":
-    import argparse
+def download_from_list(list_path=None, profile_name=None, visible=False):
+    list_file = list_path or str(_resolve_path(CONFIG["state"]["conversations_file"]))
+    if not Path(list_file).exists():
+        print(f"[DOWNLOAD] List not found: {list_file}")
+        return {"success": [], "duplicates": [], "errors": []}
+
+    with open(list_file, "r", encoding="utf-8") as f2:
+        conversations = json.load(f2)
+
+    total = {"success": [], "duplicates": [], "errors": []}
+    for conv in conversations:
+        print(f"[DOWNLOAD] Processing: {conv.get('title', 'Unknown')}")
+        result = download_from_url(conv["url"], profile_name, visible)
+        for key in total:
+            total[key].extend(result.get(key, []))
+    print(f"[DOWNLOAD] Batch: {len(total['success'])} success, {len(total['errors'])} errors")
+    return total
+
+def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", type=str)
-    parser.add_argument("--from-list", type=str)
+    parser.add_argument("--url")
+    parser.add_argument("--from-list")
+    parser.add_argument("--profile", default=None)
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--diagnose", action="store_true")
-    parser.add_argument("--screenshot-only", action="store_true")
     args = parser.parse_args()
 
     if args.url:
-        result = download_from_url(
-            args.url, visible=args.visible,
-            diagnose=args.diagnose, screenshot_only=args.screenshot_only
-        )
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        download_from_url(args.url, args.profile, args.visible, args.diagnose)
     elif args.from_list:
-        result = download_from_list(args.from_list, visible=args.visible)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        download_from_list(args.from_list, args.profile, args.visible)
     else:
-        parser.print_help()
+        download_from_list(profile_name=args.profile, visible=args.visible)
+
+if __name__ == "__main__":
+    main()
