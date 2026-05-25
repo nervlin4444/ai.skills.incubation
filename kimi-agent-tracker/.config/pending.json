@@ -7,10 +7,10 @@
       "filename": "README.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:23:05.291+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:23:26.821+00:00"
+      "last_attempt": "2026-05-25T12:02:38.040+00:00"
     },
     {
       "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
@@ -19,10 +19,10 @@
       "filename": "SKILL.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:23:05.291+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:23:46.889+00:00"
+      "last_attempt": "2026-05-25T12:02:41.055+00:00"
     },
     {
       "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
@@ -31,10 +31,10 @@
       "filename": "USAGE.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:23:05.291+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:24:06.990+00:00"
+      "last_attempt": "2026-05-25T12:02:44.070+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -43,10 +43,10 @@
       "filename": "jira-restful-api-connector-v0.1.1.zip",
       "file_ext": ".zip",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Visible fallback error: It looks like you are using Playwright Sync API inside the asyncio loop.\nPlease use the Async API instead.",
+      "retry_count": 6,
+      "last_error": "Visible mode required for binary files. Run with --visible flag.",
       "strategy": "visible_fallback",
-      "last_attempt": "2026-05-25T09:24:11.683+00:00"
+      "last_attempt": "2026-05-25T12:23:58.920+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -55,10 +55,10 @@
       "filename": "SKILL.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:24:31.772+00:00"
+      "last_attempt": "2026-05-25T12:24:32.089+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -67,10 +67,10 @@
       "filename": "README.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:24:51.871+00:00"
+      "last_attempt": "2026-05-25T12:25:05.254+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -79,10 +79,10 @@
       "filename": "jira_restful_core.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:25:22.919+00:00"
+      "last_attempt": "2026-05-25T12:25:38.417+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -91,10 +91,10 @@
       "filename": "jira_query_basic.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:25:53.947+00:00"
+      "last_attempt": "2026-05-25T12:26:11.579+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -103,10 +103,10 @@
       "filename": "jira_query_advanced.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:26:25.047+00:00"
+      "last_attempt": "2026-05-25T12:26:45.042+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -115,10 +115,10 @@
       "filename": "jira_field_parser.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:26:56.228+00:00"
+      "last_attempt": "2026-05-25T12:27:18.203+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -127,10 +127,10 @@
       "filename": "jira_datetime_utils.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 6,
+      "last_error": "Content did not stabilize after 15 attempts",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:27:27.307+00:00"
+      "last_attempt": "2026-05-25T12:27:51.374+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -139,10 +139,10 @@
       "filename": "USAGE.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:27:47.403+00:00"
+      "last_attempt": "2026-05-25T12:27:54.400+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -151,10 +151,10 @@
       "filename": "API.SCOPE.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:28:07.502+00:00"
+      "last_attempt": "2026-05-25T12:28:17.517+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -163,10 +163,10 @@
       "filename": "MAPPING.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:28:27.586+00:00"
+      "last_attempt": "2026-05-25T12:28:20.535+00:00"
     },
     {
       "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
@@ -175,10 +175,10 @@
       "filename": "jira-restful-api-connector-v0.1.2.zip",
       "file_ext": ".zip",
       "detected_at": "2026-05-25T09:24:11.682+00:00",
-      "retry_count": 1,
-      "last_error": "Visible fallback error: It looks like you are using Playwright Sync API inside the asyncio loop.\nPlease use the Async API instead.",
+      "retry_count": 6,
+      "last_error": "Visible mode required for binary files. Run with --visible flag.",
       "strategy": "visible_fallback",
-      "last_attempt": "2026-05-25T09:28:27.587+00:00"
+      "last_attempt": "2026-05-25T12:28:20.539+00:00"
     },
     {
       "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
@@ -187,10 +187,10 @@
       "filename": "SKILL.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:28:32.197+00:00",
-      "retry_count": 3,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 9,
+      "last_error": "Preview panel not found (no large element on right side)",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:31:17.869+00:00"
+      "last_attempt": "2026-05-25T12:14:44.105+00:00"
     },
     {
       "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
@@ -199,10 +199,10 @@
       "filename": "README.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:28:32.197+00:00",
-      "retry_count": 2,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:30:36.252+00:00"
+      "last_attempt": "2026-05-25T12:14:41.059+00:00"
     },
     {
       "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
@@ -211,10 +211,10 @@
       "filename": "daemon_registry.json",
       "file_ext": ".json",
       "detected_at": "2026-05-25T09:28:32.197+00:00",
-      "retry_count": 1,
+      "retry_count": 3,
       "last_error": "Browser download not detected after anchor injection",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:29:35.964+00:00"
+      "last_attempt": "2026-05-25T12:14:41.044+00:00"
     },
     {
       "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
@@ -223,10 +223,10 @@
       "filename": "platform_deployment_guide.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:28:32.197+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:29:56.082+00:00"
+      "last_attempt": "2026-05-25T12:14:41.054+00:00"
     },
     {
       "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
@@ -257,10 +257,10 @@
       "filename": "platform_trace_format.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:28:32.197+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:30:57.737+00:00"
+      "last_attempt": "2026-05-25T12:14:41.065+00:00"
     },
     {
       "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
@@ -280,10 +280,10 @@
       "filename": "SKILL.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 2,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:35:00.498+00:00"
+      "last_attempt": "2026-05-25T12:17:18.105+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -292,10 +292,10 @@
       "filename": "README.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 2,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 6,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:35:20.601+00:00"
+      "last_attempt": "2026-05-25T12:17:18.108+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -304,10 +304,10 @@
       "filename": "ASSIGNMENT_TEMPLATE.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:32:27.055+00:00"
+      "last_attempt": "2026-05-25T12:17:18.085+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -316,10 +316,10 @@
       "filename": "ROUTING_RULES.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:32:47.171+00:00"
+      "last_attempt": "2026-05-25T12:17:18.088+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -328,10 +328,10 @@
       "filename": "SUB_AGENT_PROTOCOLS.md",
       "file_ext": ".md",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 1,
-      "last_error": "Browser download not detected after anchor injection",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "anchor_injection",
-      "last_attempt": "2026-05-25T09:33:07.252+00:00"
+      "last_attempt": "2026-05-25T12:17:18.091+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -340,10 +340,10 @@
       "filename": "init_coordination.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:33:38.309+00:00"
+      "last_attempt": "2026-05-25T12:17:18.095+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -352,10 +352,10 @@
       "filename": "create_appointment.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:34:09.352+00:00"
+      "last_attempt": "2026-05-25T12:17:18.098+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -364,10 +364,10 @@
       "filename": "complete_appointment.py",
       "file_ext": ".py",
       "detected_at": "2026-05-25T09:31:26.795+00:00",
-      "retry_count": 1,
-      "last_error": "Preview panel not found after max attempts",
+      "retry_count": 3,
+      "last_error": "Failed to click link",
       "strategy": "preview_extraction",
-      "last_attempt": "2026-05-25T09:34:40.392+00:00"
+      "last_attempt": "2026-05-25T12:17:18.102+00:00"
     },
     {
       "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
@@ -390,9 +390,611 @@
       "retry_count": 0,
       "last_error": null,
       "strategy": "anchor_injection"
+    },
+    {
+      "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
+      "conversation_title": "增量下载恢复",
+      "file_url": "sandbox:///mnt/agents/output/tracker_daemon.py",
+      "filename": "tracker_daemon.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:24.708+00:00",
+      "retry_count": 1,
+      "last_error": "Extracted content contains garbage characters (box-drawing)",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:02:35.019+00:00"
+    },
+    {
+      "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
+      "conversation_title": "增量下载恢复",
+      "file_url": "sandbox:///mnt/agents/output/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:24.708+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
+      "conversation_title": "增量下载恢复",
+      "file_url": "sandbox:///mnt/agents/output/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:24.708+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
+      "conversation_title": "增量下载恢复",
+      "file_url": "sandbox:///mnt/agents/output/USAGE.md",
+      "filename": "USAGE.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:24.708+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1.zip",
+      "filename": "jira-restful-api-connector-v0.1.1.zip",
+      "file_ext": ".zip",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "visible_fallback"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_restful_core.py",
+      "filename": "jira_restful_core.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_query_basic.py",
+      "filename": "jira_query_basic.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_query_advanced.py",
+      "filename": "jira_query_advanced.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_field_parser.py",
+      "filename": "jira_field_parser.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_datetime_utils.py",
+      "filename": "jira_datetime_utils.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/USAGE.md",
+      "filename": "USAGE.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/config/config.json",
+      "filename": "config.json",
+      "file_ext": ".json",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 3,
+      "last_error": "Browser download not detected after anchor injection",
+      "strategy": "anchor_injection",
+      "last_attempt": "2026-05-25T12:28:14.494+00:00"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/references/API.SCOPE.md",
+      "filename": "API.SCOPE.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/references/MAPPING.md",
+      "filename": "MAPPING.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.2.zip",
+      "filename": "jira-restful-api-connector-v0.1.2.zip",
+      "file_ext": ".zip",
+      "detected_at": "2026-05-25T11:59:28.928+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "visible_fallback"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/scripts/daemon_registry.py",
+      "filename": "daemon_registry.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 1,
+      "last_error": "Failed to click link",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:14:20.956+00:00"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/scripts/systemd_manager.py",
+      "filename": "systemd_manager.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 1,
+      "last_error": "Failed to click link",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:14:20.957+00:00"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/scripts/launchd_manager.py",
+      "filename": "launchd_manager.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 1,
+      "last_error": "Failed to click link",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:14:20.959+00:00"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/scripts/task_scheduler_manager.py",
+      "filename": "task_scheduler_manager.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 1,
+      "last_error": "Failed to click link",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:14:20.961+00:00"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/config/daemon_registry.json",
+      "filename": "daemon_registry.json",
+      "file_ext": ".json",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "anchor_injection"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/daemon-script-connector/references/platform_deployment_guide.md",
+      "filename": "platform_deployment_guide.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/agent-conversation-mode/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/agent-conversation-mode/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/agent-conversation-mode/scripts/conversation_daemon.py",
+      "filename": "conversation_daemon.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 1,
+      "last_error": "Failed to click link",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:14:41.061+00:00"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/agent-conversation-mode/scripts/trace_extractor.py",
+      "filename": "trace_extractor.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 1,
+      "last_error": "Failed to click link",
+      "strategy": "preview_extraction",
+      "last_attempt": "2026-05-25T12:14:41.063+00:00"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "sandbox:///mnt/agents/output/agent-conversation-mode/references/platform_trace_format.md",
+      "filename": "platform_trace_format.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "conversation_title": "conversation程序改造",
+      "file_url": "https://github.com/nervlin4444/ai.skills.incubation/blob/main/agent-skill-improving/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:33.208+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/ASSIGNMENT_TEMPLATE.md",
+      "filename": "ASSIGNMENT_TEMPLATE.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/ROUTING_RULES.md",
+      "filename": "ROUTING_RULES.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/SUB_AGENT_PROTOCOLS.md",
+      "filename": "SUB_AGENT_PROTOCOLS.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/init_coordination.py",
+      "filename": "init_coordination.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/create_appointment.py",
+      "filename": "create_appointment.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "sandbox:///mnt/agents/output/complete_appointment.py",
+      "filename": "complete_appointment.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "https://raw.githubusercontent.com/nervlin4444/ai.skills.incubation/main/agent-coordination-mode/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e582-dc22-8972-8000-0955c7c3397d",
+      "conversation_title": "文件上传与处理",
+      "file_url": "https://raw.githubusercontent.com/nervlin4444/ai.skills.incubation/main/agent-coordination-mode/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T11:59:41.229+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1.zip",
+      "filename": "jira-restful-api-connector-v0.1.1.zip",
+      "file_ext": ".zip",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "visible_fallback"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/SKILL.md",
+      "filename": "SKILL.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/README.md",
+      "filename": "README.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_restful_core.py",
+      "filename": "jira_restful_core.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_query_basic.py",
+      "filename": "jira_query_basic.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_query_advanced.py",
+      "filename": "jira_query_advanced.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_field_parser.py",
+      "filename": "jira_field_parser.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/jira_datetime_utils.py",
+      "filename": "jira_datetime_utils.py",
+      "file_ext": ".py",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/scripts/USAGE.md",
+      "filename": "USAGE.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/config/config.json",
+      "filename": "config.json",
+      "file_ext": ".json",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "anchor_injection"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/references/API.SCOPE.md",
+      "filename": "API.SCOPE.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.1/references/MAPPING.md",
+      "filename": "MAPPING.md",
+      "file_ext": ".md",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "preview_extraction"
+    },
+    {
+      "conversation_id": "19e5e3af-dd82-8196-8000-09553dfddc05",
+      "conversation_title": "GitHub 上傳準備",
+      "file_url": "sandbox:///mnt/agents/output/jira-restful-api-connector-v0.1.2.zip",
+      "filename": "jira-restful-api-connector-v0.1.2.zip",
+      "file_ext": ".zip",
+      "detected_at": "2026-05-25T12:18:12.271+00:00",
+      "retry_count": 0,
+      "last_error": null,
+      "strategy": "visible_fallback"
     }
   ],
   "_meta": {
-    "last_updated": "2026-05-25T09:35:20.601+00:00"
+    "last_updated": "2026-05-25T12:28:20.539+00:00"
   }
 }
