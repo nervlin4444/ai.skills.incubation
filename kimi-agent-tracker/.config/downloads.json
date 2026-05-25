@@ -39,6 +39,30 @@
       "file": "frontmatter格式化_set_alert.py",
       "conversation": "frontmatter格式化",
       "time": "2026-05-25T08:39:36.219119+00:00"
+    },
+    "4420a454da31dc6a62223cb7716a2fe94dad54e8d14e3b5cd5ac4d60a0633b2c": {
+      "file": "kimi_downloader.py",
+      "hash": "4420a454da31dc6a62223cb7716a2fe94dad54e8d14e3b5cd5ac4d60a0633b2c",
+      "path": "/Users/kevinlinz/Downloads/kimi_downloader.py",
+      "conversation": "增量下载恢复",
+      "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
+      "downloaded_at": "2026-05-25T09:23:06.010+00:00"
+    },
+    "a977b8babaeee700a7f185dc3e514c1c48e4f7abc14b3a8ef49bd8c6c8daada1": {
+      "file": "kimi_tracker_config.json",
+      "hash": "a977b8babaeee700a7f185dc3e514c1c48e4f7abc14b3a8ef49bd8c6c8daada1",
+      "path": "/Users/kevinlinz/Downloads/kimi_tracker_config.json",
+      "conversation": "增量下载恢复",
+      "conversation_id": "19e5e571-4482-8365-8000-0955f8f7b9ff",
+      "downloaded_at": "2026-05-25T09:23:06.738+00:00"
+    },
+    "5f34fdadefee7dd8076cce150ff8e416c76f4f69bf4cb4130df2ec5eb23904ae": {
+      "file": "daemon_connector.py",
+      "hash": "5f34fdadefee7dd8076cce150ff8e416c76f4f69bf4cb4130df2ec5eb23904ae",
+      "path": "/Users/kevinlinz/Downloads/daemon_connector.py",
+      "conversation": "conversation程序改造",
+      "conversation_id": "19e5cf97-8802-8fae-8000-095557164cd4",
+      "downloaded_at": "2026-05-25T09:29:13.114+00:00"
     }
   },
   "duplicates": [
@@ -204,5 +228,13 @@
       "conversation": "frontmatter格式化",
       "time": "2026-05-25T08:54:05.285228+00:00"
     }
-  ]
+  ],
+  "_meta": {
+    "record_type": "downloads_record",
+    "skill_name": "kimi-agent-tracker",
+    "version": "v1.3.0",
+    "last_updated": "2026-05-25T09:29:13.114+00:00",
+    "github_repository": "nervlin4444/ai.skills.incubation",
+    "target_branch": "main"
+  }
 }
