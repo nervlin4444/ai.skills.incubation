@@ -14,7 +14,195 @@
       "file": "脚本交付重试_-_Kimi_kimi_downloader.py",
       "conversation": "脚本交付重试 - Kimi",
       "time": "2026-05-25T06:36:50.243785+00:00"
+    },
+    "2f351461a27aff7a68d3196197999d32822d762b25148fcc7350497dc7ad6cfd": {
+      "file": "守护程序改造_SKILL.md",
+      "conversation": "守护程序改造",
+      "time": "2026-05-25T08:26:24.171841+00:00"
+    },
+    "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299": {
+      "file": "frontmatter格式化_SKILL.md",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:26:53.619562+00:00"
+    },
+    "746bb93e7493b8f23c21b01eaf187d09637ca6beeb4848189db53322ff3f8f0d": {
+      "file": "frontmatter格式化_record_exchange_rate.py",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:38:39.632079+00:00"
+    },
+    "499fc2ecaab6927bdfce4e7c3a316c45ffcbf209b74a442df98775118b657ec1": {
+      "file": "frontmatter格式化_analyze_exchange_rate.py",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:39:07.969562+00:00"
+    },
+    "9a80ef907e2ffe491810b0748e6a816f502279a1bf6914f12341788791560e43": {
+      "file": "frontmatter格式化_set_alert.py",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:39:36.219119+00:00"
     }
   },
-  "duplicates": []
+  "duplicates": [
+    {
+      "file": "frontmatter格式化_README.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:27:13.264857+00:00"
+    },
+    {
+      "file": "frontmatter格式化_.env.example",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:27:32.850972+00:00"
+    },
+    {
+      "file": "frontmatter格式化_config.json",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:27:52.431963+00:00"
+    },
+    {
+      "file": "frontmatter格式化_API.SCOPE.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:33:21.136721+00:00"
+    },
+    {
+      "file": "frontmatter格式化_MAPPING.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:33:40.723658+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SKILL.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:34:00.334397+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SKILL.CORRECTIONS.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:34:19.921808+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SKILL.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:34:39.530326+00:00"
+    },
+    {
+      "file": "frontmatter格式化_api_reference.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:34:59.096333+00:00"
+    },
+    {
+      "file": "frontmatter格式化_market_examples.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:35:18.698678+00:00"
+    },
+    {
+      "file": "frontmatter格式化_exchange_alerts.json",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:35:38.257132+00:00"
+    },
+    {
+      "file": "frontmatter格式化_.env.example.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:39:55.774007+00:00"
+    },
+    {
+      "file": "frontmatter格式化_USAGE.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:40:15.348498+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SKILL.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:40:34.952501+00:00"
+    },
+    {
+      "file": "frontmatter格式化_README.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:40:54.536442+00:00"
+    },
+    {
+      "file": "frontmatter格式化_USAGE.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:41:14.139681+00:00"
+    },
+    {
+      "file": "frontmatter格式化_config.json",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:41:33.749438+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SKILL.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:44:58.487935+00:00"
+    },
+    {
+      "file": "frontmatter格式化_README.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:45:18.052344+00:00"
+    },
+    {
+      "file": "frontmatter格式化_USAGE.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:45:37.635216+00:00"
+    },
+    {
+      "file": "frontmatter格式化_MAPPING.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:45:57.180401+00:00"
+    },
+    {
+      "file": "frontmatter格式化_RANKING.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:46:16.716797+00:00"
+    },
+    {
+      "file": "frontmatter格式化_.env.example.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:46:36.262506+00:00"
+    },
+    {
+      "file": "frontmatter格式化_AGENT.SWARM.SKILL.INDEX.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:53:06.603245+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SUB.AGENT.MEMORY.PROTECTION.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:53:26.169427+00:00"
+    },
+    {
+      "file": "frontmatter格式化_README.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:53:45.705796+00:00"
+    },
+    {
+      "file": "frontmatter格式化_SKILL.md",
+      "hash": "f07309ab3aaa4d51772b4fa02e4015d089e0086e2d9a28cb1fb1fca1168c2299",
+      "conversation": "frontmatter格式化",
+      "time": "2026-05-25T08:54:05.285228+00:00"
+    }
+  ]
 }
