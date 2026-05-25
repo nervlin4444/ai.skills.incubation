@@ -1,12 +1,12 @@
 """
 ---
-title: Kimi Selector Probe v1.0.7
+title: Kimi Selector Probe v1.0.8
 name: kimi-agent-tracker
 description: Auto-detect working selectors for .py/.md/.json/.zip file extraction from Kimi chat pages.
-version: 1.0.7
+version: 1.0.8
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T00:10:00+08:00
+updated_at: 2026-05-26T00:25:00+08:00
 auth_config:
   provider: none
   auth_method: none
@@ -35,12 +35,10 @@ except ImportError:
     print("[FATAL] Then: python3 -m playwright install chromium")
     sys.exit(1)
 
-# Configuration
 PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
 REPORT_PATH = Path.home() / "Downloads" / "selector_test_report.json"
 SCREENSHOT_DIR = Path.home() / "Downloads" / "probe_screenshots"
 
-# File card selectors
 FILE_CARD_SELECTORS = [
     'div[class*="file-card-container"]',
     'div[class*="file-card"]',
@@ -51,7 +49,6 @@ FILE_CARD_SELECTORS = [
     'div[data-v-]',
 ]
 
-# File extension pattern
 FILE_PATTERN = re.compile(
     r'([A-Za-z0-9_.-]+[.](py|md|json|zip|env|txt|csv|yaml|yml|js|html|css|xml))',
     re.IGNORECASE
@@ -120,199 +117,225 @@ async def take_screenshot(page, name: str) -> Optional[str]:
         return None
 
 
-async def diagnose_page(page) -> Dict[str, Any]:
-    """Use JavaScript to find all relevant elements on the page."""
+async def deep_diagnose(page) -> Dict[str, Any]:
     diagnosis = {
-        "preview_panels": [],
-        "monaco_editors": [],
-        "download_buttons": [],
-        "copy_buttons": [],
-        "file_cards": [],
-        "all_classes": [],
+        "iframe_count": 0,
+        "iframes": [],
+        "shadow_hosts": [],
+        "right_side_elements": [],
+        "top_right_elements": [],
+        "all_visible_classes": [],
+        "monaco_in_iframe": False,
+        "monaco_in_main": False,
     }
 
+    frames = page.frames
+    diagnosis["iframe_count"] = len(frames)
+    log(f"[DIAG] Found {len(frames)} frames")
+
+    for i, frame in enumerate(frames):
+        try:
+            url = frame.url
+            frame_data = await frame.evaluate("""
+                () => {
+                    const result = {
+                        url: location.href,
+                        has_monaco: !!window.monaco,
+                        body_classes: document.body?.className || '',
+                        element_count: document.querySelectorAll('*').length,
+                        preview_like: [],
+                        download_like: [],
+                        copy_like: [],
+                    };
+                    document.querySelectorAll('*').forEach(el => {
+                        const cls = el.className || '';
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 400 && rect.left > window.innerWidth * 0.4) {
+                            result.preview_like.push({
+                                tag: el.tagName,
+                                class: cls.substring(0, 100),
+                                width: rect.width,
+                                height: rect.height,
+                                left: rect.left,
+                                top: rect.top,
+                            });
+                        }
+                        if (cls.includes('download') || el.getAttribute('title')?.includes('download')) {
+                            result.download_like.push({tag: el.tagName, class: cls.substring(0, 100)});
+                        }
+                        if (cls.includes('copy') || el.getAttribute('title')?.includes('copy')) {
+                            result.copy_like.push({tag: el.tagName, class: cls.substring(0, 100)});
+                        }
+                    });
+                    return result;
+                }
+            """)
+            diagnosis["iframes"].append({
+                "index": i,
+                "url": url[:100],
+                "has_monaco": frame_data.get("has_monaco", False),
+                "body_classes": frame_data.get("body_classes", "")[:100],
+                "element_count": frame_data.get("element_count", 0),
+                "preview_like_count": len(frame_data.get("preview_like", [])),
+                "download_like_count": len(frame_data.get("download_like", [])),
+                "copy_like_count": len(frame_data.get("copy_like", [])),
+                "preview_like_first": frame_data.get("preview_like", [{}])[0] if frame_data.get("preview_like") else None,
+            })
+            if frame_data.get("has_monaco"):
+                diagnosis["monaco_in_iframe"] = True
+        except Exception as e:
+            log(f"[WARN] Frame {i} diagnosis failed: {e}")
+
     try:
-        data = await page.evaluate("""
-            (() => {
+        main_data = await page.evaluate("""
+            () => {
                 const result = {
-                    preview_panels: [],
-                    monaco_editors: [],
-                    download_buttons: [],
-                    copy_buttons: [],
-                    file_cards: [],
-                    all_classes: [],
+                    has_monaco: !!window.monaco,
+                    body_classes: document.body?.className || '',
+                    shadow_hosts: [],
+                    right_side_elements: [],
+                    top_right_elements: [],
+                    all_classes: new Set(),
                 };
-
-                // Find preview-related elements
                 document.querySelectorAll('*').forEach(el => {
+                    if (el.shadowRoot) {
+                        result.shadow_hosts.push({
+                            tag: el.tagName,
+                            class: (el.className || '').substring(0, 100),
+                            id: el.id || '',
+                        });
+                    }
+                    const rect = el.getBoundingClientRect();
                     const cls = el.className || '';
-                    const tag = el.tagName.toLowerCase();
-                    const id = el.id || '';
-
-                    // Preview panels
-                    if (cls.includes('preview') || cls.includes('drawer') || cls.includes('panel') || 
-                        cls.includes('modal') || cls.includes('dialog') || cls.includes('overlay') ||
-                        cls.includes('file-preview') || cls.includes('preview-panel')) {
-                        result.preview_panels.push({
-                            tag: tag,
-                            id: id,
-                            class: cls.substring(0, 200),
-                            text: el.textContent?.substring(0, 100) || '',
-                            rect: el.getBoundingClientRect ? {
-                                width: el.getBoundingClientRect().width,
-                                height: el.getBoundingClientRect().height,
-                                top: el.getBoundingClientRect().top,
-                                left: el.getBoundingClientRect().left,
-                            } : null,
+                    if (rect.width > 500 && rect.left > window.innerWidth * 0.45 && rect.height > 300) {
+                        result.right_side_elements.push({
+                            tag: el.tagName,
+                            class: cls.substring(0, 150),
+                            id: el.id || '',
+                            width: Math.round(rect.width),
+                            height: Math.round(rect.height),
+                            left: Math.round(rect.left),
+                            top: Math.round(rect.top),
                         });
                     }
-
-                    // Monaco editors
-                    if (cls.includes('monaco') || id.includes('monaco') || 
-                        el.getAttribute('data-editor') || window.monaco) {
-                        result.monaco_editors.push({
-                            tag: tag,
-                            id: id,
-                            class: cls.substring(0, 200),
-                            has_window_monaco: !!window.monaco,
-                        });
-                    }
-
-                    // Download buttons
-                    if (cls.includes('download') || el.getAttribute('title')?.toLowerCase().includes('download') ||
-                        el.getAttribute('aria-label')?.toLowerCase().includes('download') ||
-                        el.innerHTML?.includes('download')) {
-                        result.download_buttons.push({
-                            tag: tag,
-                            id: id,
-                            class: cls.substring(0, 200),
+                    if (rect.width < 60 && rect.height < 60 && rect.left > window.innerWidth * 0.8 && rect.top < 100) {
+                        result.top_right_elements.push({
+                            tag: el.tagName,
+                            class: cls.substring(0, 100),
+                            id: el.id || '',
                             title: el.getAttribute('title') || '',
                             aria_label: el.getAttribute('aria-label') || '',
-                            html: el.outerHTML?.substring(0, 300) || '',
+                            html: el.outerHTML?.substring(0, 200) || '',
                         });
                     }
-
-                    // Copy buttons
-                    if (cls.includes('copy') || el.getAttribute('title')?.toLowerCase().includes('copy') ||
-                        el.getAttribute('aria-label')?.toLowerCase().includes('copy')) {
-                        result.copy_buttons.push({
-                            tag: tag,
-                            id: id,
-                            class: cls.substring(0, 200),
-                            title: el.getAttribute('title') || '',
-                            html: el.outerHTML?.substring(0, 300) || '',
+                    if (cls && cls.length > 0) {
+                        const keywords = ['preview', 'monaco', 'download', 'copy', 'editor', 'code', 'file', 'panel', 'drawer', 'content', 'view'];
+                        const classes = cls.split(/\s+/);
+                        classes.forEach(c => {
+                            if (c.length > 3 && keywords.some(k => c.toLowerCase().includes(k))) {
+                                result.all_classes.add(c);
+                            }
                         });
-                    }
-
-                    // File cards
-                    if (cls.includes('file-card') || cls.includes('file-item') || cls.includes('attachment')) {
-                        result.file_cards.push({
-                            tag: tag,
-                            id: id,
-                            class: cls.substring(0, 200),
-                            text: el.textContent?.substring(0, 100) || '',
-                        });
-                    }
-
-                    // Collect interesting classes
-                    if (cls && cls.length > 0 && !cls.includes(' ')) {
-                        const interesting = ['preview', 'monaco', 'download', 'copy', 'file', 'card', 
-                            'panel', 'drawer', 'modal', 'dialog', 'content', 'editor'];
-                        if (interesting.some(k => cls.toLowerCase().includes(k))) {
-                            result.all_classes.push(cls);
-                        }
                     }
                 });
-
+                result.all_classes = Array.from(result.all_classes).slice(0, 50);
                 return result;
-            })()
+            }
         """)
-        return data
+        diagnosis["monaco_in_main"] = main_data.get("has_monaco", False)
+        diagnosis["shadow_hosts"] = main_data.get("shadow_hosts", [])
+        diagnosis["right_side_elements"] = main_data.get("right_side_elements", [])
+        diagnosis["top_right_elements"] = main_data.get("top_right_elements", [])
+        diagnosis["all_visible_classes"] = main_data.get("all_classes", [])
     except Exception as e:
-        log(f"[WARN] DOM diagnosis failed: {e}")
-        return diagnosis
+        log(f"[WARN] Main frame diagnosis failed: {e}")
+
+    return diagnosis
 
 
 async def test_strategy_monaco_api(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
-    """Test Monaco Editor API injection."""
     result = {"strategy": "A_monaco_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
 
-    # Check if window.monaco exists
     has_monaco = await page.evaluate("() => !!window.monaco")
-    if not has_monaco:
-        result["error"] = "window.monaco not available"
-        result["duration_ms"] = now_ms() - start
-        return result
+    if has_monaco:
+        try:
+            text = await page.evaluate("""
+                (() => {
+                    try {
+                        const editors = window.monaco?.editor?.getEditors();
+                        if (editors && editors.length > 0) return editors[0].getValue();
+                        const models = window.monaco?.editor?.getModels();
+                        if (models && models.length > 0) return models[0].getValue();
+                        return "__NO_MONACO__";
+                    } catch (e) { return "__ERROR__: " + e.message; }
+                })()
+            """)
+            if text and not text.startswith("__"):
+                result["passed"] = True
+                result["length"] = len(text)
+                result["sample"] = text[:200]
+                result["duration_ms"] = now_ms() - start
+                return result
+        except Exception as e:
+            result["error"] = f"main frame monaco error: {e}"
 
-    try:
-        code = """
-            (() => {
-                try {
-                    const editors = window.monaco?.editor?.getEditors();
-                    if (editors && editors.length > 0) {
-                        return editors[0].getValue();
-                    }
-                    const models = window.monaco?.editor?.getModels();
-                    if (models && models.length > 0) {
-                        return models[0].getValue();
-                    }
-                    return "__NO_MONACO__";
-                } catch (e) {
-                    return "__ERROR__: " + e.message;
-                }
-            })()
-        """
-        text = await page.evaluate(code)
-        result["duration_ms"] = now_ms() - start
-        if text and not text.startswith("__"):
-            result["passed"] = True
-            result["length"] = len(text)
-            result["sample"] = text[:200]
-        else:
-            result["error"] = text if text else "monaco not accessible"
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
+    for i, frame in enumerate(page.frames):
+        try:
+            has_monaco_frame = await frame.evaluate("() => !!window.monaco")
+            if has_monaco_frame:
+                text = await frame.evaluate("""
+                    (() => {
+                        try {
+                            const editors = window.monaco?.editor?.getEditors();
+                            if (editors && editors.length > 0) return editors[0].getValue();
+                            const models = window.monaco?.editor?.getModels();
+                            if (models && models.length > 0) return models[0].getValue();
+                            return "__NO_MONACO__";
+                        } catch (e) { return "__ERROR__: " + e.message; }
+                    })()
+                """)
+                if text and not text.startswith("__"):
+                    result["passed"] = True
+                    result["length"] = len(text)
+                    result["sample"] = text[:200]
+                    result["iframe_index"] = i
+                    result["duration_ms"] = now_ms() - start
+                    return result
+        except Exception:
+            continue
+
+    result["error"] = result.get("error", "window.monaco not available in any frame")
+    result["duration_ms"] = now_ms() - start
     return result
 
 
-async def test_strategy_preview_dom(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract text from preview panel using diagnosed selectors."""
-    result = {"strategy": "B_preview_dom", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+async def test_strategy_preview_content(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
+    result = {"strategy": "B_preview_content", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
 
-    # Try selectors from diagnosis
-    preview_selectors = []
-    for p in diagnosis.get("preview_panels", []):
-        cls = p.get("class", "")
-        if cls:
-            # Build selector from class
-            classes = cls.split()
-            if classes:
-                preview_selectors.append(f'{p["tag"]}.{classes[0]}')
+    right_elements = diagnosis.get("right_side_elements", [])
+    if not right_elements:
+        result["error"] = "no right-side elements found"
+        result["duration_ms"] = now_ms() - start
+        return result
 
-    # Also try generic selectors
-    preview_selectors.extend([
-        'div[class*="preview"]',
-        'div[class*="drawer"]',
-        'div[class*="panel"]',
-        'aside[class*="preview"]',
-        'div[role="dialog"]',
-    ])
+    for el_info in right_elements[:3]:
+        tag = el_info.get("tag", "div")
+        cls = el_info.get("class", "").split()[0] if el_info.get("class") else ""
+        el_id = el_info.get("id", "")
 
-    for sel in preview_selectors:
+        if el_id:
+            selector = f'#{el_id}'
+        elif cls:
+            selector = f'{tag}.{cls}'
+        else:
+            continue
+
         try:
-            el = await page.wait_for_selector(sel, timeout=2000, state="visible")
+            el = await page.wait_for_selector(selector, timeout=2000, state="visible")
             if el:
-                # Try to get text from various content selectors within preview
-                content_selectors = [
-                    'pre',
-                    'code',
-                    'div[class*="content"]',
-                    'div[class*="markdown"]',
-                    'div[class*="monaco"]',
-                ]
+                content_selectors = ['pre', 'code', 'div[class*="content"]', 'div[class*="monaco"]', 'div[class*="editor"]']
                 for content_sel in content_selectors:
                     try:
                         content_el = await el.wait_for_selector(content_sel, timeout=1000)
@@ -321,134 +344,139 @@ async def test_strategy_preview_dom(page, diagnosis: Dict[str, Any]) -> Dict[str
                             if text and len(text) > 100:
                                 result["passed"] = True
                                 result["length"] = len(text)
-                                result["selector"] = sel
+                                result["selector"] = selector
                                 result["content_selector"] = content_sel
                                 result["sample"] = text[:200]
                                 result["duration_ms"] = now_ms() - start
                                 return result
                     except Exception:
                         continue
+
+                text = await el.inner_text()
+                if text and len(text) > 100:
+                    result["passed"] = True
+                    result["length"] = len(text)
+                    result["selector"] = selector
+                    result["sample"] = text[:200]
+                    result["duration_ms"] = now_ms() - start
+                    return result
         except Exception:
             continue
 
-    result["error"] = "no content found in preview panel"
+    result["error"] = "no content found in right-side elements"
     result["duration_ms"] = now_ms() - start
     return result
 
 
-async def test_strategy_download_button(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
-    """Click download button and capture via global listener."""
-    result = {"strategy": "C_download_button", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+async def test_strategy_top_right_buttons(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
+    result = {"strategy": "C_top_right_buttons", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
 
-    # Build selectors from diagnosis
-    download_selectors = []
-    for b in diagnosis.get("download_buttons", []):
-        tag = b.get("tag", "")
-        cls = b.get("class", "").split()[0] if b.get("class") else ""
-        if tag and cls:
-            download_selectors.append(f'{tag}.{cls}')
-
-    download_selectors.extend([
-        'button[class*="download"]',
-        'div[class*="download"]',
-        'svg[class*="download"]',
-        '[title*="download" i]',
-        '[aria-label*="download" i]',
-    ])
-
-    download_info = {"path": None}
-    def handle_download(download):
-        download_info["path"] = asyncio.create_task(download.path())
-
-    page.on("download", handle_download)
-    try:
-        clicked = False
-        for sel in download_selectors:
-            try:
-                if await safe_click(page, sel, timeout=2000):
-                    clicked = True
-                    result["used_selector"] = sel
-                    break
-            except Exception:
-                continue
-
-        if not clicked:
-            result["error"] = "no download button found or clickable"
-            result["duration_ms"] = now_ms() - start
-            return result
-
-        await asyncio.sleep(3.0)
-        if download_info["path"]:
-            path = await download_info["path"]
-            if path and Path(path).exists():
-                text = Path(path).read_text(encoding="utf-8", errors="ignore")
-                result["passed"] = True
-                result["length"] = len(text)
-                result["sample"] = text[:200]
-                result["file_path"] = str(path)
-            else:
-                result["error"] = "download captured but path invalid"
-        else:
-            result["error"] = "no download event captured"
-        result["duration_ms"] = now_ms() - start
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    finally:
-        page.remove_listener("download", handle_download)
-    return result
-
-
-async def test_strategy_copy_button(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
-    """Click copy button and read clipboard."""
-    result = {"strategy": "D_copy_button", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
-
-    copy_selectors = []
-    for b in diagnosis.get("copy_buttons", []):
-        tag = b.get("tag", "")
-        cls = b.get("class", "").split()[0] if b.get("class") else ""
-        if tag and cls:
-            copy_selectors.append(f'{tag}.{cls}')
-
-    copy_selectors.extend([
-        'button[class*="copy"]',
-        'div[class*="copy"]',
-        'svg[class*="copy"]',
-        '[title*="copy" i]',
-        '[aria-label*="copy" i]',
-    ])
-
-    clicked = False
-    for sel in copy_selectors:
-        try:
-            if await safe_click(page, sel, timeout=2000):
-                clicked = True
-                result["used_selector"] = sel
-                break
-        except Exception:
-            continue
-
-    if not clicked:
-        result["error"] = "copy button not found"
+    top_right = diagnosis.get("top_right_elements", [])
+    if not top_right:
+        result["error"] = "no top-right elements found"
         result["duration_ms"] = now_ms() - start
         return result
 
-    await asyncio.sleep(1.0)
-    try:
-        import pyperclip
-        text = pyperclip.paste()
-        result["duration_ms"] = now_ms() - start
-        if text and len(text) > 50:
-            result["passed"] = True
-            result["length"] = len(text)
-            result["sample"] = text[:200]
+    for el_info in top_right:
+        tag = el_info.get("tag", "div")
+        cls = el_info.get("class", "").split()[0] if el_info.get("class") else ""
+        el_id = el_info.get("id", "")
+
+        if el_id:
+            selector = f'#{el_id}'
+        elif cls:
+            selector = f'{tag}.{cls}'
         else:
-            result["error"] = "clipboard empty or too short"
-    except ImportError:
-        result["error"] = "pyperclip not installed"
+            continue
+
+        log(f"[TEST] Trying top-right: {selector}")
+
+        download_info = {"path": None}
+        def handle_download(download):
+            download_info["path"] = asyncio.create_task(download.path())
+        page.on("download", handle_download)
+
+        try:
+            clicked = await safe_click(page, selector, timeout=2000)
+            if clicked:
+                await asyncio.sleep(2.0)
+                if download_info["path"]:
+                    path = await download_info["path"]
+                    if path and Path(path).exists():
+                        text = Path(path).read_text(encoding="utf-8", errors="ignore")
+                        result["passed"] = True
+                        result["length"] = len(text)
+                        result["sample"] = text[:200]
+                        result["used_selector"] = selector
+                        result["file_path"] = str(path)
+                        result["duration_ms"] = now_ms() - start
+                        page.remove_listener("download", handle_download)
+                        return result
+            page.remove_listener("download", handle_download)
+        except Exception:
+            page.remove_listener("download", handle_download)
+            continue
+
+    result["error"] = "no top-right button triggered download"
+    result["duration_ms"] = now_ms() - start
+    return result
+
+
+async def test_strategy_js_content_extract(page) -> Dict[str, Any]:
+    result = {"strategy": "D_js_content_extract", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+    start = now_ms()
+
+    try:
+        data = await page.evaluate("""
+            (() => {
+                let best = null;
+                let bestArea = 0;
+                document.querySelectorAll('*').forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    const area = rect.width * rect.height;
+                    if (rect.left > window.innerWidth * 0.45 && area > bestArea && rect.width > 400 && rect.height > 300) {
+                        best = el;
+                        bestArea = area;
+                    }
+                });
+                if (!best) return {error: "no large right-side element"};
+                const text = best.innerText || best.textContent || '';
+                let monacoValue = null;
+                if (window.monaco) {
+                    const editors = window.monaco.editor?.getEditors();
+                    if (editors && editors.length > 0) monacoValue = editors[0].getValue();
+                }
+                return {
+                    tag: best.tagName,
+                    class: (best.className || '').substring(0, 200),
+                    text: text.substring(0, 500),
+                    text_length: text.length,
+                    has_monaco: !!window.monaco,
+                    monaco_value: monacoValue ? monacoValue.substring(0, 500) : null,
+                    monaco_length: monacoValue ? monacoValue.length : 0,
+                };
+            })()
+        """)
+
         result["duration_ms"] = now_ms() - start
+        if data.get("monaco_value"):
+            result["passed"] = True
+            result["length"] = data["monaco_length"]
+            result["sample"] = data["monaco_value"][:200]
+            result["method"] = "monaco_api"
+        elif data.get("text") and data.get("text_length", 0) > 100:
+            result["passed"] = True
+            result["length"] = data["text_length"]
+            result["sample"] = data["text"][:200]
+            result["method"] = "innerText"
+            result["element_class"] = data.get("class", "")[:100]
+        else:
+            result["error"] = data.get("error", "content too short")
+            result["element_class"] = data.get("class", "")[:100]
+    except Exception as e:
+        result["duration_ms"] = now_ms() - start
+        result["error"] = str(e)
     return result
 
 
@@ -461,10 +489,8 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
     if not card_selector:
         return {"filename": filename, "ext": ext, "strategies": [], "error": "no selector"}
 
-    # Screenshot before
     before_ss = await take_screenshot(page, f"{file_index:02d}_{filename}_before")
 
-    # Try multiple click methods
     click_methods = [
         ("force_click", lambda: safe_click(page, card_selector, timeout=5000, force=True)),
         ("normal_click", lambda: safe_click(page, card_selector, timeout=5000, force=False)),
@@ -481,7 +507,7 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
             if ok:
                 click_ok = True
                 used_method = method_name
-                log(f"[OK] Click succeeded: {method_name}")
+                log(f"[OK] Click: {method_name}")
                 break
         except Exception as e:
             log(f"[WARN] Click {method_name} failed: {e}")
@@ -489,44 +515,27 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
     if not click_ok:
         log(f"[WARN] All click methods failed for {filename}")
 
-    # Wait for preview
     log("[TEST] Waiting 8s for preview...")
     await asyncio.sleep(8.0)
 
-    # Screenshot after
     after_ss = await take_screenshot(page, f"{file_index:02d}_{filename}_after")
 
-    # DOM DIAGNOSIS - Key step
-    log("[TEST] Running DOM diagnosis...")
-    diagnosis = await diagnose_page(page)
-    log(f"[DIAG] Preview panels: {len(diagnosis.get('preview_panels', []))}")
-    log(f"[DIAG] Monaco editors: {len(diagnosis.get('monaco_editors', []))}")
-    log(f"[DIAG] Download buttons: {len(diagnosis.get('download_buttons', []))}")
-    log(f"[DIAG] Copy buttons: {len(diagnosis.get('copy_buttons', []))}")
+    log("[TEST] Running deep DOM diagnosis...")
+    diagnosis = await deep_diagnose(page)
+    log(f"[DIAG] Frames: {diagnosis['iframe_count']}, Shadow hosts: {len(diagnosis['shadow_hosts'])}")
+    log(f"[DIAG] Right-side elements: {len(diagnosis['right_side_elements'])}, Top-right: {len(diagnosis['top_right_elements'])}")
+    log(f"[DIAG] Monaco main: {diagnosis['monaco_in_main']}, iframe: {diagnosis['monaco_in_iframe']}")
+    if diagnosis.get("right_side_elements"):
+        log(f"[DIAG] First right-side: {diagnosis['right_side_elements'][0].get('class', '')[:60]}")
+    if diagnosis.get("top_right_elements"):
+        log(f"[DIAG] First top-right: {diagnosis['top_right_elements'][0].get('class', '')[:60]} title={diagnosis['top_right_elements'][0].get('title', '')}")
 
-    # Run strategies based on diagnosis
     strategies = []
+    strategies.append(await test_strategy_js_content_extract(page))
+    strategies.append(await test_strategy_monaco_api(page, diagnosis))
+    strategies.append(await test_strategy_preview_content(page, diagnosis))
+    strategies.append(await test_strategy_top_right_buttons(page, diagnosis))
 
-    if diagnosis.get("monaco_editors"):
-        strategies.append(await test_strategy_monaco_api(page, diagnosis))
-
-    if diagnosis.get("preview_panels"):
-        strategies.append(await test_strategy_preview_dom(page, diagnosis))
-
-    if diagnosis.get("download_buttons"):
-        strategies.append(await test_strategy_download_button(page, diagnosis))
-
-    if diagnosis.get("copy_buttons"):
-        strategies.append(await test_strategy_copy_button(page, diagnosis))
-
-    # If no elements diagnosed, try generic strategies anyway
-    if not strategies:
-        strategies.append(await test_strategy_monaco_api(page, diagnosis))
-        strategies.append(await test_strategy_preview_dom(page, diagnosis))
-        strategies.append(await test_strategy_download_button(page, diagnosis))
-        strategies.append(await test_strategy_copy_button(page, diagnosis))
-
-    # Close preview
     try:
         await page.keyboard.press("Escape")
         await asyncio.sleep(0.5)
@@ -539,13 +548,16 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
         "click_method_used": used_method,
         "screenshots": {"before": before_ss, "after": after_ss},
         "diagnosis": {
-            "preview_panel_count": len(diagnosis.get("preview_panels", [])),
-            "monaco_editor_count": len(diagnosis.get("monaco_editors", [])),
-            "download_button_count": len(diagnosis.get("download_buttons", [])),
-            "copy_button_count": len(diagnosis.get("copy_buttons", [])),
-            "preview_panel_first_class": diagnosis.get("preview_panels", [{}])[0].get("class", "") if diagnosis.get("preview_panels") else "",
-            "monaco_editor_first_class": diagnosis.get("monaco_editors", [{}])[0].get("class", "") if diagnosis.get("monaco_editors") else "",
-            "download_button_first_class": diagnosis.get("download_buttons", [{}])[0].get("class", "") if diagnosis.get("download_buttons") else "",
+            "iframe_count": diagnosis["iframe_count"],
+            "shadow_host_count": len(diagnosis["shadow_hosts"]),
+            "right_side_count": len(diagnosis["right_side_elements"]),
+            "top_right_count": len(diagnosis["top_right_elements"]),
+            "monaco_main": diagnosis["monaco_in_main"],
+            "monaco_iframe": diagnosis["monaco_in_iframe"],
+            "right_side_first_class": diagnosis.get("right_side_elements", [{}])[0].get("class", "") if diagnosis.get("right_side_elements") else "",
+            "top_right_first_class": diagnosis.get("top_right_elements", [{}])[0].get("class", "") if diagnosis.get("top_right_elements") else "",
+            "top_right_first_title": diagnosis.get("top_right_elements", [{}])[0].get("title", "") if diagnosis.get("top_right_elements") else "",
+            "interesting_classes": diagnosis.get("all_visible_classes", [])[:10],
         },
         "strategies": strategies,
     }
@@ -621,7 +633,7 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
 
 async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> Dict[str, Any]:
     report = {
-        "probe_version": "1.0.7",
+        "probe_version": "1.0.8",
         "url": url,
         "mode": "visible" if visible else "headless",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -726,10 +738,11 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
     for f in report.get("files_tested", []):
         diag = f.get("diagnosis", {})
         print(f"\nFile: {f['filename']} (clicked: {f.get('click_method_used', 'none')})")
-        print(f"  DOM: preview={diag.get('preview_panel_count',0)} monaco={diag.get('monaco_editor_count',0)} download={diag.get('download_button_count',0)} copy={diag.get('copy_button_count',0)}")
-        print(f"  Preview class: {diag.get('preview_panel_first_class','')[:60]}")
-        print(f"  Monaco class: {diag.get('monaco_editor_first_class','')[:60]}")
-        print(f"  Download class: {diag.get('download_button_first_class','')[:60]}")
+        print(f"  DOM: iframes={diag.get('iframe_count',0)} shadow={diag.get('shadow_host_count',0)} right={diag.get('right_side_count',0)} top-right={diag.get('top_right_count',0)}")
+        print(f"  Monaco: main={diag.get('monaco_main',False)} iframe={diag.get('monaco_iframe',False)}")
+        print(f"  Right-side class: {diag.get('right_side_first_class','')[:60]}")
+        print(f"  Top-right class: {diag.get('top_right_first_class','')[:60]} title={diag.get('top_right_first_title','')}")
+        print(f"  Interesting classes: {', '.join(diag.get('interesting_classes', [])[:5])}")
         for s in f.get("strategies", []):
             status = "PASS" if s.get("passed") else "FAIL"
             print(f"  [{status}] {s['strategy']}: len={s.get('length', 0)} duration={s.get('duration_ms', 0)}ms")
@@ -738,7 +751,7 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.7")
+    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.8")
     parser.add_argument("--url", required=True, help="Kimi chat URL to probe")
     parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
     parser.add_argument("--max-per-type", type=int, default=2, help="Max files to test per extension type")
