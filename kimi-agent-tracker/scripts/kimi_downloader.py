@@ -2,11 +2,11 @@
 ---
 title: Kimi Conversation File Downloader
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations using Playwright. v1.1.2 fixes mask overlay interception, sandbox:// download stability, and CSS selector escaping.
-version: "1.1.2"
+description: F-003 Auto-download files from Kimi chat conversations. v1.1.3 adds MD preview screenshot diagnostics and enhanced format dialog handling.
+version: "1.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T12:17:00+00:00"
+updated_at: "2026-05-25T12:54:00+00:00"
 auth_config:
   provider: kimi
   auth_method: persistent_profile
@@ -37,39 +37,32 @@ except ImportError:
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-
 def _now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
-
 
 def log_event(msg):
     print(f"[{_now_iso()}] {msg}")
 
-
 def get_base_dir():
     return Path(__file__).resolve().parent.parent
 
-
 def load_config():
-    config_path = get_base_dir() / ".config" / "kimi_tracker_config.json"
-    if not config_path.exists():
-        log_event(f"[ERROR] Config not found: {config_path}")
+    p = get_base_dir() / ".config" / "kimi_tracker_config.json"
+    if not p.exists():
+        log_event(f"[ERROR] Config not found: {p}")
         sys.exit(1)
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(p, "r", encoding="utf-8") as f:
         return json.load(f)
-
 
 def ensure_dir(path):
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
-
 def expand_path(path_str):
     if path_str.startswith("~/"):
         return os.path.expanduser(path_str)
     return path_str
-
 
 def compute_sha256(filepath):
     h = hashlib.sha256()
@@ -78,12 +71,10 @@ def compute_sha256(filepath):
             h.update(chunk)
     return h.hexdigest()
 
-
 def get_profile_dir():
     p = Path.home() / ".kimi_auth" / "browser_profile_chromium"
     ensure_dir(p)
     return str(p)
-
 
 def load_downloads_json():
     p = get_base_dir() / ".config" / "downloads.json"
@@ -92,12 +83,10 @@ def load_downloads_json():
             return json.load(f)
     return {"downloaded": {}, "duplicates": []}
 
-
 def save_downloads_json(data):
     p = get_base_dir() / ".config" / "downloads.json"
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
 
 class KimiDownloader:
     def __init__(self, config):
@@ -110,16 +99,28 @@ class KimiDownloader:
         self.download_dir = expand_path(config.get("daemon", {}).get("download_dir", "~/Downloads"))
         self.duplicate_dir = expand_path(config.get("daemon", {}).get("duplicate_dir", "~/skills_moved/.duplicate_downloads"))
         self.browser_default_dir = Path.home() / "Downloads"
+        self.diag_dir = get_base_dir() / ".logs" / "diagnose" / "md_download"
         ensure_dir(self.download_dir)
         ensure_dir(self.duplicate_dir)
+        ensure_dir(self.diag_dir)
 
     def _get_browser_context(self, p, visible=False):
         return p.chromium.launch_persistent_context(
-            self.profile_dir,
-            headless=not visible,
+            self.profile_dir, headless=not visible,
             args=["--disable-blink-features=AutomationControlled"],
             accept_downloads=True,
         )
+
+    def _capture(self, page, step_name):
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        png_path = self.diag_dir / f"{step_name}_{ts}.png"
+        html_path = self.diag_dir / f"{step_name}_{ts}.html"
+        try:
+            page.screenshot(path=str(png_path), full_page=True)
+            html_path.write_text(page.content(), encoding="utf-8")
+            log_event(f"[DIAG] Screenshot: {png_path.name}")
+        except Exception as e:
+            log_event(f"[DIAG] Screenshot failed: {e}")
 
     def _dismiss_overlay(self, page):
         try:
@@ -165,21 +166,14 @@ class KimiDownloader:
     def _find_file_links(self, page):
         links = []
         selectors = [
-            'a[href*="sandbox://"]',
-            'a[href*=".zip"]',
-            'a[href*=".py"]',
-            'a[href*=".csv"]',
-            'a[href*=".json"]',
-            'a[href*=".md"]',
-            'a[href*=".txt"]',
-            'a[href*=".html"]',
-            'a[href*=".yml"]',
+            'a[href*="sandbox://"]', 'a[href*=".zip"]', 'a[href*=".py"]',
+            'a[href*=".csv"]', 'a[href*=".json"]', 'a[href*=".md"]',
+            'a[href*=".txt"]', 'a[href*=".html"]', 'a[href*=".yml"]',
             'a[href*=".yaml"]',
         ]
         for sel in selectors:
             try:
-                elements = page.query_selector_all(sel)
-                for el in elements:
+                for el in page.query_selector_all(sel):
                     href = el.get_attribute("href") or ""
                     text = (el.inner_text() or "").strip()
                     if href and href not in [l["href"] for l in links]:
@@ -193,23 +187,20 @@ class KimiDownloader:
             dup_path = Path(self.duplicate_dir) / filename
             shutil.move(str(dest_path), str(dup_path))
             self.downloads_record["duplicates"].append({
-                "file": filename,
-                "hash": file_hash,
-                "conversation": conversation_title,
+                "file": filename, "hash": file_hash, "conversation": conversation_title,
                 "time": datetime.now(timezone.utc).isoformat(),
             })
             log_event(f"[DEDUP] Duplicate moved to {dup_path}")
             return {"status": "duplicate", "file": filename, "hash": file_hash}
         else:
             self.downloads_record["downloaded"][file_hash] = {
-                "file": filename,
-                "conversation": conversation_title,
+                "file": filename, "conversation": conversation_title,
                 "time": datetime.now(timezone.utc).isoformat(),
             }
             log_event(f"[SAVED] {dest_path}")
             return {"status": "success", "file": filename, "hash": file_hash, "path": str(dest_path)}
 
-    def _wait_for_browser_download(self, filename_hint, max_wait_sec=8):
+    def _wait_for_browser_download(self, filename_hint, max_wait_sec=10):
         if not self.browser_default_dir.exists():
             return None
         start_time = time.time()
@@ -218,7 +209,7 @@ class KimiDownloader:
             for p in self.browser_default_dir.iterdir():
                 if p.is_file():
                     mtime = p.stat().st_mtime
-                    if mtime > start_time - 30:
+                    if mtime > start_time - 60:
                         candidates.append((p, mtime))
             if candidates:
                 candidates.sort(key=lambda x: x[1], reverse=True)
@@ -285,14 +276,13 @@ class KimiDownloader:
             self._safe_evaluate_click(page, href)
             log_event(f"[MD-STEP1] Opened preview for {filename}")
             page.wait_for_timeout(3000)
+            self._capture(page, f"md_step1_{filename_base}")
 
             icon_selectors = [
-                '[class*="download"]',
-                'button[class*="download"]',
-                'svg[class*="download"]',
-                '[title*="download" i]',
-                '[aria-label*="download" i]',
-                'i[class*="download"]',
+                '[class*="download"]', 'button[class*="download"]',
+                'svg[class*="download"]', '[title*="download" i]',
+                '[aria-label*="download" i]', 'i[class*="download"]',
+                '.preview-download', '[data-testid*="download"]',
             ]
             clicked = False
             for sel in icon_selectors:
@@ -310,17 +300,19 @@ class KimiDownloader:
 
             if not clicked:
                 log_event(f"[SKIP] No download icon found in preview for {filename}")
+                self._capture(page, f"md_no_icon_{filename_base}")
                 return {"status": "skipped", "file": filename, "reason": "No download icon in preview panel"}
 
             log_event(f"[MD-STEP2] Clicked download icon for {filename}")
             page.wait_for_timeout(2000)
+            self._capture(page, f"md_step2_{filename_base}")
 
+            # Try multiple strategies to select Markdown format
             md_selectors = [
-                "text=Markdown",
-                "text=Save as Markdown",
-                '[class*="markdown"]',
-                "button:has-text(\"Markdown\")",
-                "div:has-text(\"Markdown\")",
+                "text=Markdown", "text=Save as Markdown",
+                '[class*="markdown"]', "button:has-text(\"Markdown\")",
+                "div:has-text(\"Markdown\")", '[role="dialog"] button:has-text("Markdown")',
+                '[class*="dialog"] [class*="markdown"]', '.modal button:has-text("Markdown")',
             ]
             for sel in md_selectors:
                 try:
@@ -333,10 +325,20 @@ class KimiDownloader:
                         break
                 except Exception:
                     continue
+            else:
+                # Fallback: try pressing Down arrow + Enter to navigate dialog
+                try:
+                    page.keyboard.press("ArrowDown")
+                    page.wait_for_timeout(300)
+                    page.keyboard.press("Enter")
+                    log_event(f"[MD-FALLBACK] Used keyboard navigation for {filename}")
+                except Exception:
+                    pass
 
             page.wait_for_timeout(3000)
+            self._capture(page, f"md_step3_{filename_base}")
 
-            browser_file = self._wait_for_browser_download(filename_hint=".md", max_wait_sec=8)
+            browser_file = self._wait_for_browser_download(filename_hint=".md", max_wait_sec=10)
             if browser_file and browser_file.exists():
                 shutil.copy2(str(browser_file), str(dest_path))
                 file_hash = compute_sha256(dest_path)
@@ -346,6 +348,7 @@ class KimiDownloader:
             return {"status": "skipped", "file": filename, "reason": "No .md file in browser download dir"}
         except Exception as e:
             log_event(f"[ERROR] MD preview download failed for {filename}: {e}")
+            self._capture(page, f"md_error_{filename_base}")
             return {"status": "error", "file": filename, "error": str(e)}
 
     def download_conversation(self, url, title="unknown", visible=False):
@@ -358,12 +361,24 @@ class KimiDownloader:
                 page.goto(url, timeout=self.timeout * 1000)
                 page.wait_for_load_state("networkidle", timeout=self.timeout * 1000)
                 page.wait_for_timeout(3000)
+
+                # Try to extract title from page if unknown
+                if title == "unknown":
+                    try:
+                        title_el = page.query_selector(".chat-name, .conversation-title, h1, title")
+                        if title_el:
+                            title = (title_el.inner_text() or title).strip()[:50]
+                    except Exception:
+                        pass
+
                 links = self._find_file_links(page)
                 log_event(f"[DOWNLOAD] Found {len(links)} file links in '{title}'")
                 for link in links:
                     href = link["href"]
+                    # KEY FIX: sandbox:// links are direct downloads regardless of extension
+                    is_sandbox = href.startswith("sandbox://")
                     is_md = ".md" in href.lower() or href.endswith(".md")
-                    is_direct = not is_md or "github.com" in href or "raw.githubusercontent" in href
+                    is_direct = is_sandbox or not is_md or "github.com" in href or "raw.githubusercontent" in href
                     if is_md and not is_direct:
                         res = self._download_md_preview(page, link, title)
                     else:
@@ -409,17 +424,14 @@ class KimiDownloader:
         log_event(f"[BATCH] Complete: {len(all_results['success'])} success, {len(all_results['duplicates'])} duplicates, {len(all_results['errors'])} errors, {len(all_results['skipped'])} skipped")
         return all_results
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.2")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.3")
     parser.add_argument("--url", help="Single conversation URL to download from")
     parser.add_argument("--from-list", help="Path to conversations.json for batch download")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
     args = parser.parse_args()
-
     config = load_config()
     downloader = KimiDownloader(config)
-
     if args.url:
         results = downloader.download_conversation(args.url, visible=args.visible)
         print(json.dumps(results, ensure_ascii=False, indent=2))
@@ -429,7 +441,6 @@ def main():
     else:
         parser.print_help()
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
