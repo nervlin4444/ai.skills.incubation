@@ -1,70 +1,97 @@
 """
 ---
-title: Kimi Agent Tracker Daemon
-description: F-005 Background daemon that periodically checks Kimi conversations and downloads new files using content extraction strategy (v1.2.0+).
-version: "1.2.1"
+title: Kimi Tracker Daemon
 name: kimi-agent-tracker
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-25T15:01:00+00:00"
+description: Background daemon for incremental Kimi conversation file downloads. Integrates with kimi_downloader.py v1.3.0 pipeline (discover -> dedup -> download -> record).
+version: v1.3.0
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-25T16:53:00+0800
+fixes: []
 auth_config:
-  provider: kimi
-  auth_method: persistent_profile
-  token_env_var: ""
-  env_file_path: ""
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: .env
 file_mapping:
   local_path: "{baseDir}/scripts/tracker_daemon.py"
   github_path: "kimi-agent-tracker/scripts/tracker_daemon.py"
 ---
 """
 
-import os
-import sys
-import json
-import time
-import signal
-import subprocess
 import argparse
-from pathlib import Path
+import json
+import os
+import subprocess
+import sys
+import time
+import traceback
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+# Constants
+DEFAULT_SKILL_DIR = Path.home() / ".workbuddy" / "skills" / "kimi-agent-tracker"
+DEFAULT_CONFIG_DIR = DEFAULT_SKILL_DIR / ".config"
+DEFAULT_LOGS_DIR = DEFAULT_SKILL_DIR / ".logs"
+DEFAULT_PID_FILE = DEFAULT_CONFIG_DIR / "daemon.pid"
+DEFAULT_LOG_FILE = DEFAULT_LOGS_DIR / "daemon.log"
 
 
-def _now_iso():
+def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
 
 
-def log_event(msg):
-    print(f"[{_now_iso()}] {msg}")
+def _log(level: str, message: str) -> None:
+    line = f"[{_timestamp()}] [{level}] {message}"
+    print(line, flush=True)
+    # Also append to log file
+    try:
+        DEFAULT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        with open(DEFAULT_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
-def get_base_dir():
-    return Path(__file__).resolve().parent.parent
+def _load_json(path: str, default: Any = None) -> Any:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default if default is not None else {}
 
 
-def load_config():
-    p = get_base_dir() / ".config" / "kimi_tracker_config.json"
-    if not p.exists():
-        log_event(f"[ERROR] Config not found: {p}")
-        sys.exit(1)
-    with open(p, "r", encoding="utf-8") as f:
-        return json.load(f)
+def _save_json(path: str, data: Any) -> None:
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        _log("ERROR", f"Failed to save JSON: {e}")
 
 
-def get_pid_file():
-    return get_base_dir() / ".config" / "daemon.pid"
+def _read_pid() -> Optional[int]:
+    try:
+        with open(DEFAULT_PID_FILE, "r", encoding="utf-8") as f:
+            return int(f.read().strip())
+    except Exception:
+        return None
 
 
-def get_log_file():
-    return get_base_dir() / ".logs" / "daemon.log"
+def _write_pid(pid: int) -> None:
+    DEFAULT_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(DEFAULT_PID_FILE, "w", encoding="utf-8") as f:
+        f.write(str(pid))
 
 
-def ensure_dir(path):
-    p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def _remove_pid() -> None:
+    try:
+        DEFAULT_PID_FILE.unlink()
+    except Exception:
+        pass
 
 
-def is_running(pid):
+def _is_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
@@ -72,237 +99,357 @@ def is_running(pid):
         return False
 
 
-def get_daemon_pid():
-    pid_file = get_pid_file()
-    if pid_file.exists():
-        try:
-            pid = int(pid_file.read_text().strip())
-            if is_running(pid):
-                return pid
-        except (ValueError, OSError):
-            pass
-    return None
+def _run_downloader_subprocess(
+    mode: str,
+    url: Optional[str] = None,
+    list_path: Optional[str] = None,
+    visible: bool = False,
+    timeout_sec: int = 600,
+) -> Dict[str, Any]:
+    """
+    Run kimi_downloader.py as subprocess with given mode.
+    Modes: discover, process-pending, download-url, download-list
+    """
+    script_dir = DEFAULT_SKILL_DIR / "scripts"
+    downloader_script = script_dir / "kimi_downloader.py"
 
+    if not downloader_script.exists():
+        return {"status": "error", "error": f"Downloader script not found: {downloader_script}"}
 
-def write_pid(pid):
-    ensure_dir(get_pid_file().parent)
-    get_pid_file().write_text(str(pid))
+    cmd = [sys.executable, str(downloader_script)]
 
+    if mode == "discover" and url:
+        cmd.extend(["--url", url, "--discover-only"])
+    elif mode == "process-pending":
+        cmd.extend(["--process-pending"])
+    elif mode == "download-url" and url:
+        cmd.extend(["--url", url])
+    elif mode == "download-list" and list_path:
+        cmd.extend(["--from-list", list_path])
+    else:
+        return {"status": "error", "error": f"Invalid mode: {mode}"}
 
-def remove_pid():
-    pid_file = get_pid_file()
-    if pid_file.exists():
-        pid_file.unlink()
+    if visible:
+        cmd.append("--visible")
 
+    _log("DAEMON", f"Running: {' '.join(cmd)}")
 
-def run_login_validate():
-    """Run login manager validate and return True/False."""
-    script = get_base_dir() / "scripts" / "kimi_login_manager.py"
     try:
         result = subprocess.run(
-            [sys.executable, str(script), "--validate"],
-            capture_output=True, text=True, timeout=60
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
         )
-        output = result.stdout + result.stderr
-        log_event(f"[VALIDATE] {output.strip()}")
-        return "Login valid: True" in output or "valid: True" in output.lower()
-    except Exception as e:
-        log_event(f"[ERROR] Login validation failed: {e}")
-        return False
 
+        output = result.stdout.strip()
+        stderr = result.stderr.strip()
 
-def run_conversation_list(count=10):
-    """Run conversation lister and return path to conversations.json."""
-    script = get_base_dir() / "scripts" / "kimi_conversation_lister.py"
-    config = load_config()
-    visible = config.get("daemon", {}).get("visible", False)
-    try:
-        cmd = [sys.executable, str(script), "--count", str(count)]
-        if visible:
-            cmd.append("--visible")
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120
-        )
-        output = result.stdout + result.stderr
-        log_event(f"[LIST] {output.strip()[-200:]}")  # Last 200 chars
-        conv_file = get_base_dir() / ".config" / "conversations.json"
-        if conv_file.exists():
-            return str(conv_file)
-    except Exception as e:
-        log_event(f"[ERROR] Conversation listing failed: {e}")
-    return None
-
-
-def run_download(conv_file):
-    """Run downloader on conversation list."""
-    script = get_base_dir() / "scripts" / "kimi_downloader.py"
-    config = load_config()
-    visible = config.get("daemon", {}).get("visible", False)
-    try:
-        cmd = [sys.executable, str(script), "--from-list", conv_file]
-        if visible:
-            cmd.append("--visible")
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=300
-        )
-        output = result.stdout + result.stderr
-        log_event(f"[DOWNLOAD] {output.strip()[-300:]}")  # Last 300 chars
-        # Parse JSON result for summary
-        try:
-            # Find JSON output in last lines
-            lines = output.strip().split("\n")
-            for line in reversed(lines):
-                if line.strip().startswith("{"):
-                    data = json.loads(line.strip())
-                    success = len(data.get("success", []))
-                    dup = len(data.get("duplicates", []))
-                    err = len(data.get("errors", []))
-                    skip = len(data.get("skipped", []))
-                    log_event(f"[DOWNLOAD] Result: {success} success, {dup} duplicates, {err} errors, {skip} skipped")
+        # Try to parse JSON from last line
+        json_data = None
+        for line in reversed(output.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    json_data = json.loads(line)
                     break
-        except Exception:
-            pass
-        return True
+                except json.JSONDecodeError:
+                    continue
+
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "returncode": result.returncode,
+                "stdout": output[-2000:] if len(output) > 2000 else output,
+                "stderr": stderr[-500:] if len(stderr) > 500 else stderr,
+            }
+
+        return {
+            "status": "success",
+            "data": json_data,
+            "stdout": output[-1000:] if len(output) > 1000 else output,
+        }
+
     except subprocess.TimeoutExpired:
-        log_event("[ERROR] Download timeout (300s)")
-        return False
+        return {"status": "error", "error": f"Subprocess timeout after {timeout_sec}s"}
     except Exception as e:
-        log_event(f"[ERROR] Download failed: {e}")
-        return False
+        return {"status": "error", "error": str(e)}
 
 
-def daemon_cycle(config):
-    """Execute one daemon cycle: validate -> list -> download."""
-    log_event("Starting cycle...")
+def _discover_conversations() -> List[Dict[str, str]]:
+    """Run conversation lister to get current conversations."""
+    lister_script = DEFAULT_SKILL_DIR / "scripts" / "kimi_conversation_lister.py"
+    if not lister_script.exists():
+        _log("WARN", "Conversation lister not found, using cached conversations.json")
+        return []
 
-    # Step 1: Validate login
-    if not run_login_validate():
-        log_event("[ERROR] Login invalid, aborting cycle.")
-        return False
+    try:
+        result = subprocess.run(
+            [sys.executable, str(lister_script)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0:
+            # Parse output for conversation list
+            try:
+                data = json.loads(result.stdout.strip().splitlines()[-1])
+                if isinstance(data, list):
+                    return data
+                elif isinstance(data, dict) and "conversations" in data:
+                    return data["conversations"]
+            except Exception:
+                pass
+    except Exception as e:
+        _log("WARN", f"Conversation lister failed: {e}")
 
-    # Step 2: List conversations
-    count = config.get("daemon", {}).get("conversation_count", 10)
-    conv_file = run_conversation_list(count)
-    if not conv_file:
-        log_event("[ERROR] Failed to list conversations, aborting cycle.")
-        return False
-
-    # Step 3: Download files
-    run_download(conv_file)
-
-    log_event("Cycle complete.")
-    return True
+    return []
 
 
-def daemon_main(config):
-    """Main daemon loop."""
-    interval = config.get("daemon", {}).get("interval_sec", 900)
-    log_event(f"Daemon started (PID: {os.getpid()}), interval={interval}s")
-    write_pid(os.getpid())
+def run_single_cycle(
+    visible: bool = False,
+    max_conversations: int = 3,
+    per_conversation_timeout: int = 600,
+) -> Dict[str, Any]:
+    """
+    Run one full daemon cycle:
+        1. List conversations
+        2. For each conversation (up to max_conversations):
+           a. Discover files (add to pending)
+           b. Process pending files for this conversation
+        3. Log results
+    """
+    _log("DAEMON", "Starting single cycle...")
+    cycle_start = time.time()
+
+    results = {
+        "cycle_start": _timestamp(),
+        "conversations_processed": 0,
+        "total_success": 0,
+        "total_duplicates": 0,
+        "total_errors": 0,
+        "total_skipped": 0,
+        "total_pending_added": 0,
+        "details": [],
+    }
+
+    # Step 1: Get conversation list
+    conversations = _discover_conversations()
+
+    # Fallback: read from cached conversations.json
+    if not conversations:
+        cached = _load_json(str(DEFAULT_CONFIG_DIR / "conversations.json"), default={})
+        if isinstance(cached, dict) and "conversations" in cached:
+            conversations = cached["conversations"]
+        elif isinstance(cached, list):
+            conversations = cached
+
+    _log("DAEMON", f"Found {len(conversations)} conversations")
+
+    # Step 2: Process up to max_conversations
+    for i, conv in enumerate(conversations[:max_conversations]):
+        if isinstance(conv, dict):
+            url = conv.get("url", "")
+            title = conv.get("title", "unknown")
+        else:
+            url = str(conv)
+            title = "unknown"
+
+        if not url:
+            continue
+
+        conv_start = time.time()
+        _log("DAEMON", f"[{i+1}/{min(len(conversations), max_conversations)}] Processing: {title}")
+
+        # Phase A: Discover (add to pending)
+        discover_result = _run_downloader_subprocess(
+            mode="discover",
+            url=url,
+            visible=visible,
+            timeout_sec=per_conversation_timeout,
+        )
+
+        pending_added = 0
+        if discover_result.get("status") == "success":
+            data = discover_result.get("data", {})
+            if isinstance(data, dict):
+                pending_added = data.get("pending_added", 0)
+
+        # Phase B: Process pending for this conversation
+        download_result = _run_downloader_subprocess(
+            mode="download-url",
+            url=url,
+            visible=visible,
+            timeout_sec=per_conversation_timeout,
+        )
+
+        conv_success = 0
+        conv_dup = 0
+        conv_err = 0
+        conv_skip = 0
+
+        if download_result.get("status") == "success":
+            data = download_result.get("data", {})
+            if isinstance(data, dict):
+                conv_success = len(data.get("success", []))
+                conv_dup = len(data.get("duplicates", []))
+                conv_err = len(data.get("errors", []))
+                conv_skip = len(data.get("skipped", []))
+        else:
+            conv_err = 1
+            _log("ERROR", f"Download failed for {title}: {download_result.get('error', 'Unknown')}")
+
+        conv_elapsed = time.time() - conv_start
+        _log("DAEMON", f"[{title}] ({conv_elapsed:.0f}s): {conv_success} success, {conv_dup} dup, {conv_err} err, {conv_skip} skip, {pending_added} pending")
+
+        cycle_results["details"].append({
+            "title": title,
+            "url": url,
+            "elapsed_sec": round(conv_elapsed, 1),
+            "success": conv_success,
+            "duplicates": conv_dup,
+            "errors": conv_err,
+            "skipped": conv_skip,
+            "pending_added": pending_added,
+        })
+
+        cycle_results["total_success"] += conv_success
+        cycle_results["total_duplicates"] += conv_dup
+        cycle_results["total_errors"] += conv_err
+        cycle_results["total_skipped"] += conv_skip
+        cycle_results["total_pending_added"] += pending_added
+        cycle_results["conversations_processed"] += 1
+
+    # Step 3: Process any remaining pending items (from previous cycles)
+    pending = _load_json(str(DEFAULT_CONFIG_DIR / "pending.json"), default={})
+    pending_count = len(pending.get("pending", []))
+
+    if pending_count > 0:
+        _log("DAEMON", f"Processing {pending_count} remaining pending items...")
+        pending_result = _run_downloader_subprocess(
+            mode="process-pending",
+            visible=visible,
+            timeout_sec=per_conversation_timeout * 2,
+        )
+
+        if pending_result.get("status") == "success":
+            data = pending_result.get("data", {})
+            if isinstance(data, dict):
+                cycle_results["total_success"] += data.get("total_success", 0)
+                cycle_results["total_duplicates"] += data.get("total_duplicates", 0)
+                cycle_results["total_errors"] += data.get("total_errors", 0)
+                cycle_results["total_skipped"] += data.get("total_skipped", 0)
+
+    cycle_elapsed = time.time() - cycle_start
+    cycle_results["cycle_elapsed_sec"] = round(cycle_elapsed, 1)
+    cycle_results["cycle_end"] = _timestamp()
+
+    _log("DAEMON", f"Cycle complete: {cycle_results['total_success']} success, {cycle_results['total_duplicates']} dup, {cycle_results['total_errors']} err, {cycle_results['total_skipped']} skip ({cycle_elapsed:.0f}s)")
+
+    return cycle_results
+
+
+def run_daemon_loop(
+    interval_sec: int = 900,
+    visible: bool = False,
+    max_conversations: int = 3,
+    per_conversation_timeout: int = 600,
+) -> None:
+    """Run daemon in infinite loop."""
+    _log("DAEMON", f"Daemon started (PID: {os.getpid()})")
+    _write_pid(os.getpid())
 
     try:
         while True:
-            daemon_cycle(config)
-            log_event(f"Sleeping {interval}s...")
-            time.sleep(interval)
+            run_single_cycle(
+                visible=visible,
+                max_conversations=max_conversations,
+                per_conversation_timeout=per_conversation_timeout,
+            )
+            _log("DAEMON", f"Sleeping for {interval_sec}s...")
+            time.sleep(interval_sec)
     except KeyboardInterrupt:
-        log_event("Daemon interrupted by user.")
-    finally:
-        remove_pid()
-        log_event("Daemon stopped.")
-
-
-def start_daemon(config):
-    """Start daemon in background."""
-    existing_pid = get_daemon_pid()
-    if existing_pid:
-        log_event(f"[ERROR] Daemon already running (PID {existing_pid})")
-        return False
-
-    # Fork to background
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # Parent process
-            log_event(f"[OK] Daemon started (PID: {pid})")
-            write_pid(pid)
-            return True
-        else:
-            # Child process - daemon
-            os.setsid()
-            daemon_main(config)
-    except OSError as e:
-        log_event(f"[ERROR] Failed to fork daemon: {e}")
-        return False
-
-
-def stop_daemon():
-    """Stop running daemon."""
-    pid = get_daemon_pid()
-    if not pid:
-        log_event("[STOPPED] Daemon not running")
-        return True
-
-    try:
-        os.kill(pid, signal.SIGTERM)
-        # Wait for process to exit
-        for _ in range(30):
-            if not is_running(pid):
-                remove_pid()
-                log_event(f"[OK] Daemon stopped (PID: {pid})")
-                return True
-            time.sleep(0.5)
-        # Force kill if still running
-        os.kill(pid, signal.SIGKILL)
-        remove_pid()
-        log_event(f"[OK] Daemon killed (PID: {pid})")
-        return True
-    except (OSError, ProcessLookupError):
-        remove_pid()
-        log_event("[OK] Daemon already stopped")
-        return True
+        _log("DAEMON", "Received KeyboardInterrupt, shutting down...")
     except Exception as e:
-        log_event(f"[ERROR] Failed to stop daemon: {e}")
-        return False
-
-
-def daemon_status():
-    """Check daemon status."""
-    pid = get_daemon_pid()
-    if pid:
-        log_event(f"[RUNNING] Daemon active (PID: {pid})")
-        return True
-    else:
-        log_event("[STOPPED] Daemon not running")
-        return False
-
-
-def run_once(config):
-    """Run single cycle in foreground."""
-    log_event("Running single cycle...")
-    daemon_cycle(config)
+        _log("ERROR", f"Daemon loop error: {e}")
+        traceback.print_exc()
+    finally:
+        _remove_pid()
+        _log("DAEMON", "Daemon stopped.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Agent Tracker Daemon v1.2.1")
+    parser = argparse.ArgumentParser(description="Kimi Tracker Daemon v1.3.0")
     parser.add_argument("--start", action="store_true", help="Start daemon in background")
     parser.add_argument("--stop", action="store_true", help="Stop running daemon")
     parser.add_argument("--status", action="store_true", help="Check daemon status")
-    parser.add_argument("--run-once", action="store_true", help="Run single cycle in foreground")
+    parser.add_argument("--run-once", action="store_true", help="Run single cycle and exit")
+    parser.add_argument("--visible", action="store_true", help="Use visible browser mode")
+    parser.add_argument("--interval", type=int, default=900, help="Cycle interval in seconds")
+    parser.add_argument("--max-conversations", type=int, default=3, help="Max conversations per cycle")
+    parser.add_argument("--timeout", type=int, default=600, help="Timeout per conversation in seconds")
+
     args = parser.parse_args()
 
-    config = load_config()
+    if args.status:
+        pid = _read_pid()
+        if pid and _is_running(pid):
+            print(f"[RUNNING] Daemon PID: {pid}")
+        else:
+            _remove_pid()
+            print("[STOPPED] Daemon not running")
+        return
+
+    if args.stop:
+        pid = _read_pid()
+        if pid and _is_running(pid):
+            try:
+                os.kill(pid, 15)  # SIGTERM
+                time.sleep(1)
+                if _is_running(pid):
+                    os.kill(pid, 9)  # SIGKILL
+                _remove_pid()
+                print("[OK] Daemon stopped")
+            except Exception as e:
+                print(f"[ERROR] Failed to stop daemon: {e}")
+        else:
+            _remove_pid()
+            print("[OK] Daemon not running")
+        return
 
     if args.start:
-        start_daemon(config)
-    elif args.stop:
-        stop_daemon()
-    elif args.status:
-        daemon_status()
-    elif args.run_once:
-        run_once(config)
-    else:
-        parser.print_help()
+        pid = _read_pid()
+        if pid and _is_running(pid):
+            print(f"[WARN] Daemon already running (PID: {pid})")
+            return
+
+        # Fork to background (Unix-like)
+        try:
+            pid = os.fork()
+            if pid > 0:
+                print(f"[OK] Daemon started (PID: {pid})")
+                return
+        except (OSError, AttributeError):
+            # Windows or fork not available, run in foreground
+            pass
+
+        run_daemon_loop(
+            interval_sec=args.interval,
+            visible=args.visible,
+            max_conversations=args.max_conversations,
+            per_conversation_timeout=args.timeout,
+        )
+        return
+
+    if args.run_once:
+        run_single_cycle(
+            visible=args.visible,
+            max_conversations=args.max_conversations,
+            per_conversation_timeout=args.timeout,
+        )
+        return
+
+    parser.print_help()
 
 
 if __name__ == "__main__":
