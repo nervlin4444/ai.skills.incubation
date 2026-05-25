@@ -1,12 +1,12 @@
 """
 ---
-title: Kimi Selector Probe v1.0.6
+title: Kimi Selector Probe v1.0.7
 name: kimi-agent-tracker
 description: Auto-detect working selectors for .py/.md/.json/.zip file extraction from Kimi chat pages.
-version: 1.0.6
+version: 1.0.7
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T00:05:00+08:00
+updated_at: 2026-05-26T00:10:00+08:00
 auth_config:
   provider: none
   auth_method: none
@@ -40,7 +40,7 @@ PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
 REPORT_PATH = Path.home() / "Downloads" / "selector_test_report.json"
 SCREENSHOT_DIR = Path.home() / "Downloads" / "probe_screenshots"
 
-# Multiple candidate selectors for file cards
+# File card selectors
 FILE_CARD_SELECTORS = [
     'div[class*="file-card-container"]',
     'div[class*="file-card"]',
@@ -56,44 +56,6 @@ FILE_PATTERN = re.compile(
     r'([A-Za-z0-9_.-]+[.](py|md|json|zip|env|txt|csv|yaml|yml|js|html|css|xml))',
     re.IGNORECASE
 )
-
-# Preview panel selectors (expanded)
-PREVIEW_SELECTORS = [
-    'div[class*="preview-panel"]',
-    'div[class*="file-preview"]',
-    'div[class*="preview-content"]',
-    'div[class*="drawer"]',
-    'div[class*="modal"]',
-    'div[class*="dialog"]',
-    'div[class*="overlay"]',
-    'aside[class*="preview"]',
-    'div[role="dialog"]',
-]
-
-# Content selectors
-MARKDOWN_CONTENT_SELECTOR = 'div[class*="markdown"], article[class*="markdown"]'
-MONACO_EDITOR_SELECTOR = 'div[class*="monaco-editor"]'
-
-# Download / copy button selectors (expanded)
-DOWNLOAD_SELECTORS = [
-    'button[class*="download"]',
-    'div[class*="download"]',
-    'svg[class*="download"]',
-    'i[class*="download"]',
-    'span[class*="download"]',
-    '[title*="download" i]',
-    '[aria-label*="download" i]',
-]
-
-COPY_SELECTORS = [
-    'button[class*="copy"]',
-    'div[class*="copy"]',
-    'svg[class*="copy"]',
-    'i[class*="copy"]',
-    'span[class*="copy"]',
-    '[title*="copy" i]',
-    '[aria-label*="copy" i]',
-]
 
 
 def log(msg: str) -> None:
@@ -120,7 +82,6 @@ async def safe_click(page, selector: str, timeout: int = 3000, force: bool = Tru
 
 
 async def js_click(page, selector: str) -> bool:
-    """Trigger click via JavaScript dispatchEvent."""
     try:
         result = await page.evaluate(f"""
             (() => {{
@@ -148,18 +109,7 @@ async def double_click(page, selector: str, timeout: int = 3000) -> bool:
     return False
 
 
-async def get_element_inner_text(page, selector: str, timeout: int = 3000) -> Optional[str]:
-    try:
-        el = await page.wait_for_selector(selector, timeout=timeout, state="visible")
-        if el:
-            return await el.inner_text()
-    except Exception:
-        pass
-    return None
-
-
 async def take_screenshot(page, name: str) -> Optional[str]:
-    """Save screenshot for diagnosis."""
     try:
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
         path = SCREENSHOT_DIR / f"{name}.png"
@@ -170,23 +120,132 @@ async def take_screenshot(page, name: str) -> Optional[str]:
         return None
 
 
-async def find_any_selector(page, selectors: List[str], timeout: int = 3000) -> tuple:
-    """Try multiple selectors, return (found_selector, element) or (None, None)."""
-    for sel in selectors:
-        try:
-            el = await page.wait_for_selector(sel, timeout=timeout, state="visible")
-            if el:
-                return sel, el
-        except Exception:
-            continue
-    return None, None
+async def diagnose_page(page) -> Dict[str, Any]:
+    """Use JavaScript to find all relevant elements on the page."""
+    diagnosis = {
+        "preview_panels": [],
+        "monaco_editors": [],
+        "download_buttons": [],
+        "copy_buttons": [],
+        "file_cards": [],
+        "all_classes": [],
+    }
 
-
-async def test_strategy_a1_monaco_editor_api(page) -> Dict[str, Any]:
-    result = {"strategy": "A1_monaco_editor_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
     try:
-        await page.wait_for_selector(MONACO_EDITOR_SELECTOR, timeout=5000)
+        data = await page.evaluate("""
+            (() => {
+                const result = {
+                    preview_panels: [],
+                    monaco_editors: [],
+                    download_buttons: [],
+                    copy_buttons: [],
+                    file_cards: [],
+                    all_classes: [],
+                };
+
+                // Find preview-related elements
+                document.querySelectorAll('*').forEach(el => {
+                    const cls = el.className || '';
+                    const tag = el.tagName.toLowerCase();
+                    const id = el.id || '';
+
+                    // Preview panels
+                    if (cls.includes('preview') || cls.includes('drawer') || cls.includes('panel') || 
+                        cls.includes('modal') || cls.includes('dialog') || cls.includes('overlay') ||
+                        cls.includes('file-preview') || cls.includes('preview-panel')) {
+                        result.preview_panels.push({
+                            tag: tag,
+                            id: id,
+                            class: cls.substring(0, 200),
+                            text: el.textContent?.substring(0, 100) || '',
+                            rect: el.getBoundingClientRect ? {
+                                width: el.getBoundingClientRect().width,
+                                height: el.getBoundingClientRect().height,
+                                top: el.getBoundingClientRect().top,
+                                left: el.getBoundingClientRect().left,
+                            } : null,
+                        });
+                    }
+
+                    // Monaco editors
+                    if (cls.includes('monaco') || id.includes('monaco') || 
+                        el.getAttribute('data-editor') || window.monaco) {
+                        result.monaco_editors.push({
+                            tag: tag,
+                            id: id,
+                            class: cls.substring(0, 200),
+                            has_window_monaco: !!window.monaco,
+                        });
+                    }
+
+                    // Download buttons
+                    if (cls.includes('download') || el.getAttribute('title')?.toLowerCase().includes('download') ||
+                        el.getAttribute('aria-label')?.toLowerCase().includes('download') ||
+                        el.innerHTML?.includes('download')) {
+                        result.download_buttons.push({
+                            tag: tag,
+                            id: id,
+                            class: cls.substring(0, 200),
+                            title: el.getAttribute('title') || '',
+                            aria_label: el.getAttribute('aria-label') || '',
+                            html: el.outerHTML?.substring(0, 300) || '',
+                        });
+                    }
+
+                    // Copy buttons
+                    if (cls.includes('copy') || el.getAttribute('title')?.toLowerCase().includes('copy') ||
+                        el.getAttribute('aria-label')?.toLowerCase().includes('copy')) {
+                        result.copy_buttons.push({
+                            tag: tag,
+                            id: id,
+                            class: cls.substring(0, 200),
+                            title: el.getAttribute('title') || '',
+                            html: el.outerHTML?.substring(0, 300) || '',
+                        });
+                    }
+
+                    // File cards
+                    if (cls.includes('file-card') || cls.includes('file-item') || cls.includes('attachment')) {
+                        result.file_cards.push({
+                            tag: tag,
+                            id: id,
+                            class: cls.substring(0, 200),
+                            text: el.textContent?.substring(0, 100) || '',
+                        });
+                    }
+
+                    // Collect interesting classes
+                    if (cls && cls.length > 0 && !cls.includes(' ')) {
+                        const interesting = ['preview', 'monaco', 'download', 'copy', 'file', 'card', 
+                            'panel', 'drawer', 'modal', 'dialog', 'content', 'editor'];
+                        if (interesting.some(k => cls.toLowerCase().includes(k))) {
+                            result.all_classes.push(cls);
+                        }
+                    }
+                });
+
+                return result;
+            })()
+        """)
+        return data
+    except Exception as e:
+        log(f"[WARN] DOM diagnosis failed: {e}")
+        return diagnosis
+
+
+async def test_strategy_monaco_api(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
+    """Test Monaco Editor API injection."""
+    result = {"strategy": "A_monaco_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+    start = now_ms()
+
+    # Check if window.monaco exists
+    has_monaco = await page.evaluate("() => !!window.monaco")
+    if not has_monaco:
+        result["error"] = "window.monaco not available"
+        result["duration_ms"] = now_ms() - start
+        return result
+
+    try:
         code = """
             (() => {
                 try {
@@ -194,39 +253,11 @@ async def test_strategy_a1_monaco_editor_api(page) -> Dict[str, Any]:
                     if (editors && editors.length > 0) {
                         return editors[0].getValue();
                     }
-                    return "__NO_MONACO_EDITORS__";
-                } catch (e) {
-                    return "__ERROR__: " + e.message;
-                }
-            })()
-        """
-        text = await page.evaluate(code)
-        result["duration_ms"] = now_ms() - start
-        if text and not text.startswith("__"):
-            result["passed"] = True
-            result["length"] = len(text)
-            result["sample"] = text[:200]
-        else:
-            result["error"] = text if text else "monaco editor not found"
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    return result
-
-
-async def test_strategy_a2_monaco_model_api(page) -> Dict[str, Any]:
-    result = {"strategy": "A2_monaco_model_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
-    try:
-        await page.wait_for_selector(MONACO_EDITOR_SELECTOR, timeout=5000)
-        code = """
-            (() => {
-                try {
                     const models = window.monaco?.editor?.getModels();
                     if (models && models.length > 0) {
                         return models[0].getValue();
                     }
-                    return "__NO_MONACO_MODELS__";
+                    return "__NO_MONACO__";
                 } catch (e) {
                     return "__ERROR__: " + e.message;
                 }
@@ -239,136 +270,114 @@ async def test_strategy_a2_monaco_model_api(page) -> Dict[str, Any]:
             result["length"] = len(text)
             result["sample"] = text[:200]
         else:
-            result["error"] = text if text else "monaco models not found"
+            result["error"] = text if text else "monaco not accessible"
     except Exception as e:
         result["duration_ms"] = now_ms() - start
         result["error"] = str(e)
     return result
 
 
-async def test_strategy_a3_copy_button_clipboard(page) -> Dict[str, Any]:
-    result = {"strategy": "A3_copy_button_clipboard", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+async def test_strategy_preview_dom(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract text from preview panel using diagnosed selectors."""
+    result = {"strategy": "B_preview_dom", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
-    try:
-        sel, _ = await find_any_selector(page, COPY_SELECTORS, timeout=3000)
-        if not sel:
-            result["error"] = "copy button not found"
-            result["duration_ms"] = now_ms() - start
-            return result
-        clicked = await safe_click(page, sel, timeout=3000)
-        if not clicked:
-            result["error"] = "copy button click failed"
-            result["duration_ms"] = now_ms() - start
-            return result
-        await asyncio.sleep(1.0)
+
+    # Try selectors from diagnosis
+    preview_selectors = []
+    for p in diagnosis.get("preview_panels", []):
+        cls = p.get("class", "")
+        if cls:
+            # Build selector from class
+            classes = cls.split()
+            if classes:
+                preview_selectors.append(f'{p["tag"]}.{classes[0]}')
+
+    # Also try generic selectors
+    preview_selectors.extend([
+        'div[class*="preview"]',
+        'div[class*="drawer"]',
+        'div[class*="panel"]',
+        'aside[class*="preview"]',
+        'div[role="dialog"]',
+    ])
+
+    for sel in preview_selectors:
         try:
-            import pyperclip
-            text = pyperclip.paste()
-            result["duration_ms"] = now_ms() - start
-            if text and len(text) > 50:
-                result["passed"] = True
-                result["length"] = len(text)
-                result["sample"] = text[:200]
-            else:
-                result["error"] = "clipboard empty or too short"
-        except ImportError:
-            result["error"] = "pyperclip not installed"
-            result["duration_ms"] = now_ms() - start
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
+            el = await page.wait_for_selector(sel, timeout=2000, state="visible")
+            if el:
+                # Try to get text from various content selectors within preview
+                content_selectors = [
+                    'pre',
+                    'code',
+                    'div[class*="content"]',
+                    'div[class*="markdown"]',
+                    'div[class*="monaco"]',
+                ]
+                for content_sel in content_selectors:
+                    try:
+                        content_el = await el.wait_for_selector(content_sel, timeout=1000)
+                        if content_el:
+                            text = await content_el.inner_text()
+                            if text and len(text) > 100:
+                                result["passed"] = True
+                                result["length"] = len(text)
+                                result["selector"] = sel
+                                result["content_selector"] = content_sel
+                                result["sample"] = text[:200]
+                                result["duration_ms"] = now_ms() - start
+                                return result
+                    except Exception:
+                        continue
+        except Exception:
+            continue
+
+    result["error"] = "no content found in preview panel"
+    result["duration_ms"] = now_ms() - start
     return result
 
 
-async def test_strategy_a4_download_button_expect(page) -> Dict[str, Any]:
-    result = {"strategy": "A4_download_button_expect", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+async def test_strategy_download_button(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
+    """Click download button and capture via global listener."""
+    result = {"strategy": "C_download_button", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
-    try:
-        sel, _ = await find_any_selector(page, DOWNLOAD_SELECTORS, timeout=3000)
-        if not sel:
-            result["error"] = "download button not found"
-            result["duration_ms"] = now_ms() - start
-            return result
-        async with page.expect_download(timeout=8000) as dl:
-            clicked = await safe_click(page, sel, timeout=3000)
-            if not clicked:
-                result["error"] = "download button click failed"
-                result["duration_ms"] = now_ms() - start
-                return result
-        download = await dl.value
-        path = await download.path()
-        if path and Path(path).exists():
-            text = Path(path).read_text(encoding="utf-8", errors="ignore")
-            result["passed"] = True
-            result["length"] = len(text)
-            result["sample"] = text[:200]
-            result["file_path"] = str(path)
-        else:
-            result["error"] = "download path not found"
-        result["duration_ms"] = now_ms() - start
-    except PlaywrightTimeout:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = "expect_download timeout (sandbox link or no download triggered)"
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    return result
 
+    # Build selectors from diagnosis
+    download_selectors = []
+    for b in diagnosis.get("download_buttons", []):
+        tag = b.get("tag", "")
+        cls = b.get("class", "").split()[0] if b.get("class") else ""
+        if tag and cls:
+            download_selectors.append(f'{tag}.{cls}')
 
-async def test_strategy_b1_preview_dom_extraction(page) -> Dict[str, Any]:
-    result = {"strategy": "B1_preview_dom_extraction", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
-    try:
-        sel, _ = await find_any_selector(page, PREVIEW_SELECTORS, timeout=5000)
-        if not sel:
-            result["error"] = "preview panel not found"
-            result["duration_ms"] = now_ms() - start
-            return result
+    download_selectors.extend([
+        'button[class*="download"]',
+        'div[class*="download"]',
+        'svg[class*="download"]',
+        '[title*="download" i]',
+        '[aria-label*="download" i]',
+    ])
 
-        selectors = [
-            MARKDOWN_CONTENT_SELECTOR,
-            'pre',
-            'code',
-            'div[class*="content"]',
-            MONACO_EDITOR_SELECTOR,
-        ]
-        for content_sel in selectors:
-            text = await get_element_inner_text(page, content_sel, timeout=2000)
-            if text and len(text) > 100:
-                result["passed"] = True
-                result["length"] = len(text)
-                result["selector_used"] = content_sel
-                result["sample"] = text[:200]
-                break
-        if not result["passed"]:
-            result["error"] = "no content found in preview panel"
-        result["duration_ms"] = now_ms() - start
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    return result
-
-
-async def test_strategy_b2_download_button_global_listener(page) -> Dict[str, Any]:
-    result = {"strategy": "B2_download_button_global_listener", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
     download_info = {"path": None}
-
     def handle_download(download):
         download_info["path"] = asyncio.create_task(download.path())
 
     page.on("download", handle_download)
     try:
-        sel, _ = await find_any_selector(page, DOWNLOAD_SELECTORS, timeout=3000)
-        if not sel:
-            result["error"] = "download button not found"
-            result["duration_ms"] = now_ms() - start
-            return result
-        clicked = await safe_click(page, sel, timeout=3000)
+        clicked = False
+        for sel in download_selectors:
+            try:
+                if await safe_click(page, sel, timeout=2000):
+                    clicked = True
+                    result["used_selector"] = sel
+                    break
+            except Exception:
+                continue
+
         if not clicked:
-            result["error"] = "download button click failed"
+            result["error"] = "no download button found or clickable"
             result["duration_ms"] = now_ms() - start
             return result
+
         await asyncio.sleep(3.0)
         if download_info["path"]:
             path = await download_info["path"]
@@ -391,133 +400,55 @@ async def test_strategy_b2_download_button_global_listener(page) -> Dict[str, An
     return result
 
 
-async def test_strategy_c1_js_click(page, card_selector: str) -> Dict[str, Any]:
-    """Try JavaScript dispatchEvent click on the card."""
-    result = {"strategy": "C1_js_click", "passed": False, "length": 0, "duration_ms": 0, "error": None}
+async def test_strategy_copy_button(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
+    """Click copy button and read clipboard."""
+    result = {"strategy": "D_copy_button", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
+
+    copy_selectors = []
+    for b in diagnosis.get("copy_buttons", []):
+        tag = b.get("tag", "")
+        cls = b.get("class", "").split()[0] if b.get("class") else ""
+        if tag and cls:
+            copy_selectors.append(f'{tag}.{cls}')
+
+    copy_selectors.extend([
+        'button[class*="copy"]',
+        'div[class*="copy"]',
+        'svg[class*="copy"]',
+        '[title*="copy" i]',
+        '[aria-label*="copy" i]',
+    ])
+
+    clicked = False
+    for sel in copy_selectors:
+        try:
+            if await safe_click(page, sel, timeout=2000):
+                clicked = True
+                result["used_selector"] = sel
+                break
+        except Exception:
+            continue
+
+    if not clicked:
+        result["error"] = "copy button not found"
+        result["duration_ms"] = now_ms() - start
+        return result
+
+    await asyncio.sleep(1.0)
     try:
-        ok = await js_click(page, card_selector)
-        if not ok:
-            result["error"] = "js click dispatch failed"
-            result["duration_ms"] = now_ms() - start
-            return result
-        await asyncio.sleep(3.0)
-        # Check if preview appeared
-        sel, _ = await find_any_selector(page, PREVIEW_SELECTORS, timeout=2000)
-        if sel:
+        import pyperclip
+        text = pyperclip.paste()
+        result["duration_ms"] = now_ms() - start
+        if text and len(text) > 50:
             result["passed"] = True
-            result["length"] = 1
-            result["preview_selector"] = sel
+            result["length"] = len(text)
+            result["sample"] = text[:200]
         else:
-            result["error"] = "preview panel did not appear after js click"
+            result["error"] = "clipboard empty or too short"
+    except ImportError:
+        result["error"] = "pyperclip not installed"
         result["duration_ms"] = now_ms() - start
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    return result
-
-
-async def test_strategy_c2_double_click(page, card_selector: str) -> Dict[str, Any]:
-    """Try double-click on the card."""
-    result = {"strategy": "C2_double_click", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
-    try:
-        ok = await double_click(page, card_selector, timeout=3000)
-        if not ok:
-            result["error"] = "double click failed"
-            result["duration_ms"] = now_ms() - start
-            return result
-        await asyncio.sleep(3.0)
-        sel, _ = await find_any_selector(page, PREVIEW_SELECTORS, timeout=2000)
-        if sel:
-            result["passed"] = True
-            result["length"] = 1
-            result["preview_selector"] = sel
-        else:
-            result["error"] = "preview panel did not appear after double click"
-        result["duration_ms"] = now_ms() - start
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    return result
-
-
-async def test_strategy_c3_child_anchor_click(page, card_selector: str) -> Dict[str, Any]:
-    """Try clicking child <a> element inside the card."""
-    result = {"strategy": "C3_child_anchor_click", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
-    try:
-        child_sel = f'{card_selector} a'
-        ok = await safe_click(page, child_sel, timeout=3000, force=True)
-        if not ok:
-            result["error"] = "child anchor click failed"
-            result["duration_ms"] = now_ms() - start
-            return result
-        await asyncio.sleep(3.0)
-        sel, _ = await find_any_selector(page, PREVIEW_SELECTORS, timeout=2000)
-        if sel:
-            result["passed"] = True
-            result["length"] = 1
-            result["preview_selector"] = sel
-        else:
-            result["error"] = "preview panel did not appear after child anchor click"
-        result["duration_ms"] = now_ms() - start
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
-    return result
-
-
-async def test_strategy_c4_extract_url_from_card(page, card_selector: str) -> Dict[str, Any]:
-    """Extract download URL directly from card HTML attributes."""
-    result = {"strategy": "C4_extract_url_from_card", "passed": False, "length": 0, "duration_ms": 0, "error": None}
-    start = now_ms()
-    try:
-        # Try to get href, data-url, or any URL from the card or its children
-        code = f"""
-            (() => {{
-                const card = document.querySelector('{card_selector}');
-                if (!card) return {{error: "card not found"}};
-
-                // Check card itself
-                let url = card.getAttribute('href') || card.getAttribute('data-url') || card.getAttribute('data-download-url');
-
-                // Check all child elements
-                if (!url) {{
-                    const links = card.querySelectorAll('a[href], [data-url], [data-download-url]');
-                    for (const link of links) {{
-                        url = link.getAttribute('href') || link.getAttribute('data-url') || link.getAttribute('data-download-url');
-                        if (url) break;
-                    }}
-                }}
-
-                // Check for onclick handlers
-                if (!url) {{
-                    const onclick = card.getAttribute('onclick');
-                    if (onclick) {{
-                        const match = onclick.match(/['"]([^'"]+)['"]/);
-                        if (match) url = match[1];
-                    }}
-                }}
-
-                return {{url: url, html: card.outerHTML.substring(0, 500)}};
-            }})()
-        """
-        data = await page.evaluate(code)
-        result["duration_ms"] = now_ms() - start
-
-        url = data.get("url") if isinstance(data, dict) else None
-        if url:
-            result["passed"] = True
-            result["length"] = len(url)
-            result["url"] = url
-            result["card_html_snippet"] = data.get("html", "")[:200]
-        else:
-            result["error"] = "no URL found in card attributes"
-            result["card_html_snippet"] = data.get("html", "")[:200] if isinstance(data, dict) else str(data)[:200]
-    except Exception as e:
-        result["duration_ms"] = now_ms() - start
-        result["error"] = str(e)
     return result
 
 
@@ -528,12 +459,10 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
     log(f"[TEST] File: {filename} (.{ext})")
 
     if not card_selector:
-        log(f"[SKIP] No selector for {filename}")
         return {"filename": filename, "ext": ext, "strategies": [], "error": "no selector"}
 
-    # Screenshot before click
+    # Screenshot before
     before_ss = await take_screenshot(page, f"{file_index:02d}_{filename}_before")
-    log(f"[TEST] Screenshot before: {before_ss}")
 
     # Try multiple click methods
     click_methods = [
@@ -547,55 +476,57 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
     click_ok = False
     used_method = None
     for method_name, method_fn in click_methods:
-        log(f"[TEST] Trying click method: {method_name}")
         try:
             ok = await method_fn()
             if ok:
                 click_ok = True
                 used_method = method_name
-                log(f"[OK] Click succeeded with: {method_name}")
+                log(f"[OK] Click succeeded: {method_name}")
                 break
         except Exception as e:
-            log(f"[WARN] Click method {method_name} failed: {e}")
+            log(f"[WARN] Click {method_name} failed: {e}")
 
     if not click_ok:
-        log(f"[WARN] All click methods failed for: {filename}")
+        log(f"[WARN] All click methods failed for {filename}")
 
-    # Wait longer for preview to appear
-    log("[TEST] Waiting 10s for preview panel...")
-    await asyncio.sleep(10.0)
+    # Wait for preview
+    log("[TEST] Waiting 8s for preview...")
+    await asyncio.sleep(8.0)
 
-    # Screenshot after click
+    # Screenshot after
     after_ss = await take_screenshot(page, f"{file_index:02d}_{filename}_after")
-    log(f"[TEST] Screenshot after: {after_ss}")
 
-    # Run strategies
+    # DOM DIAGNOSIS - Key step
+    log("[TEST] Running DOM diagnosis...")
+    diagnosis = await diagnose_page(page)
+    log(f"[DIAG] Preview panels: {len(diagnosis.get('preview_panels', []))}")
+    log(f"[DIAG] Monaco editors: {len(diagnosis.get('monaco_editors', []))}")
+    log(f"[DIAG] Download buttons: {len(diagnosis.get('download_buttons', []))}")
+    log(f"[DIAG] Copy buttons: {len(diagnosis.get('copy_buttons', []))}")
+
+    # Run strategies based on diagnosis
     strategies = []
 
-    # C-strategies first (click-related)
-    strategies.append(await test_strategy_c1_js_click(page, card_selector))
-    strategies.append(await test_strategy_c2_double_click(page, card_selector))
-    strategies.append(await test_strategy_c3_child_anchor_click(page, card_selector))
-    strategies.append(await test_strategy_c4_extract_url_from_card(page, card_selector))
+    if diagnosis.get("monaco_editors"):
+        strategies.append(await test_strategy_monaco_api(page, diagnosis))
 
-    if ext == "py":
-        strategies.append(await test_strategy_a1_monaco_editor_api(page))
-        strategies.append(await test_strategy_a2_monaco_model_api(page))
-        strategies.append(await test_strategy_a3_copy_button_clipboard(page))
-        strategies.append(await test_strategy_a4_download_button_expect(page))
-        strategies.append(await test_strategy_b1_preview_dom_extraction(page))
-        strategies.append(await test_strategy_b2_download_button_global_listener(page))
-    elif ext == "md":
-        strategies.append(await test_strategy_b1_preview_dom_extraction(page))
-        strategies.append(await test_strategy_b2_download_button_global_listener(page))
-        strategies.append(await test_strategy_a4_download_button_expect(page))
-        strategies.append(await test_strategy_a3_copy_button_clipboard(page))
-    else:
-        strategies.append(await test_strategy_a4_download_button_expect(page))
-        strategies.append(await test_strategy_b2_download_button_global_listener(page))
-        strategies.append(await test_strategy_b1_preview_dom_extraction(page))
+    if diagnosis.get("preview_panels"):
+        strategies.append(await test_strategy_preview_dom(page, diagnosis))
 
-    # Try to close preview
+    if diagnosis.get("download_buttons"):
+        strategies.append(await test_strategy_download_button(page, diagnosis))
+
+    if diagnosis.get("copy_buttons"):
+        strategies.append(await test_strategy_copy_button(page, diagnosis))
+
+    # If no elements diagnosed, try generic strategies anyway
+    if not strategies:
+        strategies.append(await test_strategy_monaco_api(page, diagnosis))
+        strategies.append(await test_strategy_preview_dom(page, diagnosis))
+        strategies.append(await test_strategy_download_button(page, diagnosis))
+        strategies.append(await test_strategy_copy_button(page, diagnosis))
+
+    # Close preview
     try:
         await page.keyboard.press("Escape")
         await asyncio.sleep(0.5)
@@ -607,6 +538,15 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
         "ext": ext,
         "click_method_used": used_method,
         "screenshots": {"before": before_ss, "after": after_ss},
+        "diagnosis": {
+            "preview_panel_count": len(diagnosis.get("preview_panels", [])),
+            "monaco_editor_count": len(diagnosis.get("monaco_editors", [])),
+            "download_button_count": len(diagnosis.get("download_buttons", [])),
+            "copy_button_count": len(diagnosis.get("copy_buttons", [])),
+            "preview_panel_first_class": diagnosis.get("preview_panels", [{}])[0].get("class", "") if diagnosis.get("preview_panels") else "",
+            "monaco_editor_first_class": diagnosis.get("monaco_editors", [{}])[0].get("class", "") if diagnosis.get("monaco_editors") else "",
+            "download_button_first_class": diagnosis.get("download_buttons", [{}])[0].get("class", "") if diagnosis.get("download_buttons") else "",
+        },
         "strategies": strategies,
     }
 
@@ -626,7 +566,7 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
             break
 
     if not all_cards:
-        log("[SCAN] No file cards found with any selector")
+        log("[SCAN] No file cards found")
         return []
 
     log(f"[SCAN] Using selector: {used_selector}")
@@ -639,14 +579,10 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
                 continue
 
             full_text = full_text.strip()
-            log(f"[SCAN] Card {idx} text: '{full_text[:80]}...'")
-
             match = FILE_PATTERN.search(full_text)
             if match:
                 filename = match.group(1)
                 ext = match.group(2).lower()
-                log(f"[SCAN] Card {idx} extracted filename: {filename} (.{ext})")
-
                 selector = f'{used_selector}:nth-of-type({idx + 1})'
 
                 all_files.append({
@@ -656,12 +592,10 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
                     "index": idx,
                     "card_text": full_text[:100],
                 })
-            else:
-                log(f"[SCAN] Card {idx} no filename pattern found in text")
         except Exception as e:
             log(f"[WARN] Error processing card {idx}: {e}")
 
-    log(f"[SCAN] Extracted {len(all_files)} valid files from {len(all_cards)} cards")
+    log(f"[SCAN] Extracted {len(all_files)} valid files")
 
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for f in all_files:
@@ -675,7 +609,7 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
         if ext in grouped:
             count = min(max_per_type, len(grouped[ext]))
             selected.extend(grouped[ext][:count])
-            log(f"[SELECT] {ext}: selected {count}/{len(grouped[ext])}")
+            log(f"[SELECT] {ext}: {count}/{len(grouped[ext])}")
 
     for ext, items in grouped.items():
         if ext not in ("py", "md", "json", "zip"):
@@ -687,7 +621,7 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
 
 async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> Dict[str, Any]:
     report = {
-        "probe_version": "1.0.6",
+        "probe_version": "1.0.7",
         "url": url,
         "mode": "visible" if visible else "headless",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -709,7 +643,7 @@ async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> D
                 )
                 page = context.pages[0] if context.pages else await context.new_page()
             else:
-                log("[MAIN] No persistent profile found, launching fresh browser")
+                log("[MAIN] No persistent profile, launching fresh browser")
                 browser = await p.chromium.launch(
                     headless=not visible,
                     args=["--disable-blink-features=AutomationControlled"] if visible else [],
@@ -737,7 +671,7 @@ async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> D
 
         files = await scan_files(page, max_per_type=max_per_type)
         if not files:
-            log("[WARN] No files found on page")
+            log("[WARN] No files found")
             report["error"] = "No files found"
             return report
 
@@ -770,10 +704,10 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
         REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\n[REPORT] Saved to: {REPORT_PATH}")
     except Exception as e:
-        print(f"\n[REPORT] Failed to save file: {e}")
+        print(f"\n[REPORT] Failed to save: {e}")
 
     print("\n" + "=" * 60)
-    print("FULL JSON REPORT (copy-paste this if file not found)")
+    print("FULL JSON REPORT")
     print("=" * 60)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     print("=" * 60)
@@ -790,18 +724,21 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
     print("=" * 60)
 
     for f in report.get("files_tested", []):
-        print(f"\nFile: {f['filename']} (clicked via: {f.get('click_method_used', 'none')})")
+        diag = f.get("diagnosis", {})
+        print(f"\nFile: {f['filename']} (clicked: {f.get('click_method_used', 'none')})")
+        print(f"  DOM: preview={diag.get('preview_panel_count',0)} monaco={diag.get('monaco_editor_count',0)} download={diag.get('download_button_count',0)} copy={diag.get('copy_button_count',0)}")
+        print(f"  Preview class: {diag.get('preview_panel_first_class','')[:60]}")
+        print(f"  Monaco class: {diag.get('monaco_editor_first_class','')[:60]}")
+        print(f"  Download class: {diag.get('download_button_first_class','')[:60]}")
         for s in f.get("strategies", []):
             status = "PASS" if s.get("passed") else "FAIL"
             print(f"  [{status}] {s['strategy']}: len={s.get('length', 0)} duration={s.get('duration_ms', 0)}ms")
             if s.get("error"):
                 print(f"       error: {s['error'][:80]}")
-            if s.get("url"):
-                print(f"       url: {s['url'][:80]}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.6")
+    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.7")
     parser.add_argument("--url", required=True, help="Kimi chat URL to probe")
     parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
     parser.add_argument("--max-per-type", type=int, default=2, help="Max files to test per extension type")
