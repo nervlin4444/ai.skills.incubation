@@ -1,12 +1,12 @@
 """
 ---
-title: Kimi Selector Probe v1.0.3
+title: Kimi Selector Probe v1.0.4
 name: kimi-agent-tracker
 description: Auto-detect working selectors for .py/.md/.json/.zip file extraction from Kimi chat pages.
-version: 1.0.3
+version: 1.0.4
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-25T23:00:00+08:00
+updated_at: 2026-05-25T23:25:00+08:00
 auth_config:
   provider: none
   auth_method: none
@@ -24,7 +24,7 @@ import sys
 import time
 import argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 try:
@@ -38,7 +38,7 @@ except ImportError:
 PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
 REPORT_PATH = Path.home() / "Downloads" / "selector_test_report.json"
 
-# Selectors (ordered by specificity)
+# Selectors
 FILE_CARD_SELECTOR = 'div[class*="file-card-container"]'
 FILE_NAME_SELECTOR = 'div[class*="file-card-info-name"]'
 FILE_EXT_SELECTOR = 'div[class*="file-card-info-ext"]'
@@ -50,7 +50,7 @@ COPY_ICON_SELECTOR = 'button[class*="copy"], div[class*="copy"], svg[class*="cop
 
 
 def log(msg: str) -> None:
-    ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     print(f"[{ts}] {msg}", flush=True)
 
 
@@ -59,7 +59,6 @@ def now_ms() -> int:
 
 
 async def safe_click(page, selector: str, timeout: int = 3000) -> bool:
-    """Click with force=True to bypass pointer-events interception."""
     try:
         el = await page.wait_for_selector(selector, timeout=timeout, state="visible")
         if el:
@@ -68,16 +67,6 @@ async def safe_click(page, selector: str, timeout: int = 3000) -> bool:
     except Exception:
         pass
     return False
-
-
-async def get_element_text(page, selector: str, timeout: int = 3000) -> Optional[str]:
-    try:
-        el = await page.wait_for_selector(selector, timeout=timeout, state="visible")
-        if el:
-            return await el.text_content()
-    except Exception:
-        pass
-    return None
 
 
 async def get_element_inner_text(page, selector: str, timeout: int = 3000) -> Optional[str]:
@@ -90,24 +79,11 @@ async def get_element_inner_text(page, selector: str, timeout: int = 3000) -> Op
     return None
 
 
-async def get_element_inner_html(page, selector: str, timeout: int = 3000) -> Optional[str]:
-    try:
-        el = await page.wait_for_selector(selector, timeout=timeout, state="visible")
-        if el:
-            return await el.inner_html()
-    except Exception:
-        pass
-    return None
-
-
 async def test_strategy_a1_monaco_editor_api(page) -> Dict[str, Any]:
-    """Inject JS to call monaco.editor.getEditors()[0].getValue()"""
     result = {"strategy": "A1_monaco_editor_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
     try:
-        # Wait for monaco editor to appear in preview panel
         await page.wait_for_selector(MONACO_EDITOR_SELECTOR, timeout=5000)
-        # Inject extraction script
         code = """
             (() => {
                 try {
@@ -136,7 +112,6 @@ async def test_strategy_a1_monaco_editor_api(page) -> Dict[str, Any]:
 
 
 async def test_strategy_a2_monaco_model_api(page) -> Dict[str, Any]:
-    """Inject JS to call monaco.editor.getModels()[0].getValue()"""
     result = {"strategy": "A2_monaco_model_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
     try:
@@ -169,7 +144,6 @@ async def test_strategy_a2_monaco_model_api(page) -> Dict[str, Any]:
 
 
 async def test_strategy_a3_copy_button_clipboard(page) -> Dict[str, Any]:
-    """Click copy button and read clipboard via pyperclip."""
     result = {"strategy": "A3_copy_button_clipboard", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
     try:
@@ -199,11 +173,9 @@ async def test_strategy_a3_copy_button_clipboard(page) -> Dict[str, Any]:
 
 
 async def test_strategy_a4_download_button_expect(page) -> Dict[str, Any]:
-    """Click download icon and capture via expect_download."""
     result = {"strategy": "A4_download_button_expect", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
     try:
-        # Try to find and click download button in preview panel
         async with page.expect_download(timeout=8000) as dl:
             clicked = await safe_click(page, DOWNLOAD_ICON_SELECTOR, timeout=3000)
             if not clicked:
@@ -231,13 +203,10 @@ async def test_strategy_a4_download_button_expect(page) -> Dict[str, Any]:
 
 
 async def test_strategy_b1_preview_dom_extraction(page) -> Dict[str, Any]:
-    """Extract text from preview panel markdown/monaco/pre elements."""
     result = {"strategy": "B1_preview_dom_extraction", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
     try:
-        # Wait for preview panel
         await page.wait_for_selector(PREVIEW_PANEL_SELECTOR, timeout=5000)
-        # Try multiple content selectors in order of preference
         selectors = [
             MARKDOWN_CONTENT_SELECTOR,
             'pre',
@@ -263,7 +232,6 @@ async def test_strategy_b1_preview_dom_extraction(page) -> Dict[str, Any]:
 
 
 async def test_strategy_b2_download_button_global_listener(page) -> Dict[str, Any]:
-    """Use page.on('download') global listener + click download button."""
     result = {"strategy": "B2_download_button_global_listener", "passed": False, "length": 0, "duration_ms": 0, "error": None}
     start = now_ms()
     download_info = {"path": None}
@@ -301,12 +269,10 @@ async def test_strategy_b2_download_button_global_listener(page) -> Dict[str, An
 
 
 async def test_file(page, file_info: Dict[str, Any], visible: bool) -> Dict[str, Any]:
-    """Test all strategies for a single file."""
     filename = file_info.get("filename", "unknown")
     ext = file_info.get("ext", "")
     log(f"[TEST] File: {filename} (.{ext})")
 
-    # Click the file card to open preview
     card_selector = file_info.get("selector")
     if not card_selector:
         log(f"[SKIP] No selector for {filename}")
@@ -317,11 +283,10 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool) -> Dict[str,
         log(f"[WARN] Failed to click file card: {filename}")
     else:
         log(f"[OK] Clicked file card: {filename}")
-        await asyncio.sleep(2.0)  # Wait for preview panel to open
+        await asyncio.sleep(2.0)
 
     strategies = []
 
-    # For .py files: test Monaco API strategies first
     if ext == "py":
         strategies.append(await test_strategy_a1_monaco_editor_api(page))
         strategies.append(await test_strategy_a2_monaco_model_api(page))
@@ -329,19 +294,16 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool) -> Dict[str,
         strategies.append(await test_strategy_a4_download_button_expect(page))
         strategies.append(await test_strategy_b1_preview_dom_extraction(page))
         strategies.append(await test_strategy_b2_download_button_global_listener(page))
-    # For .md files: test DOM extraction and download button
     elif ext == "md":
         strategies.append(await test_strategy_b1_preview_dom_extraction(page))
         strategies.append(await test_strategy_b2_download_button_global_listener(page))
         strategies.append(await test_strategy_a4_download_button_expect(page))
         strategies.append(await test_strategy_a3_copy_button_clipboard(page))
-    # For .json / .zip / others: test download strategies
     else:
         strategies.append(await test_strategy_a4_download_button_expect(page))
         strategies.append(await test_strategy_b2_download_button_global_listener(page))
         strategies.append(await test_strategy_b1_preview_dom_extraction(page))
 
-    # Close preview if possible (look for close button or press Escape)
     try:
         await page.keyboard.press("Escape")
         await asyncio.sleep(0.5)
@@ -356,7 +318,6 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool) -> Dict[str,
 
 
 async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
-    """Scan page for file cards, group by extension, return up to max_per_type per extension."""
     log("[SCAN] Scanning for file cards...")
     file_cards = await page.query_selector_all(FILE_CARD_SELECTOR)
     log(f"[SCAN] Found {len(file_cards)} file card elements")
@@ -364,7 +325,6 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
     all_files = []
     for idx, card in enumerate(file_cards):
         try:
-            # Extract filename from the card
             name_el = await card.query_selector(FILE_NAME_SELECTOR)
             ext_el = await card.query_selector(FILE_EXT_SELECTOR)
             name_text = await name_el.text_content() if name_el else None
@@ -373,20 +333,16 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
             if not name_text:
                 continue
 
-            # Clean up: some sites show extension separately
             filename = name_text.strip()
             if ext_text:
                 ext = ext_text.strip().lower().replace(".", "")
             else:
                 ext = Path(filename).suffix.lstrip(".").lower()
 
-            # Skip if looks like a label/tag rather than filename (heuristic)
             if len(filename) <= 4 and filename.upper() in ("MD", "PY", "JSON", "ZIP", "ENV", "TXT", "CSV"):
                 log(f"[SKIP] Element {idx} looks like extension tag: '{filename}', skipping")
                 continue
 
-            # Build a unique selector for this card
-            # Use nth-of-type as fallback if no stable class
             selector = f'{FILE_CARD_SELECTOR}:nth-of-type({idx + 1})'
 
             all_files.append({
@@ -400,7 +356,6 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
 
     log(f"[SCAN] Filtered to {len(all_files)} valid files")
 
-    # Group by extension and limit per type
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for f in all_files:
         ext = f["ext"]
@@ -415,7 +370,6 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
             selected.extend(grouped[ext][:count])
             log(f"[SELECT] {ext}: selected {count}/{len(grouped[ext])}")
 
-    # Add any remaining types if we have room
     for ext, items in grouped.items():
         if ext not in ("py", "md", "json", "zip"):
             count = min(max_per_type, len(items))
@@ -426,12 +380,13 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
 
 async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> Dict[str, Any]:
     report = {
-        "probe_version": "1.0.3",
+        "probe_version": "1.0.4",
         "url": url,
         "mode": "visible" if visible else "headless",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "files_tested": [],
         "summary": {},
+        "error": None,
     }
 
     async with async_playwright() as p:
@@ -465,9 +420,10 @@ async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> D
 
         try:
             log(f"[MAIN] Navigating to {url}")
-            await page.goto(url, wait_until="networkidle", timeout=60000)
-            log("[MAIN] Page loaded")
-            await asyncio.sleep(3.0)  # Extra wait for dynamic content
+            # FIX: Use domcontentloaded instead of networkidle to avoid WebSocket heartbeat timeout
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            log("[MAIN] DOM loaded, waiting for dynamic content...")
+            await asyncio.sleep(5.0)  # Extra wait for React/Vue to render file cards
         except Exception as e:
             log(f"[FATAL] Navigation failed: {e}")
             report["error"] = f"Navigation failed: {e}"
@@ -501,17 +457,47 @@ async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> D
             "success_rate": round(passed_strategies / total_strategies, 2) if total_strategies > 0 else 0,
         }
 
-        # Save report
-        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-        log(f"[DONE] Report saved to: {REPORT_PATH}")
-
         await context.close()
         return report
 
 
+def save_and_print_report(report: Dict[str, Any]) -> None:
+    """Save report to file AND print full JSON to console."""
+    # Save to file
+    try:
+        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"\n[REPORT] Saved to: {REPORT_PATH}")
+    except Exception as e:
+        print(f"\n[REPORT] Failed to save file: {e}")
+
+    # Print full JSON to console (so user can copy-paste even if file fails)
+    print("\n" + "=" * 60)
+    print("FULL JSON REPORT (copy-paste this if file not found)")
+    print("=" * 60)
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    print("=" * 60)
+
+    # Print human-readable summary
+    print("\n" + "=" * 60)
+    print("PROBE SUMMARY")
+    print("=" * 60)
+    print(f"Files tested: {report['summary'].get('files_tested', 0)}")
+    print(f"Strategies passed: {report['summary'].get('strategies_passed', 0)}/{report['summary'].get('total_strategies_attempted', 0)}")
+    print(f"Success rate: {report['summary'].get('success_rate', 0)}")
+    if report.get("error"):
+        print(f"Error: {report['error']}")
+    print("=" * 60)
+
+    for f in report.get("files_tested", []):
+        print(f"\nFile: {f['filename']}")
+        for s in f.get("strategies", []):
+            status = "PASS" if s.get("passed") else "FAIL"
+            print(f"  [{status}] {s['strategy']}: len={s.get('length', 0)} duration={s.get('duration_ms', 0)}ms error={s.get('error', 'None')}")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.3")
+    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.4")
     parser.add_argument("--url", required=True, help="Kimi chat URL to probe")
     parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
     parser.add_argument("--max-per-type", type=int, default=2, help="Max files to test per extension type")
@@ -521,23 +507,7 @@ def main():
     log(f"[MAIN] Mode: {'visible' if args.visible else 'headless'}, max_per_type: {args.max_per_type}")
 
     report = asyncio.run(run_probe(args.url, visible=args.visible, max_per_type=args.max_per_type))
-
-    # Print summary
-    print("\n" + "=" * 60)
-    print("PROBE SUMMARY")
-    print("=" * 60)
-    print(f"Files tested: {report['summary'].get('files_tested', 0)}")
-    print(f"Strategies passed: {report['summary'].get('strategies_passed', 0)}/{report['summary'].get('total_strategies_attempted', 0)}")
-    print(f"Success rate: {report['summary'].get('success_rate', 0)}")
-    print(f"Report: {REPORT_PATH}")
-    print("=" * 60)
-
-    # Print per-file results
-    for f in report.get("files_tested", []):
-        print(f"\nFile: {f['filename']}")
-        for s in f.get("strategies", []):
-            status = "PASS" if s.get("passed") else "FAIL"
-            print(f"  [{status}] {s['strategy']}: len={s.get('length', 0)} duration={s.get('duration_ms', 0)}ms error={s.get('error', 'None')}")
+    save_and_print_report(report)
 
 
 if __name__ == "__main__":
