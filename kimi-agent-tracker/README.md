@@ -1,204 +1,113 @@
 ---
-title: "Kimi Agent Tracker - Usage Guide"
-name: "kimi-agent-tracker"
-description: "Kimi platform automation tracker human-readable guide. Handles conversation list extraction, sandbox file download, SHA256 deduplication archive. Includes standalone daemon mode. v1.0.2 hotfix: F-001 login validation false-positive fixed, loop detection for login completion, diagnose directory isolation."
-version: "1.0.2"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-25T00:10:00+08:00"
-fixes: [24]
+title: Kimi Agent Tracker Project Overview
+name: kimi-agent-tracker
+description: Playwright-based automation suite for Kimi AI platform. Extracts conversation metadata and downloads file attachments incrementally.
+version: v1.3.0
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-25T16:53:00+0800
+fixes: []
 auth_config:
-  provider: "local"
-  auth_method: "none"
-  token_env_var: "N/A"
-  env_file_path: "{baseDir}/.env"
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: .env
 file_mapping:
   local_path: "{baseDir}/README.md"
   github_path: "kimi-agent-tracker/README.md"
 ---
 
-# Kimi Agent Tracker
+# Kimi Agent Tracker v1.3.0
 
-Version: 1.0.2 | Updated: 2026-05-25
-Core Fix: v1.0.2 — F-001 login validation false-positive fixed. validate_login() now uses avatar/conversation-item selectors instead of sidebar container. login() uses loop detection instead of blind sleep.
+Playwright-based automation suite for the Kimi AI platform. Extracts conversation metadata and downloads file attachments using an incremental pipeline.
 
-## Table of Contents
+## Architecture
 
-1. [Background & Motivation](#1-background--motivation)
-2. [Architecture Overview](#2-architecture-overview)
-3. [File Inventory](#3-file-inventory)
-4. [Installation](#4-installation)
-5. [Usage Guide](#5-usage-guide)
-6. [Download Mechanisms](#6-download-mechanisms)
-7. [Deduplication & File Handling](#7-deduplication--file-handling)
-8. [Diagnostic Mode](#8-diagnostic-mode)
-9. [Sandbox Version Behavior](#9-sandbox-version-behavior)
-10. [Daemon Mode](#10-daemon-mode)
-11. [Troubleshooting](#11-troubleshooting)
-12. [Directory Structure](#12-directory-structure)
-13. [Version History](#13-version-history)
+```
++---------------+     +---------------+     +---------------+     +---------------+
+|  DISCOVERY    | --> | DEDUPLICATE   | --> |   DOWNLOAD    | --> |    RECORD     |
+|  (Scan page)  |     | (Check state) |     | (Strategy)  |     | (Update JSON) |
++---------------+     +---------------+     +---------------+     +---------------+
+```
 
-## 1. Background & Motivation
+## Components
 
-When collaborating with Kimi AI long-term, files generated across multiple conversations (skill packs, reports, scripts) need automated collection. This tracker encapsulates Kimi-specific logic as an independent skill, depending on chrome-playwright-connector for browser capabilities.
+| Component | File | Purpose |
+|---|---|---|
+| Login Manager | `scripts/kimi_login_manager.py` | Persistent browser profile auth |
+| Conversation Lister | `scripts/kimi_conversation_lister.py` | Extract conversation list |
+| File Downloader | `scripts/kimi_downloader.py` | Incremental file download pipeline |
+| Tracker Daemon | `scripts/tracker_daemon.py` | Background scheduler |
+| Config | `.config/kimi_tracker_config.json` | Unified configuration |
 
-## 2. Architecture Overview
+## Download Strategy by File Type
 
-    +-------------------+        +-------------------------+
-    | kimi-agent-tracker|  -->   | chrome-playwright-      |
-    | (Kimi logic)      |        | connector               |
-    +-------------------+        | (Generic browser)       |
-                                 +-------------------------+
-                                          |
-                                          v
-                                 +-------------------------+
-                                 | kimi-agent-tracker/     |
-                                 | ├── downloads/          |
-                                 | ├── .duplicate/         |
-                                 | ├── .config/            |
-                                 | │   └── downloads.json  |
-                                 | ├── .logs/              |
-                                 | │   └── diagnose/       |
-                                 | └── scripts/            |
-                                 +-------------------------+
+| File Type | Strategy | Mode | Avg Speed |
+|---|---|---|---|
+| `.md`, `.txt`, `.json`, `.csv`, `.yml`, `.yaml`, `.html`, `.js`, `.css`, `.xml`, `.sh`, `.bash` | Anchor Injection | Headless | ~8s |
+| `.py` | Preview Extraction | Headless (extended wait) | ~30-60s |
+| `.zip`, `.pdf`, `.png`, `.jpg`, `.mp3`, `.mp4`, `.doc`, `.xls`, `.ppt`, `.rar`, `.7z`, `.tar`, `.gz` | Visible Fallback | Visible (off-screen) | ~15-30s |
 
-## 3. File Inventory
+## State Files
 
-| File | Version | Purpose |
-|------|---------|---------|
-| kimi_login_manager.py | v1.0.2 | SMS login and persistent profile maintenance |
-| kimi_conversation_lister.py | v1.0.2 | Conversation list extraction from sidebar |
-| kimi_downloader.py | v1.0.2 | Auto-download core |
-| state_manager.py | v1.0.2 | SHA256 deduplication and state tracking |
-| tracker_daemon.py | v1.0.2 | Standalone daemon |
+| File | Purpose | Format |
+|---|---|---|
+| `downloads.json` | Record of successfully downloaded files (SHA256 keyed) | JSON |
+| `pending.json` | Queue of discovered but not-yet-downloaded files | JSON |
+| `conversations.json` | Cached conversation list from Kimi | JSON |
 
-## 4. Installation
+## Incremental Pipeline
 
-    # 1. Install dependencies (skip if connector already installed)
-    /Users/kevinlinz/.workbuddy/binaries/python/versions/3.13.12/bin/python3 -m pip install playwright --user
-    /Users/kevinlinz/.workbuddy/binaries/python/versions/3.13.12/bin/python3 -m playwright install chromium
+1. **Discovery**: Scan conversation page for all file links.
+2. **Deduplication**: Compare against `downloads.json` (already downloaded) and `pending.json` (in queue).
+3. **Queue**: New files are added to `pending.json`.
+4. **Process**: Download pending files using type-appropriate strategy.
+5. **Record**: On success, move from `pending.json` to `downloads.json`.
 
-    # 2. Ensure connector is deployed in sibling directory
-    ls ../chrome-playwright-connector/scripts/browser_connector.py
+## Version History
 
-## 5. Usage Guide
+| Version | Key Changes |
+|---|---|
+| v1.0.0 | Basic login + conversation listing |
+| v1.1.0 | File link discovery |
+| v1.1.1 | nest_asyncio fix, expand_path fix |
+| v1.1.2 | Overlay dismissal, sandbox:// direct download |
+| v1.1.3 | Screenshot diagnostics, sidebar selector removal |
+| v1.1.4 | Mouse simulation (scroll + hover + click) |
+| v1.1.5 | Physical mouse move/down/up |
+| v1.1.6 | scrollIntoView + position re-query |
+| v1.1.7 | in_viewport check, JS click fallback |
+| v1.1.8 | Five-strategy degradation (anchor / mouse / keyboard / JS / fetch) |
+| v1.2.0 | Content extraction from preview panel (DOM-based) |
+| v1.2.1 | Config-driven extraction, size validation, sidebar removal |
+| v1.3.0 | **Incremental download pipeline** (pending.json + downloads.json + dedup + categorized strategies) |
 
-### Step 1: Login (one-time)
+## Requirements
 
-    python scripts/kimi_login_manager.py --visible --stay-open 300
+- Python 3.8+
+- Playwright (`python3 -m pip install playwright`)
+- nest_asyncio (`python3 -m pip install nest_asyncio`)
+- Chromium browser profile at `~/.kimi_auth/browser_profile_chromium/`
 
-### Step 2: Validate Login
+## Quick Start
 
-    python scripts/kimi_login_manager.py --validate
+```bash
+# 1. Validate login
+python3 scripts/kimi_login_manager.py --validate
 
-### Step 3: Extract Conversation List
+# 2. Discover files (add to pending, do not download)
+python3 scripts/kimi_downloader.py --url "https://www.kimi.com/chat/CONV_ID" --discover-only
 
-    python scripts/kimi_conversation_lister.py --count 4 --visible
+# 3. Process pending queue
+python3 scripts/kimi_downloader.py --process-pending
 
-### Step 4: Batch Download (single)
+# 4. Or full pipeline in one command
+python3 scripts/kimi_downloader.py --url "https://www.kimi.com/chat/CONV_ID"
 
-    python scripts/kimi_downloader.py --from-list .config/conversations.json --visible
+# 5. Start daemon
+python3 scripts/tracker_daemon.py --start
+```
 
-### Step 5: Start Daemon (auto-timed)
+## License
 
-    python scripts/tracker_daemon.py --start
-
-    # Check status
-    python scripts/tracker_daemon.py --status
-
-    # Stop daemon
-    python scripts/tracker_daemon.py --stop
-
-    # Single test (foreground)
-    python scripts/tracker_daemon.py --run-once
-
-## 6. Download Mechanisms
-
-| File Type | Kimi Behavior | Agent Strategy |
-|-----------|---------------|----------------|
-| .zip, .py, .csv | Direct browser download | expect_download() capture |
-| .md, .txt | Preview panel -> download icon -> format select | Direct click first + retry + preview panel fallback |
-
-## 7. Deduplication & File Handling
-
-- SHA256 deduplication, state saved in .config/downloads.json
-- Duplicate files moved to .duplicate/, NEVER deleted
-- Unique filename mechanism (_1, _2, _3...)
-
-## 8. Diagnostic Mode
-
-When extraction or download fails, diagnostic results print DIRECTLY to terminal.
-Success/failure visible at a glance.
-
-    Example output:
-    [DIAGNOSE] Conversation: "POS Terminal Fix"
-    [OK]     Sidebar detected: 12 nodes
-    [OK]     Download: skill.py (SHA256: a1b2c3...)
-    [FAIL]   Download: report.md (timeout)
-    [INFO]   HTML dump: .logs/diagnose/sidebar_20260524_105600.html
-
-Diagnostic HTML dumps saved to .logs/diagnose/ (skill-level folder).
-
-## 9. Sandbox Version Behavior
-
-Kimi does NOT retain historical versions. Same sandbox path in different conversations always points to the latest version.
-
-    00:00 Conversation A -> skill.py (v1)
-    00:25 Conversation B -> skill.py (v2) -> overwrites same path
-    00:35 Conversation C -> skill.py (v3) -> overwrites again
-
-"Old overwrites new" risk does NOT exist in Kimi -> download direction.
-
-## 10. Daemon Mode
-
-Standalone daemon, no external cron/launchd needed.
-
-| Parameter | Description |
-|-----------|-------------|
-| --start | Background start |
-| --stop | Stop |
-| --status | Terminal status output |
-| --run-once | Foreground single execution |
-| --interval N | Cycle interval (default 900s) |
-| --count N | Conversations per extraction (default 10) |
-
-Status output example:
-    [DAEMON] Status: RUNNING
-    [DAEMON] PID: 12345
-    [DAEMON] Last cycle: 2026-05-24 10:30:00
-    [DAEMON] Downloaded: 27 | Duplicates: 8
-
-## 11. Troubleshooting
-
-| Symptom | Cause | Solution |
-|---------|-------|----------|
-| Login failed / validate returns True but not logged in | validate_login() false-positive (sidebar skeleton) | v1.0.2 fixed: uses avatar selector. If still fails, use --force-login |
-| Browser closes before SMS input | stay_open too short or blind sleep | v1.0.2 fixed: loop detection. Use --stay-open 300 |
-| No conversations | Sidebar DOM changed | Use --diagnose, check .logs/diagnose/ |
-| Download timeout | expect_download missed | Check .logs/ for retry record |
-| Daemon already running | PID file exists | Check --status or --stop |
-| ModuleNotFoundError: playwright | Managed Python missing package | Run: python3 -m pip install playwright --user |
-
-## 12. Directory Structure
-
-    {baseDir}/
-    ├── .logs/
-    │   └── diagnose/
-    ├── .config/
-    │   ├── downloads.json
-    │   └── conversations.json
-    ├── downloads/
-    ├── .duplicate/
-    └── scripts/
-
-## 13. Version History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.2 | 2026-05-25 | Hotfix: F-001 validate_login() false-positive fixed (avatar selector). login() loop detection replaces blind sleep. Diagnose files saved to skill-level .logs/diagnose/. Added playwright dependency check. |
-| 1.0.1 | 2026-05-24 | Fix Issue #24: Synchronize all script versions, add version column to file inventory table |
-| 1.0.0 | 2026-05-21 | Initial version |
-
-## Author
-
-Kevin Lin (nervlin4444)
+MIT License - nervlin4444/ai.skills.incubation
