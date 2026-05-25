@@ -13,20 +13,20 @@
   },
   {
     "index": 2,
+    "title": "這個是記錄對話的技能, 幫我了解吓我需要改寫",
+    "url": "https://www.kimi.com/chat/19e5cf97-8802-8fae-8000-095557164cd4?chat_enter_method=history",
+    "pinned": false
+  },
+  {
+    "index": 3,
     "title": "重构难点整理",
     "url": "https://www.kimi.com/chat/19e5a7fa-8802-89eb-8000-0955be7768c3?chat_enter_method=history",
     "pinned": false
   },
   {
-    "index": 3,
+    "index": 4,
     "title": "新 repo_issue_tester",
     "url": "https://www.kimi.com/chat/19e5812a-0d72-8f3a-8000-0955e633f977?chat_enter_method=history",
-    "pinned": false
-  },
-  {
-    "index": 4,
-    "title": "skill improving",
-    "url": "https://www.kimi.com/chat/19e55d00-75f2-8740-8000-095583f0caec?chat_enter_method=history",
     "pinned": false
   }
 ]
