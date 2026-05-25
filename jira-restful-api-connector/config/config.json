@@ -1,0 +1,29 @@
+{
+  "timeout": 60,
+  "retry_max": 3,
+  "api_version": 2,
+  "rate_limit": {
+    "backoff_strategy": "exponential",
+    "backoff_max": 3
+  },
+  "_meta": {
+    "title": "jira-restful-api-connector config",
+    "name": "jira-restful-api-connector",
+    "description": "Skill-level configuration for timeout, retry strategy, and API version.",
+    "version": "v0.1.2",
+    "github_repository": "nervlin4444/ai.skills.incubation",
+    "target_branch": "main",
+    "updated_at": "2026-05-25T17:09:00+08:00",
+    "fixes": [26],
+    "auth_config": {
+      "provider": "jira",
+      "auth_method": "basic_or_bearer",
+      "token_env_var": "JIRA_API_TOKEN",
+      "env_file_path": ".env"
+    },
+    "file_mapping": {
+      "local_path": "{baseDir}/config/config.json",
+      "github_path": "jira-restful-api-connector/config/config.json"
+    }
+  }
+}
