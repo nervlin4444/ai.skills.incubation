@@ -6,8 +6,8 @@ description: "F-004: Safe issue field parser. Dot-path nested field extraction w
 version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T20:42:00+08:00"
-fixes: [27, 28]
+updated_at: "2026-05-25T21:56:00+08:00"
+fixes: [28, 29]
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -50,4 +50,12 @@ def get_due_date(issue):
 
 
 def get_last_updated(issue):
-    return get_issue_field(issue, "updated", "")
+    """Get updated field date part (YYYY-MM-DD). Parse failure -> return Unknown."""
+    raw = get_issue_field(issue, "updated", "")
+    if not raw:
+        return "Unknown"
+    # Extract YYYY-MM-DD from ISO 8601 datetime string
+    try:
+        return raw[:10]
+    except Exception:
+        return "Unknown"
