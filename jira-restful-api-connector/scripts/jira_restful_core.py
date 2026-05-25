@@ -6,7 +6,7 @@ description: "F-001: Unified HTTP client for Jira REST API v2. Auto-auth, retry,
 version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T22:05:00+08:00"
+updated_at: "2026-05-25T23:00:00+08:00"
 fixes: [26]
 auth_config:
   provider: jira
@@ -49,33 +49,43 @@ class JiraClient:
 
     Auth architecture:
       - Jira Cloud (xxx.atlassian.net): Use username + API Token via Basic Auth.
-      - Jira Server/DC (self-hosted, e.g. IP:8080): Use username + PASSWORD
-        via Basic Auth. Server/DC does NOT use API Tokens; the value in
-        JIRA_API_TOKEN env var is actually your login password (or a PAT
-        if your admin enabled Personal Access Tokens).
-      - Bearer Token: Rarely used; only if explicitly configured with PAT.
+      - Jira Server/DC (self-hosted): Two options:
+        (1) username + PASSWORD via Basic Auth
+        (2) PAT (Personal Access Token) via Bearer Token
+        Server/DC PATs often REQUIRE Bearer mode even if username is present.
+        If PAT with Basic Auth returns 403, force Bearer mode via auth_method="bearer".
 
-    403 Forbidden troubleshooting:
-      1. Check if instance is Cloud or Server/DC.
-      2. If Server/DC: ensure JIRA_API_TOKEN contains your PASSWORD, not a Cloud token.
-      3. Verify JIRA_USERNAME matches the login username (case-sensitive).
-      4. Check user has "Browse Projects" permission in Jira.
+    How to choose auth_method:
+      - "auto" (default): If username present -> Basic Auth. If only token -> Bearer.
+      - "basic": Force Basic Auth (username + token/password).
+      - "bearer": Force Bearer Token (token only, username ignored).
+
+    Environment variable override: JIRA_AUTH_METHOD=basic|bearer
+    (Implemented at line 67: env_auth = os.getenv("JIRA_AUTH_METHOD", "").lower())
     """
 
-    def __init__(self, jira_url=None, username=None, token=None):
+    def __init__(self, jira_url=None, username=None, token=None, auth_method="auto"):
         load_env()
         self.jira_url = (jira_url or os.getenv("JIRA_URL") or os.getenv("JIRA_BASE_URL", "")).rstrip("/")
         self.username = username or os.getenv("JIRA_USERNAME") or os.getenv("JIRA_USER", "")
         self.token = token or os.getenv("JIRA_API_TOKEN") or os.getenv("JIRA_PAT", "")
         if not self.jira_url or not self.token:
             raise RuntimeError("JIRA_URL and JIRA_API_TOKEN (or JIRA_PAT) required")
+
+        # Allow env override of auth method (Bug #2 fix confirmation: this IS implemented)
+        env_auth = os.getenv("JIRA_AUTH_METHOD", "").lower()
+        if env_auth in ("basic", "bearer"):
+            auth_method = env_auth
+
+        self.auth_method = auth_method
         self._auth_header = self._get_auth_header()
 
     def _get_auth_header(self):
-        if self.username:
-            creds = base64.b64encode(f"{self.username}:{self.token}".encode()).decode()
-            return {"Authorization": f"Basic {creds}"}
-        return {"Authorization": f"Bearer {self.token}"}
+        if self.auth_method == "bearer" or (self.auth_method == "auto" and not self.username):
+            return {"Authorization": f"Bearer {self.token}"}
+        # Basic Auth: username + token (password or API token)
+        creds = base64.b64encode(f"{self.username}:{self.token}".encode()).decode()
+        return {"Authorization": f"Basic {creds}"}
 
     def _request(self, endpoint, method="GET", data=None, retries=3):
         url = f"{self.jira_url}/rest/api/2{endpoint}"
@@ -91,8 +101,10 @@ class JiraClient:
                 last_err = e
                 if e.code == 401:
                     raise RuntimeError(
-                        f"401 Unauthorized - check token/username. "
-                        f"If Jira Server/DC, ensure JIRA_API_TOKEN is your PASSWORD not a Cloud API Token."
+                        f"401 Unauthorized - check credentials. "
+                        f"Current auth: {self.auth_method}. "
+                        f"Cloud: use API Token + Basic Auth. "
+                        f"Server/DC PAT: try Bearer mode (set JIRA_AUTH_METHOD=bearer or auth_method='bearer')."
                     )
                 if e.code == 403:
                     time.sleep(2 ** attempt)
@@ -114,14 +126,42 @@ class JiraClient:
     def post(self, endpoint, data):
         return self._request(endpoint, "POST", data)
 
-    def search_issues(self, jql, fields="*all", max_results=500):
-        payload = {"jql": jql, "fields": fields, "maxResults": max_results}
+    def search_issues(self, jql, fields=None, max_results=500):
+        """JQL search via POST /search.
+
+        Args:
+            jql: JQL query string.
+            fields: Field list. For Jira Cloud, "*all" works. For Server/DC 10.3.5,
+                    use None (API default) or a list like ["key", "summary", "status"].
+                    Strings "*all" and "*" are automatically converted to None for compatibility.
+            max_results: Max results to return.
+
+        Returns:
+            Raw Jira API response dict.
+        """
+        payload = {"jql": jql, "maxResults": max_results}
+        # Bug #4 fix: Server/DC 10.3.5 does not accept string "*all" for fields.
+        # Convert "*all" or "*" to None (omitted) for compatibility.
+        if fields and fields not in ("*all", "*"):
+            payload["fields"] = fields
         return self.post("/search", payload)
 
-    def get_issue(self, issue_key, fields="*all", expand=None):
+    def get_issue(self, issue_key, fields=None, expand=None):
+        """Fetch single issue by key.
+
+        Args:
+            issue_key: Issue key (e.g. "WIL-10").
+            fields: Field list. For Server/DC 10.3.5, use None or list.
+                    Strings "*all" and "*" are automatically converted to None.
+            expand: Optional expand parameter (e.g. "changelog").
+
+        Returns:
+            Issue dict.
+        """
         endpoint = f"/issue/{issue_key}"
         params = []
-        if fields:
+        # Bug #4 fix: Omit fields param if "*all" or "*" for Server/DC compatibility.
+        if fields and fields not in ("*all", "*"):
             params.append(f"fields={fields}")
         if expand:
             params.append(f"expand={expand}")
