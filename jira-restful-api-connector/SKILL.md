@@ -5,8 +5,8 @@ description: "LLM execution guide. Zero business logic. Connect and query Jira R
 version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T21:42:00+08:00"
-fixes: [27, 28, 31]
+updated_at: "2026-05-25T22:05:00+08:00"
+fixes: [26, 27, 28, 31]
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -99,7 +99,7 @@ Any missing -> single-line error, stop.
 Read .env, extract:
     - JIRA_URL: Jira instance URL
     - JIRA_USERNAME or JIRA_USER: Username
-    - JIRA_API_TOKEN or JIRA_PAT: API Token / PAT
+    - JIRA_API_TOKEN or JIRA_PAT: API Token / PAT / Password (see Section 3.5 for platform differences)
 
 Read config/config.json, extract:
     - timeout: HTTP timeout seconds (default 60)
@@ -144,6 +144,41 @@ Error format:
     ERROR: [brief desc] | [relevant params] | Stop.
     WARN: [brief desc] | [relevant params] | Continue.
 
+## 3.5 Authentication Platform Differences (CRITICAL)
+
+Jira has TWO platform types with DIFFERENT authentication:
+
+### 3.5.1 Jira Cloud (xxx.atlassian.net)
+
+| Field | Value | Source |
+|-------|-------|--------|
+| JIRA_URL | https://your-domain.atlassian.net | Cloud instance URL |
+| JIRA_USERNAME | your.email@example.com | Atlassian account email |
+| JIRA_API_TOKEN | Actual API Token | https://id.atlassian.net/manage-profile/security/api-tokens |
+
+Authentication: Basic Auth with username + API Token.
+
+### 3.5.2 Jira Server / Data Center (self-hosted, e.g. IP:8080)
+
+| Field | Value | Source |
+|-------|-------|--------|
+| JIRA_URL | http://your-server:8080 | Server instance URL |
+| JIRA_USERNAME | your_login_username | Jira login username (case-sensitive) |
+| JIRA_API_TOKEN | Your PASSWORD or PAT | Server/DC does NOT have "API Tokens". Use your login password. If admin enabled PAT, use Personal Access Token instead. |
+
+Authentication: Basic Auth with username + PASSWORD (or PAT).
+
+**WARNING**: Do NOT put a Jira Cloud API Token into JIRA_API_TOKEN when connecting to Server/DC. It will fail with 403 Forbidden.
+
+### 3.5.3 403 Forbidden Troubleshooting
+
+If Jira API returns 403:
+    1. Check JIRA_URL: Cloud (.atlassian.net) or Server/DC (IP/hostname + port)?
+    2. If Server/DC: verify JIRA_API_TOKEN contains your PASSWORD, not a Cloud token.
+    3. Verify JIRA_USERNAME exactly matches Jira login (case-sensitive).
+    4. Confirm user has "Browse Projects" permission.
+    5. Check if Jira admin blocked REST API access.
+
 ## 4. Function Codes and Interface Specs
 
 ### 4.1 F-001 — jira_restful_core.py
@@ -167,6 +202,7 @@ Mandatory functions (interface LOCK PERMANENT):
     class JiraClient:
         __init__(self, jira_url: str, jira_pat: str, jira_user: str = None, timeout: int = 60)
             Initialize client. jira_user is optional, for Basic Auth.
+            See Section 3.5 for platform-specific auth guidance.
 
         _get_auth_header(self) -> str
             Auto-detect auth method:
@@ -176,6 +212,7 @@ Mandatory functions (interface LOCK PERMANENT):
         _request(self, path: str, params: dict = None, method: str = "GET", data: dict = None) -> dict
             Unified HTTP call. Handle pagination, rate limit, error retry.
             Return JSON dict.
+            On 401: error message includes Server/DC vs Cloud auth hint.
 
         get(self, endpoint: str) -> dict
             Generic GET wrapper. Calls _request(endpoint, "GET").
@@ -403,7 +440,7 @@ Any failed -> output "Execution complete, pending items: [list]"
 | v0.1.0 | 2026-05-21 | Initial version. Split from jira-project-report v1.0.1 core. F-001~F-005, path rigidity, tiered error handling, interface LOCK PERMANENT |
 | v0.1.1 | 2026-05-25 | Fix: Python scripts renamed to underscore format per naming rules. Fixed broken import statements. All .py content verified ASCII-only. |
 | v0.1.2 | 2026-05-25 | Fix: Added missing high-level methods search_issues(), get_issue(), get_changelog() to JiraClient. Enhanced Section 4.1 docs to clarify two-layer architecture and F-002 dependency. Fixes #26. |
-| v0.1.3 | 2026-05-25 | Fix: normalize_jira_datetime() Z handling, local timezone, date-only passthrough. Added explicit microsecond standardization note in Section 4.5. get_due_date() None normalization. Frontmatter fixes fields corrected per file scope. SKILL.md version synchronized. Fixes #27, #28, #29, #30, #31. |
+| v0.1.3 | 2026-05-25 | Fix: normalize_jira_datetime() Z handling, local timezone, date-only passthrough. Added explicit microsecond standardization note in Section 4.5. get_due_date() None normalization. Frontmatter fixes fields corrected per file scope. SKILL.md version synchronized. Added Section 3.5 auth platform differences (Cloud vs Server/DC). Enhanced 401 error messages with auth hints. Fixes #27, #28, #29, #30, #31. |
 
 ---
 
