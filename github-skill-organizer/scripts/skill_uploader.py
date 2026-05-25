@@ -2,12 +2,12 @@
 ---
 title: Skill Uploader
 name: github-skill-organizer
-description: Handles skill upload to GitHub with auto-classification, parameter normalization, and base_path boundary exclusion. v1.0.0 refactored from sync_engine.py.
-version: 1.0.0
+description: Handles skill upload to GitHub with auto-classification, parameter normalization, and base_path boundary exclusion. v1.0.1 fixes gate check to use unified FrontmatterExtractor.extract() for .json _meta support.
+version: 1.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-24T15:58:00+08:00
-fixes: []
+updated_at: 2026-05-26T00:30:00+08:00
+fixes: [32]
 auth_config:
   provider: github
   auth_method: personal_access_token
@@ -86,9 +86,9 @@ class SkillUploader:
         if not skill_name or not str(skill_name).strip():
             return log_error(
                 "UPLOADER", "PARAM_MISSING_SKILL_NAME",
-                "skill_name 為空",
-                "請提供技能目錄名，例如 skill_name='github-skill-organizer'",
-                "檢查 local_dir 路徑，確認目錄名稱"
+                "skill_name is empty",
+                "Provide skill directory name, e.g. skill_name='github-skill-organizer'",
+                "Check local_dir path and confirm directory name"
             )
 
         skill_name = str(skill_name).strip()
@@ -97,9 +97,9 @@ class SkillUploader:
         if not skill_dir.exists():
             return log_error(
                 "UPLOADER", "PARAM_INVALID_FILES",
-                f"技能目錄不存在: {skill_dir}",
-                "請確認 skill_name 正確，或提供 local_dir 覆蓋",
-                f"檢查 {self.cfg.user_skills_folder}/{skill_name} 是否存在"
+                f"Skill directory not found: {skill_dir}",
+                "Confirm skill_name is correct, or provide local_dir override",
+                f"Check if {self.cfg.user_skills_folder}/{skill_name} exists"
             )
 
         # Normalize files
@@ -107,9 +107,9 @@ class SkillUploader:
         if not files:
             return log_error(
                 "UPLOADER", "PARAM_INVALID_FILES",
-                "文件列表為空或全部路徑無效",
-                "傳入 None 可自動掃描技能目錄下所有文件",
-                "確認 files 參數或改為 files=None"
+                "File list empty or all paths invalid",
+                "Pass None to auto-scan all files under skill directory",
+                "Confirm files parameter or change to files=None"
             )
 
         # Auto-complete classification
@@ -118,9 +118,9 @@ class SkillUploader:
         if not classification or "bump_type" not in classification:
             return log_error(
                 "UPLOADER", "CLASSIFICATION_INCOMPLETE",
-                "classification 缺少必要字段",
-                "可直接傳入 compare_skill() 返回值，系統會自動調用 change_classifier 補全",
-                "無需手動調用 classify_change()，系統已內建自動補全"
+                "classification missing required fields",
+                "Pass compare_skill() return value directly, system auto-calls change_classifier",
+                "No need to manually call classify_change(), auto-complete is built-in"
             )
 
         # Check approval
@@ -128,8 +128,8 @@ class SkillUploader:
             return {
                 "status": "pending_approval",
                 "reason": classification.get("reason", "Approval required"),
-                "hint": "請主人審核後，手動設置 approval_required=False 再重試",
-                "fix_action": "審核變更內容，確認無誤後重新調用 upload_skill()",
+                "hint": "Please review and manually set approval_required=False before retry",
+                "fix_action": "Review changes, confirm correct, then re-call upload_skill()",
             }
 
         # Filter excluded files
@@ -148,9 +148,9 @@ class SkillUploader:
         if not filtered_files:
             return log_error(
                 "UPLOADER", "EXCLUDE_ALL_FILES",
-                "全部文件被排除規則攔截",
-                "檢查 config.json 的 global_excludes 是否誤殺了合法目錄（如 .workbuddy）",
-                "檢查 global_excludes.prefixes 是否包含 '.'，或調整 script_profiles 邊界設置"
+                "All files blocked by exclusion rules",
+                "Check config.json global_excludes for false positives (e.g. .workbuddy)",
+                "Verify global_excludes.prefixes does not contain '.', or adjust script_profiles boundary"
             )
 
         # Validate frontmatter (skip CHANGELOG)
@@ -161,9 +161,9 @@ class SkillUploader:
             if not fm or "name" not in fm:
                 return log_error(
                     "UPLOADER", "FRONTMATTER_MISSING",
-                    f"{f.name}: 缺少 frontmatter（身份證）",
-                    "使用 skill_files_designer 重新生成帶 frontmatter 的文件",
-                    "為文件添加統一 frontmatter，或將其移出技能目錄"
+                    f"{f.name}: missing frontmatter (identity card)",
+                    "Use skill_files_designer to regenerate files with frontmatter",
+                    "Add unified frontmatter to file, or move it out of skill directory"
                 )
 
         # Gate checks
@@ -173,8 +173,8 @@ class SkillUploader:
                 "status": "rejected",
                 "error_code": "GATE_CHECK_FAILED",
                 "reason": gate_result["reason"],
-                "hint": "檢查文件內容是否包含硬編碼路徑或缺少 frontmatter",
-                "fix_action": gate_result.get("fix_action", "修正文件後重試"),
+                "hint": "Check file content for hardcoded paths or missing frontmatter",
+                "fix_action": gate_result.get("fix_action", "Fix files and retry"),
             }
 
         if dry_run:
@@ -184,7 +184,7 @@ class SkillUploader:
                 "files_count": len(filtered_files),
                 "files": [str(f) for f in filtered_files],
                 "classification": classification,
-                "hint": "這是預覽模式。確認無誤後設置 dry_run=False 執行真實上傳",
+                "hint": "This is preview mode. Set dry_run=False to execute real upload",
             }
 
         # Execute upload
@@ -209,9 +209,9 @@ class SkillUploader:
         if not skill_md.exists():
             return log_error(
                 "UPLOADER", "PARAM_INVALID_FILES",
-                f"SKILL.md 不存在: {skill_md}",
-                "每個技能必須包含 SKILL.md 作為入口文件",
-                "使用 skill_folder_designer 初始化技能目錄結構"
+                f"SKILL.md not found: {skill_md}",
+                "Each skill must contain SKILL.md as entry file",
+                "Use skill_folder_designer to initialize skill directory structure"
             )
 
         fm = FrontmatterExtractor.extract(skill_md)
@@ -219,9 +219,9 @@ class SkillUploader:
         if not repo_field:
             return log_error(
                 "UPLOADER", "FRONTMATTER_MISSING",
-                "SKILL.md 缺少 github_repository",
-                "在 SKILL.md frontmatter 中添加 github_repository: nervlin4444/ai.skills.incubation",
-                "使用 skill_files_designer 修正 frontmatter"
+                "SKILL.md missing github_repository",
+                "Add github_repository: nervlin4444/ai.skills.incubation in SKILL.md frontmatter",
+                "Use skill_files_designer to fix frontmatter"
             )
 
         try:
@@ -230,8 +230,8 @@ class SkillUploader:
             return log_error(
                 "UPLOADER", "PARAM_INVALID_FILES",
                 str(e),
-                "github_repository 必須為 owner/repo 格式",
-                "修正 SKILL.md 中的 github_repository 字段"
+                "github_repository must be owner/repo format",
+                "Fix github_repository field in SKILL.md"
             )
 
         result = self._upload_via_cli(repo_name, filtered_files, commit_msg, skill_name, skill_dir)
@@ -308,18 +308,25 @@ class SkillUploader:
         return repo_name
 
     def _run_gate_checks(self, files):
+        """
+        Run upload gate checks.
+        FIX v1.0.1: Use FrontmatterExtractor.extract() unified interface
+        instead of primitive '---' string matching. Respects .json _meta field.
+        """
         checks = self.cfg.json_config.get("upload_gate", {})
         if not checks.get("check_frontmatter", True):
             return {"passed": True}
         for f in files:
             if self.exclude.should_skip_frontmatter(f.name, "skill_uploader"):
                 continue
-            try:
-                content = f.read_text(encoding="utf-8", errors="ignore")
-                if "---" not in content and f.suffix in [".md", ".py", ".json"]:
-                    return {"passed": False, "reason": f"Missing frontmatter in {f.name}", "fix_action": "使用 skill_files_designer 添加 frontmatter"}
-            except Exception:
-                pass
+            # FIX: Use unified extractor instead of primitive '---' check
+            fm = FrontmatterExtractor.extract(f)
+            if not fm or "name" not in fm:
+                return {
+                    "passed": False,
+                    "reason": f"Missing frontmatter in {f.name}",
+                    "fix_action": "Use skill_files_designer to add frontmatter"
+                }
         if checks.get("check_hardcoded_paths", True):
             patterns = checks.get("hardcoded_path_patterns", [])
             for f in files:
@@ -328,7 +335,11 @@ class SkillUploader:
                         content = f.read_text(encoding="utf-8", errors="ignore")
                         for pat in patterns:
                             if pat in content:
-                                return {"passed": False, "reason": f"Hardcoded path: {pat} in {f.name}", "fix_action": "將硬編碼路徑改為配置驅動"}
+                                return {
+                                    "passed": False,
+                                    "reason": f"Hardcoded path: {pat} in {f.name}",
+                                    "fix_action": "Replace hardcoded path with config-driven approach"
+                                }
                     except Exception:
                         pass
         return {"passed": True}
@@ -341,8 +352,8 @@ class SkillUploader:
                 return log_error(
                     "UPLOADER", "CLI_NOT_FOUND",
                     f"github_repo_sync.py not found at {cli_script}",
-                    "請確認 github-restful-api-connector 技能已安裝於 DEPENDENCY_SKILL_PATH",
-                    "安裝依賴技能並確認 .env 中的 DEPENDENCY_SKILL_PATH 正確"
+                    "Confirm github-restful-api-connector skill installed at DEPENDENCY_SKILL_PATH",
+                    "Install dependency skill and verify DEPENDENCY_SKILL_PATH in .env"
                 )
 
             clean_dir = self._create_clean_temp_dir(skill_dir)
@@ -375,8 +386,8 @@ class SkillUploader:
             return log_error(
                 "UPLOADER", "UPLOAD_EXCEPTION",
                 str(e),
-                "上傳過程中發生未預期錯誤",
-                "檢查依賴技能安裝狀態及網絡連接"
+                "Unexpected error during upload",
+                "Check dependency skill installation and network connection"
             )
 
     def _create_clean_temp_dir(self, source_dir: Path) -> Path:
