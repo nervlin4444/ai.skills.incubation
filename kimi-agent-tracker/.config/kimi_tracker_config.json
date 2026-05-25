@@ -48,7 +48,7 @@
     "sidebar": ".sidebar"
   },
   "daemon": {
-    "interval_sec": 600,
+    "interval_sec": 60,
     "visible": false,
     "conversation_count": 10,
     "download_dir": "{baseDir}/Downloads",
