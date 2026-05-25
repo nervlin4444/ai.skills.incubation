@@ -1,0 +1,675 @@
+{
+  "models": {
+    "inclusionai/ring-2.6-1t:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 37,
+            "accuracy": 37,
+            "tool_reliability": 37,
+            "cost_efficiency": 80,
+            "context_stability": 37
+          },
+          "composite": 45.6
+        }
+      ],
+      "current_composite": 45.6,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1935,
+        "error_message": ""
+      }
+    },
+    "baidu/cobuddy:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 26,
+            "accuracy": 26,
+            "tool_reliability": 26,
+            "cost_efficiency": 80,
+            "context_stability": 26
+          },
+          "composite": 36.8
+        }
+      ],
+      "current_composite": 36.8,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 2737,
+        "error_message": ""
+      }
+    },
+    "openrouter/owl-alpha": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 24,
+            "accuracy": 24,
+            "tool_reliability": 24,
+            "cost_efficiency": 80,
+            "context_stability": 24
+          },
+          "composite": 35.2
+        }
+      ],
+      "current_composite": 35.2,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 2989,
+        "error_message": ""
+      }
+    },
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 73,
+            "accuracy": 73,
+            "tool_reliability": 73,
+            "cost_efficiency": 80,
+            "context_stability": 73
+          },
+          "composite": 74.4
+        }
+      ],
+      "current_composite": 74.4,
+      "current_tier": "domain_expert",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 982,
+        "error_message": ""
+      }
+    },
+    "poolside/laguna-xs.2:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 64,
+            "accuracy": 64,
+            "tool_reliability": 64,
+            "cost_efficiency": 80,
+            "context_stability": 64
+          },
+          "composite": 67.2
+        }
+      ],
+      "current_composite": 67.2,
+      "current_tier": "supervisor",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1114,
+        "error_message": ""
+      }
+    },
+    "poolside/laguna-m.1:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 67,
+            "accuracy": 67,
+            "tool_reliability": 67,
+            "cost_efficiency": 80,
+            "context_stability": 67
+          },
+          "composite": 69.6
+        }
+      ],
+      "current_composite": 69.6,
+      "current_tier": "supervisor",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1068,
+        "error_message": ""
+      }
+    },
+    "baidu/qianfan-ocr-fast:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 40,
+            "accuracy": 40,
+            "tool_reliability": 40,
+            "cost_efficiency": 80,
+            "context_stability": 40
+          },
+          "composite": 48.0
+        }
+      ],
+      "current_composite": 48.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1794,
+        "error_message": ""
+      }
+    },
+    "google/gemma-4-26b-a4b-it:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 707,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "google/gemma-4-31b-it:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 665,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "arcee-ai/trinity-large-thinking:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 84,
+            "accuracy": 84,
+            "tool_reliability": 84,
+            "cost_efficiency": 80,
+            "context_stability": 84
+          },
+          "composite": 83.2
+        }
+      ],
+      "current_composite": 83.2,
+      "current_tier": "strategic_expert",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 850,
+        "error_message": ""
+      }
+    },
+    "google/lyria-3-pro-preview": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 0,
+            "accuracy": 0,
+            "tool_reliability": 0,
+            "cost_efficiency": 0,
+            "context_stability": 0
+          },
+          "composite": 0.0
+        }
+      ],
+      "current_composite": 0.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "error",
+        "latency_ms": 289,
+        "error_message": "HTTP 403: {\"error\":{\"message\":\"This model is not available in your region.\",\"code\":403}}"
+      }
+    },
+    "google/lyria-3-clip-preview": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 0,
+            "accuracy": 0,
+            "tool_reliability": 0,
+            "cost_efficiency": 0,
+            "context_stability": 0
+          },
+          "composite": 0.0
+        }
+      ],
+      "current_composite": 0.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "error",
+        "latency_ms": 283,
+        "error_message": "HTTP 403: {\"error\":{\"message\":\"This model is not available in your region.\",\"code\":403}}"
+      }
+    },
+    "nvidia/nemotron-3-super-120b-a12b:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 16,
+            "accuracy": 16,
+            "tool_reliability": 16,
+            "cost_efficiency": 80,
+            "context_stability": 16
+          },
+          "composite": 28.8
+        }
+      ],
+      "current_composite": 28.8,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 4498,
+        "error_message": ""
+      }
+    },
+    "minimax/minimax-m2.5:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 1299,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "openrouter/free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 61,
+            "accuracy": 61,
+            "tool_reliability": 61,
+            "cost_efficiency": 80,
+            "context_stability": 61
+          },
+          "composite": 64.8
+        }
+      ],
+      "current_composite": 64.8,
+      "current_tier": "supervisor",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1164,
+        "error_message": ""
+      }
+    },
+    "liquid/lfm-2.5-1.2b-thinking:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 54,
+            "accuracy": 54,
+            "tool_reliability": 54,
+            "cost_efficiency": 80,
+            "context_stability": 54
+          },
+          "composite": 59.2
+        }
+      ],
+      "current_composite": 59.2,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1332,
+        "error_message": ""
+      }
+    },
+    "liquid/lfm-2.5-1.2b-instruct:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 53,
+            "accuracy": 53,
+            "tool_reliability": 53,
+            "cost_efficiency": 80,
+            "context_stability": 53
+          },
+          "composite": 58.4
+        }
+      ],
+      "current_composite": 58.4,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1350,
+        "error_message": ""
+      }
+    },
+    "nvidia/nemotron-3-nano-30b-a3b:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 100,
+            "accuracy": 100,
+            "tool_reliability": 100,
+            "cost_efficiency": 80,
+            "context_stability": 100
+          },
+          "composite": 96.0
+        }
+      ],
+      "current_composite": 96.0,
+      "current_tier": "omnipotent",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 714,
+        "error_message": ""
+      }
+    },
+    "nvidia/nemotron-nano-12b-v2-vl:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 40,
+            "accuracy": 40,
+            "tool_reliability": 40,
+            "cost_efficiency": 80,
+            "context_stability": 40
+          },
+          "composite": 48.0
+        }
+      ],
+      "current_composite": 48.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1786,
+        "error_message": ""
+      }
+    },
+    "qwen/qwen3-next-80b-a3b-instruct:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 861,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "nvidia/nemotron-nano-9b-v2:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 49,
+            "accuracy": 49,
+            "tool_reliability": 49,
+            "cost_efficiency": 80,
+            "context_stability": 49
+          },
+          "composite": 55.2
+        }
+      ],
+      "current_composite": 55.2,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1445,
+        "error_message": ""
+      }
+    },
+    "openai/gpt-oss-120b:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 66,
+            "accuracy": 66,
+            "tool_reliability": 66,
+            "cost_efficiency": 80,
+            "context_stability": 66
+          },
+          "composite": 68.8
+        }
+      ],
+      "current_composite": 68.8,
+      "current_tier": "supervisor",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 1090,
+        "error_message": ""
+      }
+    },
+    "openai/gpt-oss-20b:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 893,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "z-ai/glm-4.5-air:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 10,
+            "accuracy": 10,
+            "tool_reliability": 10,
+            "cost_efficiency": 80,
+            "context_stability": 10
+          },
+          "composite": 24.0
+        }
+      ],
+      "current_composite": 24.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "success",
+        "latency_ms": 10318,
+        "error_message": ""
+      }
+    },
+    "qwen/qwen3-coder:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 850,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 825,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "meta-llama/llama-3.3-70b-instruct:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 820,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "meta-llama/llama-3.2-3b-instruct:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 823,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    },
+    "nousresearch/hermes-3-llama-3.1-405b:free": {
+      "scores": [
+        {
+          "timestamp": "2026-05-13T16:56:48Z",
+          "dimensions": {
+            "latency": 35,
+            "accuracy": 0,
+            "tool_reliability": 15,
+            "cost_efficiency": 20,
+            "context_stability": 20
+          },
+          "composite": 18.0
+        }
+      ],
+      "current_composite": 18.0,
+      "current_tier": "staff",
+      "history": [],
+      "metadata": {
+        "status": "rate_limited",
+        "latency_ms": 914,
+        "error_message": "HTTP 429 Rate Limited"
+      }
+    }
+  },
+  "meta": {
+    "updated_at": "2026-05-13T16:56:48Z",
+    "scoring_rule": "延遲反比歸一化（保底10分上限100分）| 報錯=0分 | 5維度等權"
+  }
+}
