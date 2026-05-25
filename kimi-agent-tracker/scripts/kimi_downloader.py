@@ -2,11 +2,11 @@
 ---
 title: Kimi Conversation File Downloader
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations. v1.1.8 adds anchor-download injection, keyboard Enter/Space fallback, realistic mouse trajectory, and fetch-API direct content extraction as ultimate fallbacks.
-version: "1.1.8"
+description: F-003 Auto-download files from Kimi chat conversations. v1.2.0 replaces download triggering with preview panel content extraction as primary strategy. Clicks file link, waits for preview panel to load, extracts text content from DOM, and writes directly to local file. Fallback to browser download for binary files.
+version: "1.2.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T14:10:00+00:00"
+updated_at: "2026-05-25T14:30:00+00:00"
 auth_config:
   provider: kimi
   auth_method: persistent_profile
@@ -208,7 +208,126 @@ class KimiDownloader:
             time.sleep(0.5)
         return None
 
-    def _download_direct(self, page, link, conversation_title):
+    def _download_by_extraction(self, page, link, conversation_title):
+        """Primary strategy: click link, wait for preview panel, extract content from DOM."""
+        href = link["href"]
+        filename = os.path.basename(urlparse(href).path) or "unknown"
+        if not filename or filename == "unknown":
+            filename = f"download_{int(time.time())}"
+        if self.unique_name:
+            safe_title = "".join(c for c in conversation_title if c.isalnum() or c in "-_ ").replace(" ", "_")[:30]
+            filename = f"{safe_title}_{filename}"
+        dest_path = Path(self.download_dir) / filename
+
+        try:
+            self._dismiss_overlay(page)
+
+            # Step 1: Click the file link to open preview panel
+            log_event(f"[EXTRACT-1] Clicking link for {filename}")
+            scrolled = self._scroll_element_into_view(page, href)
+            if scrolled:
+                page.wait_for_timeout(800)
+                pos = self._get_element_position(page, href)
+                if pos and pos.get("in_viewport") and pos["y"] > 0:
+                    page.mouse.move(pos["x"], pos["y"])
+                    page.wait_for_timeout(300)
+                    page.mouse.click(pos["x"], pos["y"])
+                else:
+                    js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
+                    page.evaluate(js_click, href)
+            else:
+                js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
+                page.evaluate(js_click, href)
+
+            # Step 2: Wait for preview panel to appear
+            log_event(f"[EXTRACT-2] Waiting for preview panel...")
+            preview_selectors = [
+                '[class*="preview"]', '[class*="panel"]', '[class*="drawer"]',
+                '[class*="sidebar"]', '[class*="file-view"]', '[class*="code"]',
+                '.monaco-editor', '[role="dialog"]', '.ant-drawer',
+                '[class*="content"]',
+            ]
+            preview_found = False
+            for sel in preview_selectors:
+                try:
+                    el = page.wait_for_selector(sel, timeout=5000)
+                    if el and el.is_visible():
+                        preview_found = True
+                        log_event(f"[EXTRACT-2] Preview panel found: {sel}")
+                        break
+                except Exception:
+                    continue
+
+            if not preview_found:
+                log_event(f"[EXTRACT-FAIL] Preview panel not found for {filename}")
+                self._capture(page, f"extract_no_preview_{filename[:30]}")
+                return {"status": "skipped", "file": filename, "reason": "Preview panel not found"}
+
+            # Step 3: Wait for content to load (check multiple times)
+            log_event(f"[EXTRACT-3] Waiting for content to load...")
+            content = None
+            for attempt in range(5):
+                page.wait_for_timeout(2000)
+                content = self._extract_preview_content(page)
+                if content and len(content.strip()) > 50:
+                    log_event(f"[EXTRACT-3] Content loaded: {len(content)} chars")
+                    break
+                log_event(f"[EXTRACT-3] Content not ready, attempt {attempt+1}/5")
+
+            if not content or len(content.strip()) < 10:
+                log_event(f"[EXTRACT-FAIL] Content empty or too short for {filename}")
+                self._capture(page, f"extract_empty_{filename[:30]}")
+                return {"status": "skipped", "file": filename, "reason": "Preview content empty"}
+
+            # Step 4: Write content to file
+            log_event(f"[EXTRACT-4] Writing {len(content)} chars to {dest_path}")
+            with open(dest_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            file_hash = compute_sha256(dest_path)
+            return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+        except Exception as e:
+            log_event(f"[EXTRACT-ERROR] {filename}: {e}")
+            self._capture(page, f"extract_error_{filename[:30]}")
+            return {"status": "error", "file": filename, "error": str(e)}
+
+    def _extract_preview_content(self, page):
+        """Extract text content from preview panel DOM."""
+        js_extract = """() => {
+            var selectors = [
+                '[class*="preview"] pre', '[class*="panel"] pre',
+                '[class*="code"] pre', '.monaco-editor .view-lines',
+                '[class*="file-view"] pre', '[class*="content"] pre',
+                '.ant-drawer pre', '[role="dialog"] pre',
+                'pre[class*="code"]', 'code[class*="language"]',
+                '[class*="markdown-body"]', '[class*="article"]',
+                '.preview-panel pre', '.file-preview pre',
+                '[class*="text"] pre', 'pre',
+            ];
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (el && el.innerText && el.innerText.trim().length > 10) {
+                    return el.innerText;
+                }
+            }
+            // Fallback: get all text from preview-like containers
+            var containers = document.querySelectorAll('[class*="preview"], [class*="panel"], [class*="drawer"], [class*="file-view"]');
+            for (var j = 0; j < containers.length; j++) {
+                var text = containers[j].innerText;
+                if (text && text.trim().length > 50) {
+                    return text;
+                }
+            }
+            return null;
+        }"""
+        try:
+            return page.evaluate(js_extract)
+        except Exception as e:
+            log_event(f"[EXTRACT-ERROR] JS extraction failed: {e}")
+            return None
+
+    def _download_by_browser(self, page, link, conversation_title):
+        """Fallback strategy: trigger browser download for binary files (zip, etc)."""
         href = link["href"]
         filename = os.path.basename(urlparse(href).path) or "unknown"
         if not filename or filename == "unknown":
@@ -226,8 +345,8 @@ class KimiDownloader:
         try:
             self._dismiss_overlay(page)
 
-            # STRATEGY A: Anchor injection with download attribute (forces browser download)
-            log_event(f"[STRAT-A] Anchor injection for {filename}")
+            # Strategy A: Anchor injection with download attribute
+            log_event(f"[BROWSER-A] Anchor injection for {filename}")
             js_inject = f"""() => {{
             var a = document.createElement("a");
             a.href = "{href.replace(chr(34), chr(92)+chr(34))}";
@@ -255,23 +374,17 @@ class KimiDownloader:
                 file_hash = compute_sha256(dest_path)
                 return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            # STRATEGY B: Physical mouse click (single click, not down/up)
-            log_event(f"[STRAT-B] Mouse click for {filename}")
+            # Strategy B: Mouse click on original element
+            log_event(f"[BROWSER-B] Mouse click for {filename}")
             scrolled = self._scroll_element_into_view(page, href)
             if scrolled:
                 page.wait_for_timeout(1000)
                 pos = self._get_element_position(page, href)
                 if pos and pos.get("in_viewport") and pos["y"] > 0:
-                    x, y = pos["x"], pos["y"]
-                    # Realistic mouse trajectory: move to nearby first, then to target
-                    nearby_x = x + random.randint(-50, 50)
-                    nearby_y = y + random.randint(-30, 30)
-                    page.mouse.move(nearby_x, nearby_y)
-                    page.wait_for_timeout(random.randint(200, 500))
-                    page.mouse.move(x, y)
-                    page.wait_for_timeout(random.randint(300, 700))
-                    page.mouse.click(x, y)  # Single click with built-in down/up
-                    log_event(f"[MOUSE] Clicked at ({x:.0f}, {y:.0f}) for {filename}")
+                    page.mouse.move(pos["x"], pos["y"])
+                    page.wait_for_timeout(300)
+                    page.mouse.click(pos["x"], pos["y"])
+                    log_event(f"[MOUSE] Clicked at ({pos['x']:.0f}, {pos['y']:.0f}) for {filename}")
                     page.wait_for_timeout(8000)
 
                     if downloads_collected:
@@ -288,253 +401,13 @@ class KimiDownloader:
                         file_hash = compute_sha256(dest_path)
                         return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            # STRATEGY C: Keyboard navigation (focus + Enter/Space)
-            log_event(f"[STRAT-C] Keyboard navigation for {filename}")
-            page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
-            js_focus = f"""() => {{
-            var links = document.querySelectorAll('a[href]');
-            for (var i = 0; i < links.length; i++) {{
-                if (links[i].getAttribute('href') === "{href.replace(chr(34), chr(92)+chr(34))}") {{
-                    links[i].focus();
-                    links[i].tabIndex = 0;
-                    return true;
-                }}
-            }}
-            return false;
-            }}"""
-            focused = page.evaluate(js_focus)
-            if focused:
-                page.wait_for_timeout(500)
-                page.keyboard.press("Enter")
-                log_event(f"[KEYBOARD] Enter pressed for {filename}")
-                page.wait_for_timeout(8000)
-
-                if downloads_collected:
-                    download = downloads_collected[-1]
-                    tmp_path = Path(download.path())
-                    if tmp_path.exists():
-                        shutil.move(str(tmp_path), str(dest_path))
-                        file_hash = compute_sha256(dest_path)
-                        return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-                browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
-                if browser_file and browser_file.exists():
-                    shutil.copy2(str(browser_file), str(dest_path))
-                    file_hash = compute_sha256(dest_path)
-                    return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-                # Try Space key as alternative
-                page.keyboard.press("Space")
-                log_event(f"[KEYBOARD] Space pressed for {filename}")
-                page.wait_for_timeout(8000)
-
-                if downloads_collected:
-                    download = downloads_collected[-1]
-                    tmp_path = Path(download.path())
-                    if tmp_path.exists():
-                        shutil.move(str(tmp_path), str(dest_path))
-                        file_hash = compute_sha256(dest_path)
-                        return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-                browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
-                if browser_file and browser_file.exists():
-                    shutil.copy2(str(browser_file), str(dest_path))
-                    file_hash = compute_sha256(dest_path)
-                    return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            # STRATEGY D: JS element.click() on original element
-            log_event(f"[STRAT-D] JS element.click() for {filename}")
-            js_click = f"""() => {{
-            var links = document.querySelectorAll('a[href]');
-            for (var i = 0; i < links.length; i++) {{
-                if (links[i].getAttribute('href') === "{href.replace(chr(34), chr(92)+chr(34))}") {{
-                    links[i].click();
-                    return "clicked";
-                }}
-            }}
-            return "not_found";
-            }}"""
-            result = page.evaluate(js_click)
-            log_event(f"[JS-CLICK] Result: {result} for {filename}")
-            page.wait_for_timeout(8000)
-
-            if downloads_collected:
-                download = downloads_collected[-1]
-                tmp_path = Path(download.path())
-                if tmp_path.exists():
-                    shutil.move(str(tmp_path), str(dest_path))
-                    file_hash = compute_sha256(dest_path)
-                    return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
-            if browser_file and browser_file.exists():
-                shutil.copy2(str(browser_file), str(dest_path))
-                file_hash = compute_sha256(dest_path)
-                return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            # STRATEGY E: Fetch API direct content extraction
-            log_event(f"[STRAT-E] Fetch API for {filename}")
-            try:
-                js_fetch = f"""async () => {{
-                try {{
-                    const resp = await fetch("{href.replace(chr(34), chr(92)+chr(34))}");
-                    if (!resp.ok) return {{ok: false, status: resp.status}};
-                    const blob = await resp.blob();
-                    return {{ok: true, size: blob.size, type: blob.type}};
-                }} catch (e) {{
-                    return {{ok: false, error: e.message}};
-                }}
-                }}"""
-                fetch_result = page.evaluate(js_fetch)
-                log_event(f"[FETCH] Result: {fetch_result} for {filename}")
-                if fetch_result and fetch_result.get("ok"):
-                    # Fetch succeeded, try to download via blob URL
-                    js_blob_download = f"""async () => {{
-                    const resp = await fetch("{href.replace(chr(34), chr(92)+chr(34))}");
-                    const blob = await resp.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "{filename.replace(chr(34), chr(92)+chr(34))}";
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    return "blob_downloaded";
-                    }}"""
-                    page.evaluate(js_blob_download)
-                    page.wait_for_timeout(8000)
-
-                    if downloads_collected:
-                        download = downloads_collected[-1]
-                        tmp_path = Path(download.path())
-                        if tmp_path.exists():
-                            shutil.move(str(tmp_path), str(dest_path))
-                            file_hash = compute_sha256(dest_path)
-                            return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-                    browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
-                    if browser_file and browser_file.exists():
-                        shutil.copy2(str(browser_file), str(dest_path))
-                        file_hash = compute_sha256(dest_path)
-                        return self._record_download(dest_path, filename, conversation_title, file_hash)
-            except Exception as e:
-                log_event(f"[FETCH] Error: {e} for {filename}")
-
-            # All strategies exhausted
-            log_event(f"[SKIP] All 5 strategies failed for {filename}")
-            self._capture(page, f"skip_all_{filename[:30]}")
-            return {"status": "skipped", "file": filename, "reason": "All download strategies failed"}
+            log_event(f"[SKIP] Browser download failed for {filename}")
+            return {"status": "skipped", "file": filename, "reason": "Browser download failed"}
         except Exception as e:
-            log_event(f"[ERROR] Direct download failed for {filename}: {e}")
-            self._capture(page, f"error_{filename[:30]}")
+            log_event(f"[ERROR] Browser download failed for {filename}: {e}")
             return {"status": "error", "file": filename, "error": str(e)}
         finally:
             page.remove_listener("download", on_download)
-
-    def _download_md_preview(self, page, link, conversation_title):
-        href = link["href"]
-        filename_base = os.path.basename(urlparse(href).path).replace(".md", "") or "document"
-        safe_title = "".join(c for c in conversation_title if c.isalnum() or c in "-_ ").replace(" ", "_")[:30]
-        filename = f"{safe_title}_{filename_base}.md"
-        dest_path = Path(self.download_dir) / filename
-
-        try:
-            self._dismiss_overlay(page)
-
-            # Step 1: Scroll MD link into view and click via mouse to open preview
-            scrolled = self._scroll_element_into_view(page, href)
-            if not scrolled:
-                log_event(f"[SKIP] MD link not found for {filename}")
-                return {"status": "skipped", "file": filename, "reason": "MD link not found"}
-            page.wait_for_timeout(500)
-            pos = self._get_element_position(page, href)
-            if pos and pos.get("in_viewport") and pos["y"] > 0:
-                page.mouse.move(pos["x"], pos["y"])
-                page.wait_for_timeout(300)
-                page.mouse.click(pos["x"], pos["y"])
-            else:
-                js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
-                page.evaluate(js_click, href)
-            log_event(f"[MD-STEP1] Opened preview for {filename}")
-            page.wait_for_timeout(3000)
-            self._capture(page, f"md_step1_{filename_base}")
-
-            # Step 2: Find download icon in preview panel
-            icon_selectors = [
-                '[class*="download"]', 'button[class*="download"]',
-                'svg[class*="download"]', '[title*="download" i]',
-                '[aria-label*="download" i]', 'i[class*="download"]',
-                '.preview-download', '[data-testid*="download"]',
-            ]
-            clicked = False
-            for sel in icon_selectors:
-                try:
-                    icon = page.wait_for_selector(sel, timeout=3000)
-                    if icon and icon.is_visible():
-                        bbox = icon.bounding_box()
-                        if bbox:
-                            page.mouse.move(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
-                            page.wait_for_timeout(300)
-                            page.mouse.click(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
-                            clicked = True
-                            break
-                except Exception:
-                    continue
-
-            if not clicked:
-                log_event(f"[SKIP] No download icon found in preview for {filename}")
-                self._capture(page, f"md_no_icon_{filename_base}")
-                return {"status": "skipped", "file": filename, "reason": "No download icon in preview panel"}
-
-            log_event(f"[MD-STEP2] Clicked download icon for {filename}")
-            page.wait_for_timeout(2000)
-            self._capture(page, f"md_step2_{filename_base}")
-
-            # Step 3: Select Markdown format
-            md_selectors = [
-                "text=Markdown", "text=Save as Markdown",
-                '[class*="markdown"]', "button:has-text(\"Markdown\")",
-                "div:has-text(\"Markdown\")", '[role="dialog"] button:has-text("Markdown")',
-                '[class*="dialog"] [class*="markdown"]', '.modal button:has-text("Markdown")',
-            ]
-            for sel in md_selectors:
-                try:
-                    opt = page.wait_for_selector(sel, timeout=3000)
-                    if opt and opt.is_visible():
-                        bbox = opt.bounding_box()
-                        if bbox:
-                            page.mouse.move(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
-                            page.wait_for_timeout(300)
-                            page.mouse.click(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
-                            break
-                except Exception:
-                    continue
-            else:
-                try:
-                    page.keyboard.press("ArrowDown")
-                    page.wait_for_timeout(300)
-                    page.keyboard.press("Enter")
-                    log_event(f"[MD-FALLBACK] Used keyboard navigation for {filename}")
-                except Exception:
-                    pass
-
-            page.wait_for_timeout(3000)
-            self._capture(page, f"md_step3_{filename_base}")
-
-            browser_file = self._wait_for_browser_download(filename_hint=".md", max_wait_sec=10)
-            if browser_file and browser_file.exists():
-                shutil.copy2(str(browser_file), str(dest_path))
-                file_hash = compute_sha256(dest_path)
-                return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            log_event(f"[SKIP] No .md file found in browser download dir for {filename}")
-            return {"status": "skipped", "file": filename, "reason": "No .md file in browser download dir"}
-        except Exception as e:
-            log_event(f"[ERROR] MD preview download failed for {filename}: {e}")
-            self._capture(page, f"md_error_{filename_base}")
-            return {"status": "error", "file": filename, "error": str(e)}
 
     def download_conversation(self, url, title="unknown", visible=False):
         log_event(f"[DOWNLOAD] Navigating to: {url}")
@@ -559,13 +432,20 @@ class KimiDownloader:
                 log_event(f"[DOWNLOAD] Found {len(links)} file links in '{title}'")
                 for link in links:
                     href = link["href"]
-                    is_sandbox = href.startswith("sandbox://")
-                    is_md = ".md" in href.lower() or href.endswith(".md")
-                    is_direct = is_sandbox or not is_md or "github.com" in href or "raw.githubusercontent" in href
-                    if is_md and not is_direct:
-                        res = self._download_md_preview(page, link, title)
+                    filename = os.path.basename(urlparse(href).path) or ""
+                    ext = Path(filename).suffix.lower()
+                    # Text files: use content extraction (primary)
+                    # Binary files: use browser download (fallback)
+                    is_text = ext in [".py", ".md", ".txt", ".json", ".csv", ".yml", ".yaml", ".html", ".js", ".css", ".xml"]
+                    is_binary = ext in [".zip", ".rar", ".7z", ".tar", ".gz", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".gif", ".mp3", ".mp4"]
+                    if is_text or not is_binary:
+                        res = self._download_by_extraction(page, link, title)
+                        # If extraction fails, try browser download as fallback
+                        if res.get("status") in ["skipped", "error"]:
+                            log_event(f"[FALLBACK] Extraction failed, trying browser download for {filename}")
+                            res = self._download_by_browser(page, link, title)
                     else:
-                        res = self._download_direct(page, link, title)
+                        res = self._download_by_browser(page, link, title)
                     if res is None:
                         results["errors"].append({"file": "unknown", "error": "Download returned None"})
                     elif res.get("status") == "success":
@@ -608,7 +488,7 @@ class KimiDownloader:
         return all_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.8")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.2.0")
     parser.add_argument("--url", help="Single conversation URL to download from")
     parser.add_argument("--from-list", help="Path to conversations.json for batch download")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
