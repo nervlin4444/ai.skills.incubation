@@ -1,12 +1,12 @@
 """
 ---
-title: Kimi Downloader v3.6
+title: Kimi Downloader v3.6.1
 name: kimi-agent-tracker
-description: Download .py/.md/.json/.zip files from Kimi chat pages using proven JS content extraction + download button strategies.
-version: 3.6.0
+description: Download .py/.md/.json/.zip files from Kimi chat pages. Files saved to ~/Downloads/ with original filenames.
+version: 3.6.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T00:30:00+08:00
+updated_at: 2026-05-26T00:35:00+08:00
 auth_config:
   provider: none
   auth_method: none
@@ -24,6 +24,7 @@ import sys
 import time
 import argparse
 import re
+import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -39,7 +40,7 @@ except ImportError:
 PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
 DOWNLOAD_DIR = Path.home() / "Downloads"
 
-# File card selectors (proven working)
+# File card selectors
 FILE_CARD_SELECTORS = [
     'div[class*="file-card-container"]',
     'div[class*="file-card"]',
@@ -98,7 +99,6 @@ async def js_click(page, selector: str) -> bool:
 
 
 async def scan_files(page) -> List[Dict[str, Any]]:
-    """Scan page for file cards."""
     log("[SCAN] Scanning for file cards...")
 
     all_cards = []
@@ -144,7 +144,6 @@ async def scan_files(page) -> List[Dict[str, Any]]:
 
 
 async def click_file_card(page, file_info: Dict[str, Any]) -> bool:
-    """Click file card to open preview panel."""
     card_selector = file_info.get("selector", "")
     if not card_selector:
         return False
@@ -167,30 +166,6 @@ async def click_file_card(page, file_info: Dict[str, Any]) -> bool:
     return False
 
 
-async def extract_content_js(page) -> Optional[str]:
-    """Extract content using proven JS strategy (D strategy from probe v1.0.8)."""
-    try:
-        data = await page.evaluate("""
-            (() => {
-                let best = null;
-                let bestArea = 0;
-                document.querySelectorAll('*').forEach(el => {
-                    const rect = el.getBoundingClientRect();
-                    const area = rect.width * rect.height;
-                    if (rect.left > window.innerWidth * 0.45 && area > bestArea && rect.width > 400 && rect.height > 300) {
-                        best = el;
-                        bestArea = area;
-                    }
-                });
-                if (!best) return null;
-                return best.innerText || best.textContent || null;
-            })()
-        """)
-        return data
-    except Exception:
-        return None
-
-
 async def click_download_button_in_preview(page) -> Optional[str]:
     """Click download button inside preview panel and capture download."""
     download_info = {"path": None}
@@ -201,60 +176,22 @@ async def click_download_button_in_preview(page) -> Optional[str]:
     page.on("download", handle_download)
 
     try:
-        # Strategy 1: Try selectors based on screenshot observation (top-right of preview)
-        # The download icon is typically in the preview panel header
-        preview_header_selectors = [
-            'div[class*="preview"] button',
-            'div[class*="preview"] svg',
-            'div[class*="preview"] [class*="download"]',
-            'div[class*="preview"] [title*="download" i]',
-            'div[class*="preview"] [aria-label*="download" i]',
-            'div[class*="drawer"] button',
-            'div[class*="panel"] button',
-            'aside button',
-            'div[role="dialog"] button',
-        ]
-
-        for sel in preview_header_selectors:
+        # Strategy 1: Try all buttons in top-right area
+        buttons = await page.query_selector_all('button, svg, [class*="icon"]')
+        for btn in buttons:
             try:
-                el = await page.wait_for_selector(sel, timeout=2000, state="visible")
-                if el:
-                    # Check if this element looks like a download button (has download icon or text)
-                    html = await el.inner_html()
-                    text = await el.text_content()
-                    if (html and ('download' in html.lower() or 'arrow' in html.lower() or 'down' in html.lower())) or                        (text and 'download' in text.lower()):
-                        await el.click(force=True)
-                        log(f"[OK] Clicked download button: {sel}")
-                        await asyncio.sleep(3.0)
-                        if download_info["path"]:
-                            path = await download_info["path"]
-                            if path and Path(path).exists():
-                                page.remove_listener("download", handle_download)
-                                return str(path)
+                box = await btn.bounding_box()
+                if box and box["x"] > 800 and box["y"] < 100 and box["width"] < 60:
+                    await btn.click(force=True)
+                    log(f"[OK] Clicked top-right button at ({box['x']}, {box['y']})")
+                    await asyncio.sleep(3.0)
+                    if download_info["path"]:
+                        path = await download_info["path"]
+                        if path and Path(path).exists():
+                            page.remove_listener("download", handle_download)
+                            return str(path)
             except Exception:
                 continue
-
-        # Strategy 2: Try all buttons in top-right area of the page
-        # Based on screenshot: download icon is at top-right of preview panel
-        try:
-            buttons = await page.query_selector_all('button, svg, [class*="icon"]')
-            for btn in buttons:
-                try:
-                    box = await btn.bounding_box()
-                    if box and box["x"] > 800 and box["y"] < 100 and box["width"] < 60:
-                        await btn.click(force=True)
-                        log(f"[OK] Clicked top-right button at ({box['x']}, {box['y']})")
-                        await asyncio.sleep(3.0)
-                        if download_info["path"]:
-                            path = await download_info["path"]
-                            if path and Path(path).exists():
-                                page.remove_listener("download", handle_download)
-                                return str(path)
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
     except Exception as e:
         log(f"[WARN] Download button click failed: {e}")
     finally:
@@ -263,88 +200,73 @@ async def click_download_button_in_preview(page) -> Optional[str]:
     return None
 
 
-async def download_file_direct(page, file_info: Dict[str, Any]) -> Optional[str]:
-    """For .py/.json/.zip: try direct download via expect_download after clicking card."""
-    card_selector = file_info.get("selector", "")
-    if not card_selector:
-        return None
-
-    try:
-        async with page.expect_download(timeout=10000) as dl:
-            clicked = await safe_click(page, card_selector, timeout=5000, force=True)
-            if not clicked:
-                return None
-        download = await dl.value
-        path = await download.path()
-        if path and Path(path).exists():
-            return str(path)
-    except PlaywrightTimeout:
-        pass
-    except Exception as e:
-        log(f"[WARN] Direct download failed: {e}")
-    return None
-
-
-async def download_file_md(page, file_info: Dict[str, Any]) -> Optional[str]:
-    """For .md: three-step process (preview -> download icon -> select Markdown format)."""
-    # Step 1: Click file card to open preview
-    if not await click_file_card(page, file_info):
-        return None
-
-    await asyncio.sleep(3.0)
-
-    # Step 2: Click download icon in preview panel
-    download_path = await click_download_button_in_preview(page)
-    if download_path:
-        return download_path
-
-    # Step 3: If format selection dialog appears, select Markdown
-    try:
-        # Look for "Markdown" option in dialog
-        md_option = await page.wait_for_selector('text=Markdown', timeout=3000)
-        if md_option:
-            await md_option.click(force=True)
-            await asyncio.sleep(2.0)
-            # Check if download triggered
-            # (download listener should have captured it)
-    except Exception:
-        pass
-
-    return None
-
-
-async def download_file_py(page, file_info: Dict[str, Any]) -> Optional[str]:
-    """For .py/.json: strategy priority: direct download -> preview content extraction."""
+async def download_file(page, file_info: Dict[str, Any]) -> Optional[str]:
+    """Download a single file. Returns final path in ~/Downloads/."""
     filename = file_info["filename"]
     ext = file_info["ext"]
 
-    # Strategy 1: Try direct download (for .py/.json/.zip)
-    log(f"[DL] Trying direct download for {filename}")
-    direct_path = await download_file_direct(page, file_info)
-    if direct_path:
-        log(f"[OK] Direct download success: {direct_path}")
-        return direct_path
+    log(f"[DL] Processing: {filename}")
 
-    # Strategy 2: Click card to open preview, then click download button in preview
+    # Strategy 1: Try direct download (for .py/.json/.zip)
+    if ext in ("py", "json", "zip", "env", "txt", "csv", "yaml", "yml", "js", "html", "css", "xml"):
+        log(f"[DL] Trying direct download for {filename}")
+        try:
+            async with page.expect_download(timeout=10000) as dl:
+                clicked = await safe_click(page, file_info["selector"], timeout=5000, force=True)
+                if not clicked:
+                    return None
+            download = await dl.value
+            temp_path = await download.path()
+            if temp_path and Path(temp_path).exists():
+                # Move to ~/Downloads/ with correct filename
+                final_path = DOWNLOAD_DIR / filename
+                shutil.copy2(temp_path, final_path)
+                log(f"[OK] Direct download success: {final_path}")
+                return str(final_path)
+        except PlaywrightTimeout:
+            pass
+        except Exception as e:
+            log(f"[WARN] Direct download failed: {e}")
+
+    # Strategy 2: Click card to open preview, then click download button
     log(f"[DL] Trying preview panel download for {filename}")
     if await click_file_card(page, file_info):
         await asyncio.sleep(3.0)
-        preview_download = await click_download_button_in_preview(page)
-        if preview_download:
-            log(f"[OK] Preview download success: {preview_download}")
-            return preview_download
+        temp_path = await click_download_button_in_preview(page)
+        if temp_path:
+            final_path = DOWNLOAD_DIR / filename
+            shutil.copy2(temp_path, final_path)
+            log(f"[OK] Preview download success: {final_path}")
+            return str(final_path)
 
-    # Strategy 3: Extract content via JS (fallback)
+    # Strategy 3: JS content extraction (fallback for text files)
     log(f"[DL] Trying JS content extraction for {filename}")
     if await click_file_card(page, file_info):
         await asyncio.sleep(3.0)
-        content = await extract_content_js(page)
-        if content and len(content) > 100:
-            # Save extracted content to file
-            output_path = DOWNLOAD_DIR / filename
-            output_path.write_text(content, encoding="utf-8")
-            log(f"[OK] JS extraction success: {output_path} ({len(content)} chars)")
-            return str(output_path)
+        try:
+            content = await page.evaluate("""
+                (() => {
+                    let best = null;
+                    let bestArea = 0;
+                    document.querySelectorAll('*').forEach(el => {
+                        const rect = el.getBoundingClientRect();
+                        const area = rect.width * rect.height;
+                        if (rect.left > window.innerWidth * 0.45 && area > bestArea && rect.width > 400 && rect.height > 300) {
+                            best = el;
+                            bestArea = area;
+                        }
+                    });
+                    if (!best) return null;
+                    return best.innerText || best.textContent || null;
+                })()
+            """)
+            if content and len(content) > 100:
+                final_path = DOWNLOAD_DIR / filename
+                final_path.write_text(content, encoding="utf-8")
+                log(f"[OK] JS extraction success: {final_path} ({len(content)} chars)")
+                return str(final_path)
+        except Exception as e:
+            log(f"[WARN] JS extraction failed: {e}")
 
     log(f"[FAIL] All strategies failed for {filename}")
     return None
@@ -352,7 +274,7 @@ async def download_file_py(page, file_info: Dict[str, Any]) -> Optional[str]:
 
 async def run_downloader(url: str, visible: bool = False, max_files: int = 10) -> Dict[str, Any]:
     report = {
-        "downloader_version": "3.6.0",
+        "downloader_version": "3.6.1",
         "url": url,
         "mode": "visible" if visible else "headless",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -406,36 +328,26 @@ async def run_downloader(url: str, visible: bool = False, max_files: int = 10) -
             report["error"] = "No files found"
             return report
 
-        # Limit files
         files = files[:max_files]
         log(f"[MAIN] Processing {len(files)} files (max: {max_files})")
 
         for f in files:
-            filename = f["filename"]
-            ext = f["ext"]
-            log(f"[DL] Processing: {filename}")
-
-            if ext == "md":
-                path = await download_file_md(page, f)
-            else:
-                path = await download_file_py(page, f)
-
+            path = await download_file(page, f)
             if path:
                 report["files_downloaded"].append({
-                    "filename": filename,
-                    "ext": ext,
+                    "filename": f["filename"],
+                    "ext": f["ext"],
                     "path": path,
                     "size": Path(path).stat().st_size if Path(path).exists() else 0,
                 })
             else:
                 report["files_downloaded"].append({
-                    "filename": filename,
-                    "ext": ext,
+                    "filename": f["filename"],
+                    "ext": f["ext"],
                     "path": None,
                     "error": "All download strategies failed",
                 })
 
-            # Small delay between files
             await asyncio.sleep(1.0)
 
         success_count = sum(1 for f in report["files_downloaded"] if f.get("path"))
@@ -477,7 +389,7 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Downloader v3.6.0")
+    parser = argparse.ArgumentParser(description="Kimi Downloader v3.6.1")
     parser.add_argument("--url", required=True, help="Kimi chat URL")
     parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
     parser.add_argument("--max-files", type=int, default=10, help="Max files to download")
