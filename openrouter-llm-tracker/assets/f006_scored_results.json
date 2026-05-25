@@ -1,0 +1,108 @@
+{
+  "generated_at": "2026-05-11T18:44:33Z",
+  "total_models_tested": 29,
+  "post_april_free_models": 10,
+  "scoring_rule": "成功連通：延遲越低分越高（反比公式）；報錯：0分",
+  "results": [
+    {
+      "model_id": "arcee-ai/trinity-large-thinking:free",
+      "name": "Arcee AI: Trinity Large Thinking (free)",
+      "vendor": "Arcee-ai",
+      "api_created": "2026-04-01",
+      "status": "success",
+      "latency_ms": 850,
+      "score": 100,
+      "remark": "✅ 成功連通，延遲 850ms"
+    },
+    {
+      "model_id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "name": "NVIDIA: Nemotron 3 Nano Omni (free)",
+      "vendor": "NVIDIA",
+      "api_created": "2026-04-28",
+      "status": "success",
+      "latency_ms": 982,
+      "score": 87,
+      "remark": "✅ 成功連通，延遲 982ms"
+    },
+    {
+      "model_id": "poolside/laguna-m.1:free",
+      "name": "Poolside: Laguna M.1 (free)",
+      "vendor": "Poolside",
+      "api_created": "2026-04-28",
+      "status": "success",
+      "latency_ms": 1068,
+      "score": 80,
+      "remark": "✅ 成功連通，延遲 1068ms"
+    },
+    {
+      "model_id": "poolside/laguna-xs.2:free",
+      "name": "Poolside: Laguna XS.2 (free)",
+      "vendor": "Poolside",
+      "api_created": "2026-04-28",
+      "status": "success",
+      "latency_ms": 1114,
+      "score": 76,
+      "remark": "✅ 成功連通，延遲 1114ms"
+    },
+    {
+      "model_id": "baidu/qianfan-ocr-fast:free",
+      "name": "Baidu: Qianfan-OCR-Fast (free)",
+      "vendor": "Baidu",
+      "api_created": "2026-04-20",
+      "status": "success",
+      "latency_ms": 1794,
+      "score": 47,
+      "remark": "✅ 成功連通，延遲 1794ms"
+    },
+    {
+      "model_id": "inclusionai/ring-2.6-1t:free",
+      "name": "inclusionAI: Ring-2.6-1T (free)",
+      "vendor": "inclusionAI",
+      "api_created": "2026-05-08",
+      "status": "success",
+      "latency_ms": 1935,
+      "score": 44,
+      "remark": "✅ 成功連通，延遲 1935ms"
+    },
+    {
+      "model_id": "baidu/cobuddy:free",
+      "name": "Baidu Qianfan: CoBuddy (free)",
+      "vendor": "Baidu",
+      "api_created": "2026-05-06",
+      "status": "success",
+      "latency_ms": 2737,
+      "score": 31,
+      "remark": "✅ 成功連通，延遲 2737ms"
+    },
+    {
+      "model_id": "openrouter/owl-alpha",
+      "name": "Owl Alpha",
+      "vendor": "OpenRouter",
+      "api_created": "2026-04-28",
+      "status": "success",
+      "latency_ms": 2989,
+      "score": 28,
+      "remark": "✅ 成功連通，延遲 2989ms"
+    },
+    {
+      "model_id": "google/gemma-4-31b-it:free",
+      "name": "Google: Gemma 4 31B (free)",
+      "vendor": "Google",
+      "api_created": "2026-04-02",
+      "status": "rate_limited",
+      "latency_ms": 665,
+      "score": 0,
+      "remark": "❌ Rate Limited（HTTP 429），延遲 665ms"
+    },
+    {
+      "model_id": "google/gemma-4-26b-a4b-it:free",
+      "name": "Google: Gemma 4 26B A4B  (free)",
+      "vendor": "Google",
+      "api_created": "2026-04-03",
+      "status": "rate_limited",
+      "latency_ms": 707,
+      "score": 0,
+      "remark": "❌ Rate Limited（HTTP 429），延遲 707ms"
+    }
+  ]
+}
