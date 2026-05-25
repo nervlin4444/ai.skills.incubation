@@ -2,12 +2,12 @@
 ---
 title: "jira_query_advanced.py"
 name: "jira-restful-api-connector"
-description: "F-003: Advanced queries (recursive descendants, bulk search, changelog cache). Depends on F-002 jira_query_basic."
-version: "v0.1.2"
+description: "F-003: Advanced queries (recursive descendants, bulk search, changelog cache)."
+version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T17:09:00+08:00"
-fixes: [26]
+updated_at: "2026-05-25T23:28:00+08:00"
+fixes: []
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -82,6 +82,26 @@ def build_changelog_cache(client, epic_key, cache_path):
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
     return cache
+
+
+def load_changelog_cache(cache_path):
+    """Load changelog cache from file.
+
+    Args:
+        cache_path: Path to the cache JSON file.
+
+    Returns:
+        dict: {issue_key: changelog_dict} if file exists and is valid JSON.
+        None: if file does not exist or JSON is invalid.
+    """
+    p = Path(cache_path)
+    if not p.exists():
+        return None
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return None
 
 
 # Circular import helpers (called at runtime)
