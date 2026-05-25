@@ -40,56 +40,51 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # 掃描所有子目錄下的 CHANGELOG.md
+
+          changed=0
           for file in $(find . -maxdepth 2 -name "CHANGELOG.md" -not -path "./.git/*"); do
             dir=$(dirname "$file")
             skill_name=$(basename "$dir")
-            
-            # 檢查是否已有 frontmatter
-            if ! head -5 "$file" | grep -q "^---"; then
-              # 生成統一 frontmatter
-              cat > /tmp/fm.txt <<EOF
----
-title: "Changelog"
-name: "${skill_name}"
-description: "Auto-generated changelog by semantic-release"
-version: "0.0.0"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
-fixes: []
-auth_config:
-  provider: "github"
-  auth_method: "token"
-  token_env_var: "GITHUB_TOKEN"
-  env_file_path: ".env"
-file_mapping:
-  local_path: "CHANGELOG.md"
-  github_path: "${skill_name}/CHANGELOG.md"
----
 
-EOF
+            if ! head -5 "$file" | grep -q "^---"; then
+              timestamp=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)
+
+              # 用 echo 逐行寫入，完全避免 heredoc 縮排陷阱
+              echo "---"                                         > /tmp/fm.txt
+              echo "title: \"Changelog\""                       >> /tmp/fm.txt
+              echo "name: \"${skill_name}\""                   >> /tmp/fm.txt
+              echo "description: \"Auto-generated changelog by semantic-release\"" >> /tmp/fm.txt
+              echo "version: \"0.0.0\""                       >> /tmp/fm.txt
+              echo "github_repository: \"nervlin4444/ai.skills.incubation\"" >> /tmp/fm.txt
+              echo "target_branch: \"main\""                   >> /tmp/fm.txt
+              echo "updated_at: \"${timestamp}\""              >> /tmp/fm.txt
+              echo "fixes: []"                                    >> /tmp/fm.txt
+              echo "auth_config:"                                >> /tmp/fm.txt
+              echo "  provider: \"github\""                   >> /tmp/fm.txt
+              echo "  auth_method: \"token\""                >> /tmp/fm.txt
+              echo "  token_env_var: \"GITHUB_TOKEN\""        >> /tmp/fm.txt
+              echo "  env_file_path: \".env\""                >> /tmp/fm.txt
+              echo "file_mapping:"                               >> /tmp/fm.txt
+              echo "  local_path: \"CHANGELOG.md\""          >> /tmp/fm.txt
+              echo "  github_path: \"${skill_name}/CHANGELOG.md\"" >> /tmp/fm.txt
+              echo "---"                                         >> /tmp/fm.txt
+              echo ""                                            >> /tmp/fm.txt
+
               cat /tmp/fm.txt "$file" > /tmp/changelog_new.md
               mv /tmp/changelog_new.md "$file"
               git add "$file"
-              echo "[OK] Added frontmatter to ${skill_name}/CHANGELOG.md (name=${skill_name}, github_path=${skill_name}/CHANGELOG.md)"
+              echo "[OK] Added frontmatter to ${skill_name}/CHANGELOG.md"
+              changed=1
             else
               echo "[SKIP] ${skill_name}/CHANGELOG.md already has frontmatter"
             fi
           done
-          
-          # 如果有改動，commit 並 push
-          if git diff --cached --quiet; then
+
+          if [ "$changed" -eq 0 ]; then
             echo "[INFO] No CHANGELOG.md files need frontmatter updates."
           else
             git commit -m "docs: add frontmatter to CHANGELOG.md files [skip ci]"
-            
-            # ============================================================
-            # CRITICAL FIX: 防 race condition
-            # 原因：client 用 REST API 上傳會產生新 commit，
-            # 導致本地 main 落後於 remote，直接 push 會被拒絕
-            # ============================================================
+            # CRITICAL FIX: 防 race condition（client REST API 上傳產生新 commit）
             git pull --rebase origin main
             git push origin main
           fi
