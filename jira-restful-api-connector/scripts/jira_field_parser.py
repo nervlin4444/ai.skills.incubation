@@ -6,7 +6,7 @@ description: "F-004: Safe issue field parser. Dot-path nested field extraction w
 version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T21:56:00+08:00"
+updated_at: "2026-05-25T22:12:00+08:00"
 fixes: [28, 29]
 auth_config:
   provider: jira
@@ -18,8 +18,25 @@ file_mapping:
   github_path: "jira-restful-api-connector/scripts/jira_field_parser.py"
 ---
 '''
-def get_issue_field(issue, field_name, default=""):
-    return issue.get("fields", {}).get(field_name, default)
+def get_issue_field(issue, field_path, default=""):
+    """Safely get nested field using dot notation (e.g. 'status.name').
+
+    Args:
+        issue: Jira issue dict with 'fields' key.
+        field_path: Dot-separated path like 'status.name' or 'assignee.displayName'.
+        default: Value to return if path not found or any intermediate value is None.
+
+    Returns:
+        The nested value, or default if path invalid or value is None.
+    """
+    parts = field_path.split(".")
+    current = issue.get("fields", {})
+    for part in parts:
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return default
+    return current if current is not None else default
 
 
 def get_assignee_name(issue):
@@ -54,7 +71,6 @@ def get_last_updated(issue):
     raw = get_issue_field(issue, "updated", "")
     if not raw:
         return "Unknown"
-    # Extract YYYY-MM-DD from ISO 8601 datetime string
     try:
         return raw[:10]
     except Exception:
