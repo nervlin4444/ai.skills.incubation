@@ -2,11 +2,11 @@
 title: "jira-restful-api-connector — LLM SKILL.md"
 name: "jira-restful-api-connector"
 description: "LLM execution guide. Zero business logic. Connect and query Jira REST API v2, return raw data only."
-version: "v0.1.2"
+version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T17:09:00+08:00"
-fixes: [26]
+updated_at: "2026-05-25T21:42:00+08:00"
+fixes: [27, 28, 31]
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -271,7 +271,8 @@ Mandatory functions:
         Get issuetype name. Missing -> return "Unknown".
 
     def get_due_date(issue: dict) -> str
-        Get duedate. Not set -> return None.
+        Get duedate. Not set or None -> return "" (empty string).
+        Implementation: call get_issue_field(), then normalize None to "".
 
     def get_last_updated(issue: dict) -> str
         Get updated field date part (YYYY-MM-DD).
@@ -285,9 +286,24 @@ Mandatory functions:
 
     def normalize_jira_datetime(dt_str: str) -> str
         Jira date format -> ISO 8601 format.
-        Handle: "2026-05-14T12:45:53.000+0800" -> "2026-05-14T12:45:53.000+08:00"
-        Handle: "Z" -> "+00:00"
-        Use regex: re.sub(r'([+-])(\d{2})(\d{2})$', r'\1\2:\3', dt_str)
+
+        Behavior rules (do NOT report as bugs):
+          - Trailing .000 microseconds are dropped by datetime.isoformat().
+            Input "2026-05-14T12:45:53.000+0800" returns "2026-05-14T12:45:53+08:00".
+            The .000 is dropped by Python, not by this function. Expected behavior.
+          - Z suffix (UTC Zulu time) converted to +00:00.
+          - Inputs without timezone use local system timezone.
+          - Date-only inputs (no T separator) returned as-is, no time appended.
+
+        Implementation steps:
+          1. Handle Z suffix before strptime(): replace "Z" with "+0000".
+             strptime %z expects +0800 (no colon), so use +0000 not +00:00.
+          2. Date-only (no "T"): return as-is.
+          3. strptime() with formats preserving microseconds: %Y-%m-%dT%H:%M:%S.%f%z.
+          4. If no timezone in input, apply local system timezone via datetime.now().astimezone().tzinfo.
+             Do NOT hardcode +08:00.
+          5. isoformat() automatically formats timezone as +08:00 (with colon).
+             No manual regex conversion needed; isoformat() handles this.
 
     def days_since_updated(issue: dict) -> int
         Calculate days since last update.
@@ -336,9 +352,9 @@ Before executing any script, check version consistency:
 
     python scripts/jira_restful_core.py --version
 
-Output must be v0.1.2. If mismatch, output warning:
+Output must be v0.1.3. If mismatch, output warning:
 
-    WARN: Version mismatch. Expected v0.1.2, got [actual version]. Continue at your own risk.
+    WARN: Version mismatch. Expected v0.1.3, got [actual version]. Continue at your own risk.
 
 ## 8. Cross-Skill Collaboration
 
@@ -387,6 +403,7 @@ Any failed -> output "Execution complete, pending items: [list]"
 | v0.1.0 | 2026-05-21 | Initial version. Split from jira-project-report v1.0.1 core. F-001~F-005, path rigidity, tiered error handling, interface LOCK PERMANENT |
 | v0.1.1 | 2026-05-25 | Fix: Python scripts renamed to underscore format per naming rules. Fixed broken import statements. All .py content verified ASCII-only. |
 | v0.1.2 | 2026-05-25 | Fix: Added missing high-level methods search_issues(), get_issue(), get_changelog() to JiraClient. Enhanced Section 4.1 docs to clarify two-layer architecture and F-002 dependency. Fixes #26. |
+| v0.1.3 | 2026-05-25 | Fix: normalize_jira_datetime() Z handling, local timezone, date-only passthrough. Added explicit microsecond standardization note in Section 4.5. get_due_date() None normalization. Frontmatter fixes fields corrected per file scope. SKILL.md version synchronized. Fixes #27, #28, #29, #30, #31. |
 
 ---
 
