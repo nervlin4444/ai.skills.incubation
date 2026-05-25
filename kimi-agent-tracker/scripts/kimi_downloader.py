@@ -2,11 +2,11 @@
 ---
 title: Kimi Conversation File Downloader
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations. v1.2.0 replaces download triggering with preview panel content extraction as primary strategy. Clicks file link, waits for preview panel to load, extracts text content from DOM, and writes directly to local file. Fallback to browser download for binary files.
-version: "1.2.0"
+description: F-003 Auto-download files from Kimi chat conversations. v1.2.1 fixes preview panel selector to exclude sidebar, ensuring correct DOM content extraction.
+version: "1.2.1"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T14:30:00+00:00"
+updated_at: "2026-05-25T15:01:00+00:00"
 auth_config:
   provider: kimi
   auth_method: persistent_profile
@@ -38,14 +38,18 @@ except ImportError:
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
+
 def _now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
+
 
 def log_event(msg):
     print(f"[{_now_iso()}] {msg}")
 
+
 def get_base_dir():
     return Path(__file__).resolve().parent.parent
+
 
 def load_config():
     p = get_base_dir() / ".config" / "kimi_tracker_config.json"
@@ -55,15 +59,18 @@ def load_config():
     with open(p, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
 def ensure_dir(path):
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
+
 def expand_path(path_str):
     if path_str.startswith("~/"):
         return os.path.expanduser(path_str)
     return path_str
+
 
 def compute_sha256(filepath):
     h = hashlib.sha256()
@@ -72,10 +79,12 @@ def compute_sha256(filepath):
             h.update(chunk)
     return h.hexdigest()
 
+
 def get_profile_dir():
     p = Path.home() / ".kimi_auth" / "browser_profile_chromium"
     ensure_dir(p)
     return str(p)
+
 
 def load_downloads_json():
     p = get_base_dir() / ".config" / "downloads.json"
@@ -84,10 +93,12 @@ def load_downloads_json():
             return json.load(f)
     return {"downloaded": {}, "duplicates": []}
 
+
 def save_downloads_json(data):
     p = get_base_dir() / ".config" / "downloads.json"
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 class KimiDownloader:
     def __init__(self, config):
@@ -143,12 +154,12 @@ class KimiDownloader:
             pass
 
     def _scroll_element_into_view(self, page, href):
-        js_scroll = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].scrollIntoView({block: \"center\", inline: \"center\", behavior: \"instant\"}); return true; } } return false; }"
-        return page.evaluate(js_scroll, href)
+        js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { links[i].scrollIntoView({block: "center", inline: "center", behavior: "instant"}); return true; } } return false; }'
+        return page.evaluate(js, href)
 
     def _get_element_position(self, page, href):
-        js_pos = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { var rect = links[i].getBoundingClientRect(); return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, w: rect.width, h: rect.height, in_viewport: rect.top >= 0 && rect.bottom <= window.innerHeight}; } } return null; }"
-        return page.evaluate(js_pos, href)
+        js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { var rect = links[i].getBoundingClientRect(); return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, w: rect.width, h: rect.height, in_viewport: rect.top >= 0 && rect.bottom <= window.innerHeight}; } } return null; }'
+        return page.evaluate(js, href)
 
     def _find_file_links(self, page):
         links = []
@@ -233,28 +244,34 @@ class KimiDownloader:
                     page.wait_for_timeout(300)
                     page.mouse.click(pos["x"], pos["y"])
                 else:
-                    js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
-                    page.evaluate(js_click, href)
+                    js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { links[i].click(); return true; } } return false; }'
+                    page.evaluate(js, href)
             else:
-                js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
-                page.evaluate(js_click, href)
+                js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { links[i].click(); return true; } } return false; }'
+                page.evaluate(js, href)
 
             # Step 2: Wait for preview panel to appear
-            log_event(f"[EXTRACT-2] Waiting for preview panel...")
+            # CRITICAL FIX v1.2.1: Removed [class*="sidebar"] which matched conversation sidebar
+            log_event("[EXTRACT-2] Waiting for preview panel...")
             preview_selectors = [
                 '[class*="preview"]', '[class*="panel"]', '[class*="drawer"]',
-                '[class*="sidebar"]', '[class*="file-view"]', '[class*="code"]',
-                '.monaco-editor', '[role="dialog"]', '.ant-drawer',
-                '[class*="content"]',
+                '[class*="file-view"]', '[class*="code"]', '.monaco-editor',
+                '[role="dialog"]', '.ant-drawer', '[class*="content"]',
+                '[class*="file-preview"]', '[class*="doc-preview"]',
             ]
             preview_found = False
+            preview_sel = None
             for sel in preview_selectors:
                 try:
                     el = page.wait_for_selector(sel, timeout=5000)
                     if el and el.is_visible():
-                        preview_found = True
-                        log_event(f"[EXTRACT-2] Preview panel found: {sel}")
-                        break
+                        # Verify it's not the conversation sidebar by checking dimensions
+                        bbox = el.bounding_box()
+                        if bbox and bbox.get("width", 0) > 200 and bbox.get("height", 0) > 200:
+                            preview_found = True
+                            preview_sel = sel
+                            log_event(f"[EXTRACT-2] Preview panel found: {sel} ({bbox.get('width', 0):.0f}x{bbox.get('height', 0):.0f})")
+                            break
                 except Exception:
                     continue
 
@@ -264,20 +281,28 @@ class KimiDownloader:
                 return {"status": "skipped", "file": filename, "reason": "Preview panel not found"}
 
             # Step 3: Wait for content to load (check multiple times)
-            log_event(f"[EXTRACT-3] Waiting for content to load...")
+            log_event("[EXTRACT-3] Waiting for content to load...")
             content = None
             for attempt in range(5):
                 page.wait_for_timeout(2000)
                 content = self._extract_preview_content(page)
-                if content and len(content.strip()) > 50:
+                if content and len(content.strip()) > 100:
                     log_event(f"[EXTRACT-3] Content loaded: {len(content)} chars")
                     break
                 log_event(f"[EXTRACT-3] Content not ready, attempt {attempt+1}/5")
 
-            if not content or len(content.strip()) < 10:
-                log_event(f"[EXTRACT-FAIL] Content empty or too short for {filename}")
+            # Validate content length and quality
+            if not content or len(content.strip()) < 100:
+                log_event(f"[EXTRACT-FAIL] Content empty or too short ({len(content or '')} chars) for {filename}")
                 self._capture(page, f"extract_empty_{filename[:30]}")
-                return {"status": "skipped", "file": filename, "reason": "Preview content empty"}
+                return {"status": "skipped", "file": filename, "reason": "Preview content empty or too short"}
+
+            # Extra validation for code files
+            ext = Path(filename).suffix.lower()
+            if ext == ".py" and ("def " not in content and "import " not in content and "class " not in content):
+                log_event(f"[EXTRACT-FAIL] Content does not look like Python code for {filename}")
+                self._capture(page, f"extract_wrong_format_{filename[:30]}")
+                return {"status": "skipped", "file": filename, "reason": "Content validation failed (not valid Python)"}
 
             # Step 4: Write content to file
             log_event(f"[EXTRACT-4] Writing {len(content)} chars to {dest_path}")
@@ -293,7 +318,7 @@ class KimiDownloader:
 
     def _extract_preview_content(self, page):
         """Extract text content from preview panel DOM."""
-        js_extract = """() => {
+        js = """() => {
             var selectors = [
                 '[class*="preview"] pre', '[class*="panel"] pre',
                 '[class*="code"] pre', '.monaco-editor .view-lines',
@@ -321,7 +346,7 @@ class KimiDownloader:
             return null;
         }"""
         try:
-            return page.evaluate(js_extract)
+            return page.evaluate(js)
         except Exception as e:
             log_event(f"[EXTRACT-ERROR] JS extraction failed: {e}")
             return None
@@ -434,13 +459,10 @@ class KimiDownloader:
                     href = link["href"]
                     filename = os.path.basename(urlparse(href).path) or ""
                     ext = Path(filename).suffix.lower()
-                    # Text files: use content extraction (primary)
-                    # Binary files: use browser download (fallback)
                     is_text = ext in [".py", ".md", ".txt", ".json", ".csv", ".yml", ".yaml", ".html", ".js", ".css", ".xml"]
                     is_binary = ext in [".zip", ".rar", ".7z", ".tar", ".gz", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".gif", ".mp3", ".mp4"]
                     if is_text or not is_binary:
                         res = self._download_by_extraction(page, link, title)
-                        # If extraction fails, try browser download as fallback
                         if res.get("status") in ["skipped", "error"]:
                             log_event(f"[FALLBACK] Extraction failed, trying browser download for {filename}")
                             res = self._download_by_browser(page, link, title)
@@ -487,8 +509,9 @@ class KimiDownloader:
         log_event(f"[BATCH] Complete: {len(all_results['success'])} success, {len(all_results['duplicates'])} duplicates, {len(all_results['errors'])} errors, {len(all_results['skipped'])} skipped")
         return all_results
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.2.0")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.2.1")
     parser.add_argument("--url", help="Single conversation URL to download from")
     parser.add_argument("--from-list", help="Path to conversations.json for batch download")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
@@ -504,6 +527,7 @@ def main():
     else:
         parser.print_help()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
