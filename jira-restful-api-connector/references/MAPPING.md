@@ -2,11 +2,11 @@
 title: "Jira Status & Field Mapping"
 name: "jira-restful-api-connector"
 description: "Jira status name and internal field mapping rules."
-version: "v0.1.2"
+version: "v0.1.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T17:09:00+08:00"
-fixes: [26]
+updated_at: "2026-05-25T00:52:00+08:00"
+fixes: []
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -18,27 +18,27 @@ file_mapping:
 ---
 # Jira Status & Field Mapping
 
-## Status Mapping (Status Name -> Internal Key)
+## 狀態映射 (Status Name -> Internal Key)
 
-| Display Name | Internal Key | Purpose |
-|--------------|--------------|---------|
-| Done | done | Completed |
-| In Progress | in_progress | In progress |
-| Ready for QC | ready_for_qc | Pending test |
-| To Do | to_do | Not started |
-| Return | returned | Returned |
-| On Hold | on_hold | On hold |
-| Completed | done | Chinese mapping |
-| In Progress | in_progress | Chinese mapping |
-| Pending Test | ready_for_qc | Chinese mapping |
-| Not Started | to_do | Chinese mapping |
-| Returned | returned | Chinese mapping |
-| On Hold | on_hold | Chinese mapping |
+| 顯示名稱 | 內部 Key | 用途 |
+|----------|----------|------|
+| Done | done | 已完成 |
+| In Progress | in_progress | 進行中 |
+| Ready for QC | ready_for_qc | 待測試 |
+| To Do | to_do | 待開始 |
+| Return | returned | 退回 |
+| On Hold | on_hold | 暫停 |
+| 已完成 | done | 中文映射 |
+| 進行中 | in_progress | 中文映射 |
+| 待測試 | ready_for_qc | 中文映射 |
+| 待開始 | to_do | 中文映射 |
+| 退回 | returned | 中文映射 |
+| 暫停 | on_hold | 中文映射 |
 
-## Field Path Reference
+## 字段路徑對照
 
-| Business Meaning | Field Path | Type |
-|------------------|------------|------|
+| 業務含義 | 字段路徑 | 類型 |
+|----------|----------|------|
 | Issue Key | key | string |
 | Summary | fields.summary | string |
 | Status | fields.status.name | string |
@@ -48,13 +48,13 @@ file_mapping:
 | Updated | fields.updated | string (ISO 8601) |
 | Priority | fields.priority.name | string |
 
-## JQL Syntax Reference
+## JQL 語法參考
 
-| Operation | Syntax | Example |
-|-----------|--------|---------|
-| Equals | = | project = WIL |
-| Not equals | != | status != "Done" |
-| Contains | ~ | summary ~ "Void Sales" |
-| Linked | in linkedIssues | issue in linkedIssues("WIL-10") |
+| 操作 | 語法 | 範例 |
+|------|------|------|
+| 等於 | = | project = WIL |
+| 不等於 | != | status != "Done" |
+| 包含 | ~ | summary ~ "Void Sales" |
+| 鏈接 | in linkedIssues | issue in linkedIssues("WIL-10") |
 | OR | OR | status = "Done" OR status = "Return" |
 | AND | AND | project = WIL AND status = "Done" |
