@@ -1,118 +1,125 @@
 ---
-title: Kimi Agent Tracker - LLM Execution Guide
+title: Kimi Agent Tracker LLM Execution Guide
 name: kimi-agent-tracker
-description: LLM execution instruction for the Kimi Agent Tracker skill. Defines download strategy rules, failure recovery patterns, and mandatory diagnostics based on v1.2.1 field experience.
-version: "1.2.1"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-25T15:01:00+00:00"
+description: LLM execution instructions for the Kimi file download automation suite. Covers incremental pipeline, strategy selection, and daemon integration.
+version: v1.3.0
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-25T16:53:00+0800
+fixes: []
 auth_config:
-  provider: kimi
-  auth_method: persistent_profile
-  token_env_var: ""
-  env_file_path: ""
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: .env
 file_mapping:
   local_path: "{baseDir}/SKILL.md"
   github_path: "kimi-agent-tracker/SKILL.md"
 ---
 
-# SKILL: kimi-agent-tracker v1.2.1
+# Kimi Agent Tracker - LLM Execution Guide v1.3.0
 
-## Role Definition
+> This file is an LLM execution instruction, not a human manual.
+> LLM must read and execute strictly. No improvisation.
 
-You are the execution agent for the Kimi Agent Tracker. Your job is to automate file downloads from Kimi AI chat conversations using Playwright.
+## Identity Split
 
-## Execution Rules
+### If you are Sub-Agent (L1 / L2 / L3)
 
-### RULE 1: Download Strategy Hierarchy (LOCKED)
+Stop. Close. Execute your own task. This file is not for you.
 
-When downloading files from Kimi conversations, you MUST follow this exact priority order:
+### If you are Main Agent (L0)
 
-1. **PRIMARY**: Content Extraction from Preview Panel DOM
-   - Click the file link to open Kimi's preview panel
-   - Wait for panel to appear (selectors from config: `extraction.preview_selectors`)
-   - Validate panel dimensions: width > 200px AND height > 200px (prevents matching sidebar)
-   - Extract text content from DOM (`pre`, `code`, `.view-lines`, `.markdown-body` — from `extraction.content_selectors`)
-   - Validate content: minimum length from `extraction.min_content_length` (default 100)
-   - For .py files: validate presence of `def ` OR `import ` OR `class `
-   - Write directly to local file with UTF-8 encoding (NO BOM)
-   - This bypasses all browser download mechanisms
+Continue. You are the coordinator. When asked to operate kimi-agent-tracker, follow this guide.
 
-2. **SECONDARY**: Browser Download Fallback (binary files only: .zip, .pdf, .png)
-   - Anchor injection with `download` attribute
-   - Mouse click on visible element
-   - Check browser default download directory
+## Core Pipeline (v1.3.0)
 
-3. **FORBIDDEN**: Never attempt these failed strategies for text files
-   - `page.click()` on `sandbox://` links
-   - `expect_download()` with Playwright
-   - Fetch API on `sandbox://` URLs (returns "Failed to fetch")
-   - Physical mouse simulation on off-viewport elements
-   - `[class*="sidebar"]` as preview panel selector
+The download system uses a 4-stage incremental pipeline:
 
-### RULE 2: Preview Panel Detection (CRITICAL)
+```
+DISCOVERY  ->  DEDUPLICATE  ->  DOWNLOAD  ->  RECORD
+   |                |               |             |
+Scan page     Check downloads    Apply        Update
+for links     .json + pending    strategy     state
+              .json              by type      files
+```
 
-The selector `[class*="sidebar"]` is BANNED from preview panel detection. It matches the conversation sidebar, not the file preview panel.
+## Strategy Selection Rules (MANDATORY)
 
-Correct preview panel selectors (from config):
-- `[class*="preview"]`
-- `[class*="panel"]` (verify not sidebar by dimensions)
-- `[class*="drawer"]`
-- `[class*="file-view"]`
-- `[class*="code"]`
-- `.monaco-editor`
-- `[role="dialog"]`
+When generating or modifying download logic, you MUST classify files by extension and assign the correct strategy:
 
-Dimension validation: after finding a matching element, verify `bounding_box().width > 200 && bounding_box().height > 200`.
+| Extension Group | Strategy | Browser Mode | Reason |
+|---|---|---|---|
+| `.md`, `.txt`, `.json`, `.csv`, `.yml`, `.yaml`, `.html`, `.js`, `.css`, `.xml`, `.sh`, `.bash` | `anchor_injection` | Headless | Fast, reliable for text files. Creates `<a download>` element via JS. |
+| `.py` | `preview_extraction` | Headless (extended wait) | Kimi renders Python in preview panel. Extract from DOM after 10x3s retries. Fallback to visible if empty. |
+| `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.pdf`, `.doc`, `.docx`, `.xls`, `.xlsx`, `.ppt`, `.pptx`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.mp3`, `.mp4`, `.webp`, `.svg`, `.ico`, `.woff`, `.woff2`, `.ttf`, `.eot` | `visible_fallback` | Visible (off-screen) | Binary files refuse headless download. Window moved to `-10000,-10000` to avoid UI interference. |
 
-### RULE 3: Content Validation
+**NEVER** assign the wrong strategy. `.py` files must use `preview_extraction`, not `anchor_injection`.
 
-After extracting content, validate:
-- Minimum length: `extraction.min_content_length` (default 100 chars)
-- Content indicators for .py files: presence of `def `, `import `, or `class `
-- If content < min_length or wrong format, retry with different selector from `extraction.content_selectors`
-- Maximum wait attempts: `extraction.max_wait_attempts` (default 5)
-- Wait interval between attempts: `extraction.wait_interval_ms` (default 2000ms)
+## State File Management (MANDATORY)
 
-### RULE 4: File Type Routing
+All state files are JSON with `_meta` block:
 
-| Extension | Strategy | Reason |
-|-----------|----------|--------|
-| .py, .md, .txt, .json, .csv, .yml, .yaml, .html, .js, .css, .xml | Content Extraction | Text renderable in preview panel |
-| .zip, .rar, .7z, .tar, .gz, .pdf, .doc, .png, .jpg, .mp4 | Browser Download | Binary, not renderable as text |
+### downloads.json
+- Key: SHA256 hash of file content
+- Value: `{file, hash, path, conversation, conversation_id, downloaded_at}`
+- Purpose: Permanent record of successfully downloaded files
+- Rule: NEVER delete entries. Append-only.
 
-### RULE 5: Configuration Management
+### pending.json
+- Array of `{conversation_id, conversation_title, file_url, filename, file_ext, detected_at, retry_count, last_error, strategy}`
+- Purpose: Queue of discovered but not-yet-downloaded files
+- Rule: Remove item on success. Increment retry_count on failure. Max retry = daemon.max_retry_per_conversation.
 
-ALL tunable parameters MUST be in `.config/kimi_tracker_config.json`. NEVER hardcode:
-- Timeouts
-- Selectors (use `extraction.preview_selectors` and `extraction.content_selectors`)
-- Directory paths
-- Retry counts
-- Content validation thresholds
+### conversations.json
+- Cache from `kimi_conversation_lister.py`
+- Purpose: Avoid re-listing conversations every cycle
+- Rule: Daemon refreshes this at cycle start.
 
-## Failure Recovery Matrix
+## Daemon Cycle Flow
 
-| Error Pattern | Diagnosis | Action |
-|---------------|-----------|--------|
-| `[EXTRACT-FAIL] Preview panel not found` | Wrong selector matched sidebar | Check dimension validation; verify `extraction.preview_selectors` in config |
-| `[EXTRACT-FAIL] Content empty` | Panel opened but content not loaded | Increase `extraction.max_wait_attempts` or `extraction.wait_interval_ms` |
-| `42 chars extracted` | Matched wrong element (sidebar text) | Fixed in v1.2.1 — dimension validation prevents this. If persists, check screenshot. |
-| `[SKIP] Browser download failed` | Binary file, extraction not applicable | Verify file extension is in binary list |
-| `Login invalid` | Session expired | Execute `kimi_login_manager.py --force-login --visible` |
-| `Navigation timeout` | Page load slow | Increase `login.timeout_sec` in config |
+```
+1. List conversations (lister.py or cache)
+2. For each conversation (up to max_conversations_per_cycle):
+   a. DISCOVER: downloader.py --url URL --discover-only
+      -> New files added to pending.json
+   b. DOWNLOAD: downloader.py --url URL
+      -> Process pending files for this conversation
+   c. Log results per conversation
+3. Process remaining pending items (cross-conversation)
+4. Sleep interval_sec
+```
 
-## Diagnostic Requirements
+## Critical Rules
 
-When ANY download fails:
-1. Capture full-page screenshot to `.logs/diagnose/download/`
-2. Log the exact selector that matched and its dimensions
-3. Log content length and first 200 chars
-4. Do NOT silently skip — always log the specific failure reason
+1. **LOCK-016 Compliance**: All `.py` files must be ASCII-only. No Chinese characters or fullwidth punctuation in code, comments, log messages, or error strings. Frontmatter `title`/`name` fields are exempt.
+
+2. **Config-Driven**: All selectors, thresholds, and timeouts must be read from `kimi_tracker_config.json`. Never hardcode values in scripts.
+
+3. **Deduplication Before Download**: Always check `downloads.json` and `pending.json` before opening a browser page. Skip if already recorded.
+
+4. **Subprocess Isolation**: Daemon must call downloader.py as subprocess (not import). Each conversation gets independent process + timeout.
+
+5. **Error Recording**: Every failed download must update `pending.json` with `retry_count` and `last_error`. After max retries, log and skip permanently.
+
+6. **Window Hiding**: When using `visible_fallback`, always pass `--window-position=-10000,-10000 --window-size=1,1` to keep window off-screen.
+
+## File Naming Convention
+
+- `.py` scripts: `xxx_yyy_zzz.py` (underscore separators, exempt from dot-separation rule per agent-skill-improving v1.3.1)
+- Config: `kimi_tracker_config.json`
+- State files: `downloads.json`, `pending.json`, `conversations.json`
+- Log files: `daemon.log`
+
+## Frontmatter Requirements
+
+All files in this skill must include unified frontmatter:
+- `.md` files: YAML frontmatter at top
+- `.py` files: Docstring with `---` wrapped YAML block
+- `.json` files: `_meta` block inside JSON
+
+Mandatory fields: `title`, `name`, `description`, `version`, `github_repository`, `target_branch`, `updated_at`, `fixes`, `auth_config`, `file_mapping`
 
 ## Version Lock
 
-- Current: v1.2.1
-- Download strategy: Content Extraction (primary) + Browser Download (binary fallback)
-- Critical fix: Preview panel dimension validation (width>200, height>200)
-- NEVER revert to pre-v1.2.0 download triggering strategies for text files
-- NEVER use `[class*="sidebar"]` as preview panel selector
+LOCK v1.3.0 PERMANENT - Incremental download pipeline, categorized strategies, state file management, deduplication, subprocess isolation, config-driven selectors, LOCK-016 ASCII compliance.
