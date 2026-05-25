@@ -2,11 +2,11 @@
 title: "Jira RESTful API Connector — Usage Guide"
 name: "jira-restful-api-connector"
 description: "Human-readable usage tutorial. How to configure .env and use modules F-001~F-005."
-version: "v0.1.2"
+version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T17:09:00+08:00"
-fixes: [26]
+updated_at: "2026-05-25T22:05:00+08:00"
+fixes: [26, 27, 28, 31]
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -22,14 +22,25 @@ file_mapping:
 
 ### 1.1 Create .env File
 
-Create `.env` in skill root:
+Create `.env` in skill root.
 
-    JIRA_URL=https://your-jira-instance.atlassian.net
+**IMPORTANT**: Jira Cloud and Jira Server/DC use DIFFERENT authentication values.
+
+#### Option A: Jira Cloud (xxx.atlassian.net)
+
+    JIRA_URL=https://your-domain.atlassian.net
     JIRA_USERNAME=your.email@example.com
-    JIRA_API_TOKEN=your_api_token_here
+    JIRA_API_TOKEN=your_cloud_api_token_here
 
-For Basic Auth, must provide `JIRA_USERNAME` + `JIRA_API_TOKEN`.
-For Bearer Token, only `JIRA_API_TOKEN` (or `JIRA_PAT`) needed.
+Get API Token from: https://id.atlassian.net/manage-profile/security/api-tokens
+
+#### Option B: Jira Server / Data Center (self-hosted, e.g. IP:8080)
+
+    JIRA_URL=http://your-server:8080
+    JIRA_USERNAME=your_jira_login_username
+    JIRA_API_TOKEN=your_jira_login_password
+
+**WARNING**: Server/DC does NOT have "API Tokens". The `JIRA_API_TOKEN` field must contain your **login PASSWORD** (or a Personal Access Token if your admin enabled PAT). Do NOT put a Cloud API Token here.
 
 ### 1.2 Copy Template
 
@@ -79,8 +90,8 @@ Edit `.env` with actual values.
 
 | HTTP Status | Behavior |
 |-------------|----------|
-| 401 | Stop immediately, check token |
-| 403 | Exponential backoff retry (max 3) |
+| 401 | Stop immediately, check token. If Server/DC, verify JIRA_API_TOKEN is your PASSWORD. |
+| 403 | Exponential backoff retry (max 3). If persistent, check auth per Section 1.1. |
 | 404 | Stop immediately, issue does not exist |
 | 422 | Stop immediately, JQL syntax error |
 | 5xx | Linear backoff retry (max 5) |
