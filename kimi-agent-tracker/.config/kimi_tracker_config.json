@@ -2,11 +2,11 @@
   "_meta": {
     "title": "Kimi Tracker Unified Configuration",
     "name": "kimi-agent-tracker",
-    "description": "Single source of truth. All tunable parameters centralized here. No .env required.",
-    "version": "1.1.0",
+    "description": "Single source of truth. All tunable parameters centralized here. No .env required. v1.2.1 adds extraction configuration for content-based download strategy.",
+    "version": "1.2.1",
     "github_repository": "nervlin4444/ai.skills.incubation",
     "target_branch": "main",
-    "updated_at": "2026-05-25T02:15:00+08:00",
+    "updated_at": "2026-05-25T15:47:00+08:00",
     "auth_config": {
       "provider": "local",
       "auth_method": "none",
@@ -27,6 +27,8 @@
     "keep_log_days": 7
   },
   "login": {
+    "timeout_sec": 30,
+    "max_retry": 2,
     "stay_open_default": 300,
     "validate_timeout_ms": 5000,
     "login_check_interval_sec": 3,
@@ -48,7 +50,7 @@
     "sidebar": ".sidebar"
   },
   "daemon": {
-    "interval_sec": 60,
+    "interval_sec": 900,
     "visible": false,
     "conversation_count": 10,
     "download_dir": "~/Downloads",
@@ -56,13 +58,50 @@
     "max_retry_per_conversation": 2
   },
   "download": {
-    "direct_extensions": [".zip", ".py", ".csv", ".json", ".env"],
+    "strategy": "extraction",
+    "deduplicate": true,
+    "unique_filename": true,
+    "direct_extensions": [".zip", ".py", ".csv", ".json", ".env", ".txt", ".md", ".yml", ".yaml", ".html", ".js", ".css", ".xml"],
     "preview_extensions": [".md", ".txt"],
     "download_timeout_ms": 10000,
     "retry_delay_sec": 2,
     "max_retry": 1,
-    "unique_filename": true,
-    "deduplicate": true
+    "extraction": {
+      "preview_selectors": [
+        "[class*=\"preview\"]",
+        "[class*=\"panel\"]",
+        "[class*=\"drawer\"]",
+        "[class*=\"file-view\"]",
+        "[class*=\"code\"]",
+        ".monaco-editor",
+        "[role=\"dialog\"]",
+        ".ant-drawer",
+        "[class*=\"content\"]",
+        "[class*=\"file-preview\"]",
+        "[class*=\"doc-preview\"]"
+      ],
+      "content_selectors": [
+        "[class*=\"preview\"] pre",
+        "[class*=\"panel\"] pre",
+        "[class*=\"code\"] pre",
+        ".monaco-editor .view-lines",
+        "[class*=\"file-view\"] pre",
+        "[class*=\"content\"] pre",
+        ".ant-drawer pre",
+        "[role=\"dialog\"] pre",
+        "pre[class*=\"code\"]",
+        "code[class*=\"language\"]",
+        "[class*=\"markdown-body\"]",
+        "[class*=\"article\"]",
+        ".preview-panel pre",
+        ".file-preview pre",
+        "[class*=\"text\"] pre",
+        "pre"
+      ],
+      "min_content_length": 100,
+      "max_wait_attempts": 5,
+      "wait_interval_ms": 2000
+    }
   },
   "state": {
     "state_file": "{baseDir}/.config/downloads.json",
