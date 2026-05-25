@@ -1,3 +1,22 @@
+---
+title: "Changelog"
+name: "."
+description: "Auto-generated changelog by semantic-release"
+version: "0.0.0"
+github_repository: "nervlin4444/ai.skills.incubation"
+target_branch: "main"
+updated_at: "2026-05-25T15:01:52+00:00"
+fixes: []
+auth_config:
+  provider: "github"
+  auth_method: "token"
+  token_env_var: "GITHUB_TOKEN"
+  env_file_path: ".env"
+file_mapping:
+  local_path: "CHANGELOG.md"
+  github_path: "./CHANGELOG.md"
+---
+
 # [1.2.0](https://github.com/nervlin4444/ai.skills.incubation/compare/v1.1.0...v1.2.0) (2026-05-23)
 
 
