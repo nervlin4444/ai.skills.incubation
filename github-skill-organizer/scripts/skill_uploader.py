@@ -6,7 +6,7 @@ description: Handles skill upload to GitHub with auto-classification, parameter 
 version: 1.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T00:30:00+08:00
+updated_at: 2026-05-26T00:51:00+08:00
 fixes: [32]
 auth_config:
   provider: github
@@ -247,14 +247,12 @@ class SkillUploader:
     def _normalize_files(self, files, skill_dir: Path) -> list:
         """Normalize any input to list[Path]. Supports None, str, Path, or mixed list."""
         if files is None:
-            # Auto-scan skill directory
             return [f for f in skill_dir.rglob("*") if f.is_file()]
 
         result = []
         for item in files:
             if isinstance(item, str):
                 item = item.strip()
-                # Check if relative first, before normalize_path resolves to CWD
                 p = Path(item)
                 if not p.is_absolute():
                     p = skill_dir / p
@@ -276,7 +274,6 @@ class SkillUploader:
             log("UPLOADER", "classification is None, auto-invoking classify_change...")
             try:
                 from change_classifier import classify_change
-                # Need comparison first - use skill_syncer
                 from skill_syncer import SkillSyncer
                 syncer = SkillSyncer()
                 comparison = syncer.compare_skill(skill_name)
@@ -406,7 +403,6 @@ class SkillUploader:
             if item.is_file():
                 shutil.copy2(item, dest)
 
-        # Log excluded directories
         excluded = []
         for item in source_dir.rglob("*"):
             if item.is_dir() and self.exclude.is_excluded(item, "skill_uploader", base_path=source_dir):
