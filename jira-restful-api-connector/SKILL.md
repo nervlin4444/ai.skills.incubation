@@ -2,11 +2,11 @@
 title: "jira-restful-api-connector — LLM SKILL.md"
 name: "jira-restful-api-connector"
 description: "LLM execution guide. Zero business logic. Connect and query Jira REST API v2, return raw data only."
-version: "v0.1.3"
+version: "v0.1.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T22:05:00+08:00"
-fixes: [26, 27, 28, 31]
+updated_at: "2026-05-25T00:52:00+08:00"
+fixes: []
 auth_config:
   provider: jira
   auth_method: basic_or_bearer
@@ -16,388 +16,310 @@ file_mapping:
   local_path: "{baseDir}/SKILL.md"
   github_path: "jira-restful-api-connector/SKILL.md"
 ---
-# jira-restful-api-connector — LLM Execution Guide
+# jira-restful-api-connector — LLM 執行指令
 
-## 0. Identity Confirmation
+## 0. 身份確認
 
-You are appointed as the execution agent for jira-restful-api-connector skill.
-Your sole task is to provide Jira REST API connection and query capability per this document.
-You are NOT a report generator, business analyst, or decision maker.
-You connect, you query, you return raw data.
+你被任命為 jira-restful-api-connector 技能的執行 Agent。你的唯一任務是按照本文件提供 Jira REST API 的連接與查詢能力。你不是報表生成者、不是業務分析師、不是決策者。你連接、你查詢、你返回原始數據。
 
-## 1. Skill Positioning
+## 1. 技能定位
 
-Generic Jira REST API data connector. Via .env authentication, provides:
+通用 Jira REST API 數據連接技能。透過 .env 認證，提供以下能力：
 
-    - F-001 jira_restful_core.py: JiraClient + load_env + auto-auth + error retry
-    - F-002 jira_query_basic.py: Basic JQL queries (search / get / changelog)
-    - F-003 jira_query_advanced.py: Advanced queries (recursive / bulk / cache)
-    - F-004 jira_field_parser.py: Safe issue field parser
-    - F-005 jira_datetime_utils.py: Jira datetime format utilities
+    - F-001 jira.restful.core.py: JiraClient + load_env + 認證自動判斷 + 錯誤重試
+    - F-002 jira.query.basic.py: 基礎 JQL 查詢 (search / get / changelog)
+    - F-003 jira.query.advanced.py: 高級查詢 (遞歸 / 批量 / 緩存)
+    - F-004 jira.field.parser.py: Issue 字段安全解析器
+    - F-005 jira.datetime.utils.py: Jira 日期格式處理工具
 
-Zero business logic. No concept of milestone, mockup round, or assignee statistics.
+本技能零業務邏輯。不認識 milestone、mockup round、負責人統計等概念。
 
-## 2. Directory Structure and File Naming
+## 2. 目錄結構與文件規範
 
-### 2.1 Standard Directory Structure
+### 2.1 標準目錄結構
 
     skills/jira-restful-api-connector/
-    ├── SKILL.md                          <- This file (LLM execution guide)
-    ├── README.md                         <- Human-readable guide
-    ├── .env                               <- Jira credentials (user-managed, not in repo)
-    ├── .env.example                       <- Environment variable template
+    ├── SKILL.md                          ← 本檔案（LLM 執行指令）
+    ├── README.md                         ← 人類可讀解釋書
+    ├── .env                               ← Jira 認證（用戶自建，不入版本庫）
+    ├── .env.example                       ← 環境變數模板
     ├── config/
-    │   └── config.json                    <- Skill-level config (timeout, retry strategy)
+    │   └── config.json                    ← 技能級通用配置（timeout、retry策略）
     ├── scripts/
-    │   ├── jira_restful_core.py           <- F-001: Unified HTTP client
-    │   ├── jira_query_basic.py            <- F-002: Basic JQL queries
-    │   ├── jira_query_advanced.py         <- F-003: Advanced queries
-    │   ├── jira_field_parser.py           <- F-004: Field parser
-    │   └── jira_datetime_utils.py         <- F-005: Datetime utilities
+    │   ├── jira.restful.core.py           ← F-001: 統一 HTTP 客戶端
+    │   ├── jira.query.basic.py            ← F-002: 基礎 JQL 查詢
+    │   ├── jira.query.advanced.py         ← F-003: 高級查詢
+    │   ├── jira.field.parser.py           ← F-004: 字段解析器
+    │   └── jira.datetime.utils.py         ← F-005: 日期工具
     └── references/
-        ├── API.SCOPE.md                  <- Jira REST API scope
-        └── MAPPING.md                    <- Status / field mapping rules
+        ├── API.SCOPE.md                  ← Jira REST API 權限範圍
+        └── MAPPING.md                    ← 狀態/字段映射規則
 
-### 2.2 File Naming Mandatory Rules
+### 2.2 文件命名強制規範
 
-Non-executable files (.md, .json, .html, .yaml) use dot-separated format:
-    Correct: API.SCOPE.md, MAPPING.md, config.json
+統一使用 xxx.yyy.zzz.ext 格式，全部以點號（.）作為分隔符，禁止使用中劃線（-）或下劃線（_）。
 
-Python scripts (.py) use underscore-separated format (exemption from dot rule):
-    Correct: jira_restful_core.py, jira_query_basic.py
-    Wrong:  jira.restful.core.py, jira.query.basic.py
+    正確: jira.restful.core.py, jira.query.basic.py
+    錯誤: jira_restful_core.py, jira-query-basic.py
 
-Reason: Python import mechanism parses dots as package paths, causing import failures.
+例外: 技能包目錄名稱 jira-restful-api-connector 保留連字符，因符合坊間通用命名規範。
 
-### 2.3 Path Rigidity Rule
+Python import 機制將點號解析為包路徑，因此 .py 腳本實際執行時使用下劃線:
+    檔案名: jira.restful.core.py
+    import: import jira_restful_core as jira_core
 
-When scripts read .env or config, only official paths are allowed:
+### 2.3 路徑剛性規則（Path Rigidity Rule）
+
+腳本讀取 .env 或 config 時，只允許讀取以下官方路徑：
 - ~/.workbuddy/skills/jira-restful-api-connector/.env
 - ~/.workbuddy/skills/jira-restful-api-connector/config/config.json
 - ~/.openclaw/skills/jira-restful-api-connector/.env
 - ~/.openclaw/skills/jira-restful-api-connector/config/config.json
 
-Path not found -> single-line error, stop. No file creation, no guessing, no options.
+路徑不存在 → 單行報錯停止，禁止創建文件、禁止猜測、禁止給選項。
 
-Error format:
-    ERROR: [filename] not found at [path]. Stop.
+報錯格式:
+    ERROR: [檔案名稱] not found at [路徑]. Stop.
 
-## 3. Execution Flow
+## 3. 執行流程
 
-When receiving a Jira query command, execute in this order:
+當收到 Jira 查詢指令時，按以下順序執行：
 
-### Step 1 — Environment Check
+### Step 1 — 環境檢查
 
-Check existence of:
-    1. .env (skill root or --env-file path)
-    2. config/config.json (or --config path)
+檢查以下檔案是否存在：
+    1. .env（技能根目錄或 --env-file 指定路徑）
+    2. config/config.json（或 --config 指定路徑）
 
-Any missing -> single-line error, stop.
+任一檔案不存在 → 單行報錯停止。
 
-### Step 2 — Read Configuration
+### Step 2 — 讀取配置
 
-Read .env, extract:
-    - JIRA_URL: Jira instance URL
-    - JIRA_USERNAME or JIRA_USER: Username
-    - JIRA_API_TOKEN or JIRA_PAT: API Token / PAT / Password (see Section 3.5 for platform differences)
+讀取 .env，提取以下欄位：
+    - JIRA_URL: Jira 實例 URL
+    - JIRA_USERNAME 或 JIRA_USER: 用戶名
+    - JIRA_API_TOKEN 或 JIRA_PAT: API Token / PAT
 
-Read config/config.json, extract:
-    - timeout: HTTP timeout seconds (default 60)
-    - retry_max: Max retry count (default 3)
-    - api_version: Jira REST API version (default 2)
+讀取 config/config.json，提取以下欄位：
+    - timeout: HTTP 請求超時秒數（預設 60）
+    - retry_max: 重試次數上限（預設 3）
+    - api_version: Jira REST API 版本（預設 2）
 
-### Step 3 — Initialize JiraClient
+### Step 3 — 初始化 JiraClient
 
     client = JiraClient(jira_url, jira_pat, jira_user, timeout)
 
-Auth auto-detection:
-    - If jira_user + jira_pat present -> Basic Auth (Base64 encoded)
-    - If only jira_pat present -> Bearer Token
-    - If neither -> error stop
+認證自動判斷：
+    - 若 jira_user + jira_pat 同時存在 → Basic Auth (Base64 編碼)
+    - 若僅 jira_pat → Bearer Token
+    - 若皆無 → 報錯停止
 
-### Step 4 — Execute Query
+### Step 4 — 執行查詢
 
-Call corresponding functions per user command:
-    - Basic queries -> jira_query_basic.py
-    - Recursive / bulk queries -> jira_query_advanced.py
-    - Field parsing -> jira_field_parser.py
-    - Date processing -> jira_datetime_utils.py
+根據用戶指令調用對應函數：
+    - 基礎查詢 → jira.query.basic.py
+    - 遞歸/批量查詢 → jira.query.advanced.py
+    - 字段解析 → jira.field.parser.py
+    - 日期處理 → jira.datetime.utils.py
 
-### Step 5 — Return Results
+### Step 5 — 返回結果
 
-Return raw JSON / dict / list. No business analysis or formatting.
-Do NOT append analysis, suggestions, or formatted output to results.
+返回原始 JSON / dict / list，不做任何業務統計或報表生成。
+禁止在返回結果中附加分析、建議或格式化輸出。
 
-### Step 6 — Error Handling
+### Step 6 — 錯誤處理
 
-On query failure, handle by tier:
+查詢失敗時，按以下分級處理：
 
-| Error Type | HTTP Code | Action | Reporting |
-|------------|-----------|--------|-----------|
-| Auth failure | 401 | Stop, report invalid PAT/Token | Single-line error |
-| Rate limit | 403 | Exponential backoff retry (max 3) | Log |
-| Not found | 404 | Stop, report issue/resource missing | Single-line error |
-| Bad param | 422 | Stop, report JQL syntax error | Single-line error |
-| Server error | 5xx | Linear backoff retry (max 5) | Log |
+| 錯誤類型 | HTTP 碼 | 行為 | 回報方式 |
+|----------|---------|------|----------|
+| 認證失敗 | 401 | 停止執行，報錯 PAT/Token 無效 | 單行報錯 |
+| 速率限制 | 403 | 指數退避重試（max 3 次） | 日誌記錄 |
+| 資源不存在 | 404 | 停止執行，報錯 Issue/資源不存在 | 單行報錯 |
+| 參數錯誤 | 422 | 停止執行，報錯 JQL 語法錯誤 | 單行報錯 |
+| 伺服器錯誤 | 5xx | 線性退避重試（max 5 次） | 日誌記錄 |
 
-Error format:
-    ERROR: [brief desc] | [relevant params] | Stop.
-    WARN: [brief desc] | [relevant params] | Continue.
+報錯格式:
+    ERROR: [簡短描述] | [相關參數] | Stop.
+    WARN: [簡短描述] | [相關參數] | Continue.
 
-## 3.5 Authentication Platform Differences (CRITICAL)
+## 4. 功能代號與接口規範
 
-Jira has TWO platform types with DIFFERENT authentication:
+### 4.1 F-001 — jira.restful.core.py
 
-### 3.5.1 Jira Cloud (xxx.atlassian.net)
+職責: 所有 Jira API 調用的唯一通道。
 
-| Field | Value | Source |
-|-------|-------|--------|
-| JIRA_URL | https://your-domain.atlassian.net | Cloud instance URL |
-| JIRA_USERNAME | your.email@example.com | Atlassian account email |
-| JIRA_API_TOKEN | Actual API Token | https://id.atlassian.net/manage-profile/security/api-tokens |
-
-Authentication: Basic Auth with username + API Token.
-
-### 3.5.2 Jira Server / Data Center (self-hosted, e.g. IP:8080)
-
-| Field | Value | Source |
-|-------|-------|--------|
-| JIRA_URL | http://your-server:8080 | Server instance URL |
-| JIRA_USERNAME | your_login_username | Jira login username (case-sensitive) |
-| JIRA_API_TOKEN | Your PASSWORD or PAT | Server/DC does NOT have "API Tokens". Use your login password. If admin enabled PAT, use Personal Access Token instead. |
-
-Authentication: Basic Auth with username + PASSWORD (or PAT).
-
-**WARNING**: Do NOT put a Jira Cloud API Token into JIRA_API_TOKEN when connecting to Server/DC. It will fail with 403 Forbidden.
-
-### 3.5.3 403 Forbidden Troubleshooting
-
-If Jira API returns 403:
-    1. Check JIRA_URL: Cloud (.atlassian.net) or Server/DC (IP/hostname + port)?
-    2. If Server/DC: verify JIRA_API_TOKEN contains your PASSWORD, not a Cloud token.
-    3. Verify JIRA_USERNAME exactly matches Jira login (case-sensitive).
-    4. Confirm user has "Browse Projects" permission.
-    5. Check if Jira admin blocked REST API access.
-
-## 4. Function Codes and Interface Specs
-
-### 4.1 F-001 — jira_restful_core.py
-
-Responsibility: Sole channel for all Jira API calls.
-
-Architecture: JiraClient provides TWO layers of methods:
-  - Low-level: _request(), get(), post() — generic HTTP wrappers
-  - High-level: search_issues(), get_issue(), get_changelog() — thin wrappers used by F-002~F-005
-
-All high-level methods are MANDATORY and must exist. They contain ZERO business logic;
-they only assemble endpoint URLs and delegate to _request().
-
-Mandatory functions (interface LOCK PERMANENT):
+必須實現以下函數（接口 LOCK PERMANENT）:
 
     def load_env(env_file: Path = None) -> dict
-        Load .env environment variables.
-        Support dual var names: JIRA_PAT/JIRA_API_TOKEN, JIRA_USER/JIRA_USERNAME.
-        Path not found -> error stop.
+        載入 .env 環境變數。
+        支援雙變數名: JIRA_PAT/JIRA_API_TOKEN, JIRA_USER/JIRA_USERNAME。
+        路徑不存在 → 報錯停止。
 
     class JiraClient:
         __init__(self, jira_url: str, jira_pat: str, jira_user: str = None, timeout: int = 60)
-            Initialize client. jira_user is optional, for Basic Auth.
-            See Section 3.5 for platform-specific auth guidance.
+            初始化客戶端。jira_user 為可選，用於 Basic Auth。
 
         _get_auth_header(self) -> str
-            Auto-detect auth method:
-            - username + pat -> Basic Auth (Base64 encoded)
-            - pat only -> Bearer Token
+            自動判斷認證方式:
+            - username + pat → Basic Auth (Base64 編碼)
+            - 僅 pat → Bearer Token
 
         _request(self, path: str, params: dict = None, method: str = "GET", data: dict = None) -> dict
-            Unified HTTP call. Handle pagination, rate limit, error retry.
-            Return JSON dict.
-            On 401: error message includes Server/DC vs Cloud auth hint.
-
-        get(self, endpoint: str) -> dict
-            Generic GET wrapper. Calls _request(endpoint, "GET").
-
-        post(self, endpoint: str, data: dict) -> dict
-            Generic POST wrapper. Calls _request(endpoint, "POST", data).
+            統一 HTTP 調用。處理分頁、速率限制、錯誤重試。
+            返回 JSON dict。
 
         search_issues(self, jql: str, fields: str = "*all", max_results: int = 500) -> dict
-            JQL search via POST /search. Returns raw Jira API response dict.
-            MANDATORY — F-002 fetch_issues_by_jql() depends on this.
-            Implementation: assemble payload {jql, fields, maxResults} and call post("/search", payload).
+            JQL 搜索。返回 Jira API 原始響應 dict。
 
         get_issue(self, issue_key: str, fields: str = "*all", expand: str = None) -> dict
-            Single issue query via GET /issue/{key}. Returns issue dict.
-            MANDATORY — F-002 fetch_issue_by_key() depends on this.
-            Implementation: assemble endpoint URL with query params and call get(endpoint).
+            單一 Issue 查詢。返回 Issue dict。
 
         get_changelog(self, issue_key: str) -> dict
-            Single issue changelog via GET /issue/{key}?expand=changelog.
-            MANDATORY — F-002 fetch_changelog_by_key() depends on this.
-            Implementation: call get(f"/issue/{issue_key}?expand=changelog").
+            單一 Issue Changelog 查詢。返回 Changelog dict。
 
-### 4.2 F-002 — jira_query_basic.py
+### 4.2 F-002 — jira.query.basic.py
 
-Responsibility: Basic JQL query wrappers.
-Dependency: F-001 JiraClient methods search_issues(), get_issue(), get_changelog().
+職責: 基礎 JQL 查詢封裝。
 
-Mandatory functions:
+必須實現以下函數:
 
     def fetch_issues_by_jql(client: JiraClient, jql: str, fields: str = "*all", max_results: int = 500) -> list
-        Generic JQL search. Return issue list (extracted from response issues field).
-        Calls: client.search_issues(jql, fields, max_results)
+        通用 JQL 搜索。返回 issue 列表（從響應中提取 issues 欄位）。
 
     def fetch_issue_by_key(client: JiraClient, issue_key: str, fields: str = "*all") -> dict
-        Single issue query. Return issue dict.
-        Calls: client.get_issue(issue_key, fields)
+        單一 Issue 查詢。返回 Issue dict。
 
     def fetch_changelog_by_key(client: JiraClient, issue_key: str) -> dict
-        Single issue changelog query. Return changelog dict.
-        Calls: client.get_changelog(issue_key)
+        單一 Issue Changelog 查詢。返回 Changelog dict。
 
-### 4.3 F-003 — jira_query_advanced.py
+### 4.3 F-003 — jira.query.advanced.py
 
-Responsibility: Advanced queries (recursive, bulk, cache).
-Dependency: F-002 jira_query_basic functions.
+職責: 高級查詢（遞歸、批量、緩存）。
 
-Mandatory functions:
+必須實現以下函數:
 
     def fetch_all_descendants(client: JiraClient, issue_key: str, fields: str, visited: set = None) -> list
-        Recursively fetch all descendants of an issue (via linkedIssues JQL).
-        Use visited set to prevent cycles. Return issue list.
+        遞歸獲取 issue 的全部子孫（via linkedIssues JQL）。
+        使用 visited set 防止循環。返回 issue 列表。
 
     def fetch_epic_issues(client: JiraClient, epic_key: str, fields: str = "key,summary,issuetype,status,assignee,created,updated,duedate") -> list
-        Fetch all issues under an Epic (including Epic itself + recursive descendants + dedup).
-        Return unique issue list.
+        獲取 Epic 下全部 issue（含 Epic 本身 + 遞歸子孫 + 去重）。
+        返回唯一 issue 列表。
 
     def fetch_milestone_issues_v2(client: JiraClient, milestone_key: str, exclude_keys: list = None, fields: str = "key,summary,issuetype,status,assignee,created,updated,duedate") -> list
-        Fetch all issues under a Milestone (including Milestone itself + direct children + recursive descendants).
-        exclude_keys prevents cross-contamination with other milestones.
-        Return unique issue list.
+        獲取 Milestone 下全部 issue（含 Milestone 本身 + 直接子 issue + 遞歸子孫）。
+        exclude_keys 用於排除其他 milestone key，防止交叉污染。
+        返回唯一 issue 列表。
 
     def fetch_issues_by_summary_keywords(client: JiraClient, keywords: list, project_key: str = "WIL", max_results: int = 200) -> list
-        JQL summary ~ keyword multi-keyword search.
-        Each keyword independently escaped, OR logic.
-        Return issue list.
+        JQL summary ~ keyword 多關鍵字搜索。
+        每個 keyword 獨立 escape，使用 OR 邏輯連接。
+        返回 issue 列表。
 
     def build_changelog_cache(client: JiraClient, epic_key: str, cache_file: Path) -> dict
-        Build changelog cache for all issues under epic.
-        Cache format: {issue_key: changelog_dict}.
-        Auto-create parent dirs. Return cache dict.
+        為 Epic 下全部 issue 構建 changelog 緩存。
+        緩存格式: {issue_key: changelog_dict}。
+        自動創建父目錄。返回緩存 dict。
 
     def load_changelog_cache(cache_file: Path) -> dict
-        Read changelog cache file.
-        File not found -> return None.
+        讀取 changelog 緩存文件。
+        文件不存在 → 返回 None。
 
-### 4.4 F-004 — jira_field_parser.py
+### 4.4 F-004 — jira.field.parser.py
 
-Responsibility: Safe issue field parser.
+職責: Issue 字段安全解析器。
 
-Mandatory functions:
+必須實現以下函數:
 
     def get_issue_field(issue: dict, field_path: str, default: any = None) -> any
-        Safely get nested field. field_path uses dot notation (e.g. "status.name").
-        Field missing -> return default.
+        安全獲取嵌套字段。field_path 使用點號分隔（如 "status.name"）。
+        字段不存在 → 返回 default。
 
     def get_assignee_name(issue: dict) -> str
-        Get assignee displayName. No assignee -> return "Unassigned".
+        獲取 assignee displayName。無 assignee → 返回 "Unassigned"。
 
     def get_status_name(issue: dict) -> str
-        Get status name. No status -> return "Unknown".
+        獲取 status name。無 status → 返回 "Unknown"。
 
     def get_issue_type(issue: dict) -> str
-        Get issuetype name. Missing -> return "Unknown".
+        獲取 issuetype name。無 → 返回 "Unknown"。
 
     def get_due_date(issue: dict) -> str
-        Get duedate. Not set or None -> return "" (empty string).
-        Implementation: call get_issue_field(), then normalize None to "".
+        獲取 duedate。未設置 → 返回 None。
 
     def get_last_updated(issue: dict) -> str
-        Get updated field date part (YYYY-MM-DD).
-        Parse failure -> return "Unknown".
+        獲取 updated 字段的日期部分（YYYY-MM-DD）。
+        解析失敗 → 返回 "Unknown"。
 
-### 4.5 F-005 — jira_datetime_utils.py
+### 4.5 F-005 — jira.datetime.utils.py
 
-Responsibility: Jira datetime format handling.
+職責: Jira 日期格式處理。
 
-Mandatory functions:
+必須實現以下函數:
 
     def normalize_jira_datetime(dt_str: str) -> str
-        Jira date format -> ISO 8601 format.
-
-        Behavior rules (do NOT report as bugs):
-          - Trailing .000 microseconds are dropped by datetime.isoformat().
-            Input "2026-05-14T12:45:53.000+0800" returns "2026-05-14T12:45:53+08:00".
-            The .000 is dropped by Python, not by this function. Expected behavior.
-          - Z suffix (UTC Zulu time) converted to +00:00.
-          - Inputs without timezone use local system timezone.
-          - Date-only inputs (no T separator) returned as-is, no time appended.
-
-        Implementation steps:
-          1. Handle Z suffix before strptime(): replace "Z" with "+0000".
-             strptime %z expects +0800 (no colon), so use +0000 not +00:00.
-          2. Date-only (no "T"): return as-is.
-          3. strptime() with formats preserving microseconds: %Y-%m-%dT%H:%M:%S.%f%z.
-          4. If no timezone in input, apply local system timezone via datetime.now().astimezone().tzinfo.
-             Do NOT hardcode +08:00.
-          5. isoformat() automatically formats timezone as +08:00 (with colon).
-             No manual regex conversion needed; isoformat() handles this.
+        Jira 日期格式 → ISO 8601 格式。
+        處理: "2026-05-14T12:45:53.000+0800" → "2026-05-14T12:45:53.000+08:00"
+        處理: "Z" → "+00:00"
+        使用正則: re.sub(r'([+-])(\d{2})(\d{2})$', r'\1\2:\3', dt_str)
 
     def days_since_updated(issue: dict) -> int
-        Calculate days since last update.
-        Use normalize_jira_datetime to parse updated field.
-        Parse failure -> return 999.
+        計算距最後更新日期的天數。
+        使用 normalize_jira_datetime 解析 updated 字段。
+        解析失敗 → 返回 999。
 
     def today_str() -> str
-        Return today date string YYYY-MM-DD.
+        返回今日日期字符串 YYYY-MM-DD。
 
-## 5. Error Handling Rules
+## 5. 錯誤處理規則
 
-### 5.1 Hard Stop Conditions
+### 5.1 硬停止條件
 
-Must stop immediately with single-line error:
-    1. .env or config/config.json missing
-    2. Jira API connection failure (auth error, network timeout)
-    3. JQL syntax error (422)
-    4. Issue Key not found (404)
-    5. Script execution returns non-zero exit code
+以下情況必須立即停止，單行報錯：
+    1. .env 或 config/config.json 不存在
+    2. Jira API 連接失敗（認證錯誤、網絡超時）
+    3. JQL 語法錯誤（422）
+    4. Issue Key 不存在（404）
+    5. 腳本執行返回非零退出碼
 
-### 5.2 Warning But Continue
+### 5.2 警告但不停止
 
-Output warning, continue execution:
-    1. Rate limit triggered (403) -> exponential backoff retry
-    2. Server error (5xx) -> linear backoff retry
-    3. Field missing (use default value)
-    4. Date parse failure (return 999)
+以下情況輸出警告，繼續執行：
+    1. 速率限制觸發（403）→ 指數退避重試
+    2. 伺服器錯誤（5xx）→ 線性退避重試
+    3. 字段缺失（使用 default 值）
+    4. 日期解析失敗（返回 999）
 
-### 5.3 Error Format
+### 5.3 報錯格式
 
-    ERROR: [brief desc] | [relevant file or params] | Stop.
-    WARN: [brief desc] | [relevant file or params] | Continue.
+    ERROR: [簡短描述] | [相關檔案或參數] | Stop.
+    WARN: [簡短描述] | [相關檔案或參數] | Continue.
 
-## 6. Pending Items Handling
+## 6. 待確認項處理
 
-When encountering "pending confirmation" config items:
-    1. Use suggested value to continue
-    2. Mark in output: "Using default: [suggested value]"
-    3. List pending items in suggestion list for later user confirmation
+遇到標記為「待確認」的配置項時：
+    1. 使用建議值繼續執行
+    2. 在輸出中標註「使用預設值：[建議值]」
+    3. 將待確認項列入建議清單，供用戶後續確認
 
-Do NOT stop execution due to pending items unless required and no suggestion value.
+禁止因待確認項而停止執行，除非該項為必填且無建議值。
 
-## 7. Version Check
+## 7. 版本檢查
 
-Before executing any script, check version consistency:
+執行任何腳本前，必須先檢查版本一致性：
 
-    python scripts/jira_restful_core.py --version
+    python scripts/jira.restful.core.py --version
 
-Output must be v0.1.3. If mismatch, output warning:
+輸出必須為 v0.1.0。如不一致，輸出警告：
 
-    WARN: Version mismatch. Expected v0.1.3, got [actual version]. Continue at your own risk.
+    WARN: Version mismatch. Expected v0.1.0, got [實際版本]. Continue at your own risk.
 
-## 8. Cross-Skill Collaboration
+## 8. 跨技能協作
 
-### 8.1 Consumer Skill Reference
+### 8.1 消費者技能引用
 
-wilson-project-report as consumer skill references this connector layer:
+wilson-project-report 作為消費者技能，通過以下方式引用本連接層：
 
     import sys
     from pathlib import Path
@@ -405,44 +327,40 @@ wilson-project-report as consumer skill references this connector layer:
     sys.path.insert(0, str(SKILL_ROOT / "../jira-restful-api-connector/scripts"))
     import jira_restful_core as jira_core
 
-Or declare dependency via skill package manager (WorkBuddy / OpenClaw).
+或通過技能包管理系統（WorkBuddy / OpenClaw skill dependency）聲明依賴。
 
-### 8.2 Skill Defect Reporting
+### 8.2 技能缺陷報告
 
-If discovering defects in this skill (script errors, output anomalies, logic mismatch),
-use agent-skill-improving skill flow:
-    1. Record defect phenomenon (screenshot or text)
-    2. Record reproduction steps
-    3. Record expected vs actual result
-    4. Submit to owner for confirmation
-    5. Wait for owner confirmation, then execute per SKILL_CORRECTIONS.md rules
+如發現本技能缺陷（腳本錯誤、輸出異常、邏輯不符），使用 agent-skill-improving 技能流程：
+    1. 記錄缺陷現象（截圖或文字描述）
+    2. 記錄重現步驟
+    3. 記錄預期結果 vs 實際結果
+    4. 提交給主人確認
+    5. 等待主人確認後，按 SKILL_CORRECTIONS.md 規則執行修正
 
-Agent is forbidden from modifying scripts or config on its own.
+禁止 Agent 擅自修改腳本或配置。
 
-## 9. Post-Execution Checklist
+## 9. 輸出後檢查清單
 
-After each execution, confirm item by item:
+每次執行完成後，必須逐項確認：
 
-    [ ] Return result is raw JSON / dict / list (no business analysis)
-    [ ] .env not modified or exposed
-    [ ] Error log recorded (if any)
-    [ ] Rate limit status normal
-    [ ] Conversation backed up (conversation_append.py)
-    [ ] Exceptions or warnings recorded
+    [ ] 返回結果為原始 JSON / dict / list（無業務分析）
+    [ ] .env 未被修改或暴露
+    [ ] 錯誤日誌已記錄（如有）
+    [ ] 速率限制狀態正常
+    [ ] 對話已備份（conversation_append.py）
+    [ ] 異常或警告已記錄
 
-All passed -> output "Execution complete"
-Any failed -> output "Execution complete, pending items: [list]"
+全部確認通過 → 輸出「執行完成」
+任一項未通過 → 輸出「執行完成，但有未確認項：[列表]」
 
-## 10. Version History
+## 10. 版本歷史
 
-| Version | Date | Changes |
-|---------|------|---------|
-| v0.1.0 | 2026-05-21 | Initial version. Split from jira-project-report v1.0.1 core. F-001~F-005, path rigidity, tiered error handling, interface LOCK PERMANENT |
-| v0.1.1 | 2026-05-25 | Fix: Python scripts renamed to underscore format per naming rules. Fixed broken import statements. All .py content verified ASCII-only. |
-| v0.1.2 | 2026-05-25 | Fix: Added missing high-level methods search_issues(), get_issue(), get_changelog() to JiraClient. Enhanced Section 4.1 docs to clarify two-layer architecture and F-002 dependency. Fixes #26. |
-| v0.1.3 | 2026-05-25 | Fix: normalize_jira_datetime() Z handling, local timezone, date-only passthrough. Added explicit microsecond standardization note in Section 4.5. get_due_date() None normalization. Frontmatter fixes fields corrected per file scope. SKILL.md version synchronized. Added Section 3.5 auth platform differences (Cloud vs Server/DC). Enhanced 401 error messages with auth hints. Fixes #27, #28, #29, #30, #31. |
+| 版本 | 日期 | 變更內容 |
+|------|------|----------|
+| v0.1.0 | 2026-05-21 | 初始版本。分離自 jira-project-report v1.0.1 核心庫。功能代號 F-001~F-005、路徑剛性規則、錯誤分級處理、接口 LOCK PERMANENT |
 
 ---
 
-*This file is an LLM execution guide. Human-readable guide see README.md.*
-*Generated: 2026-05-25*
+*本檔案為 LLM 執行指令。人類可讀解釋請參考 README.md。*
+*生成時間：2026-05-21*
