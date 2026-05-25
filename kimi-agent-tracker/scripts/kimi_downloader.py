@@ -1,529 +1,1162 @@
 """
 ---
-title: Kimi Conversation File Downloader
+title: Kimi File Downloader Core Engine
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations. v1.2.1 fixes preview panel selector to exclude sidebar, ensuring correct DOM content extraction.
-version: "1.2.1"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-25T15:01:00+00:00"
+description: Playwright-based file downloader for Kimi conversations. Supports incremental download pipeline with discovery, deduplication, and categorized extraction strategies.
+version: v1.3.0
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-25T16:53:00+0800
+fixes: []
 auth_config:
-  provider: kimi
-  auth_method: persistent_profile
-  token_env_var: ""
-  env_file_path: ""
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: .env
 file_mapping:
   local_path: "{baseDir}/scripts/kimi_downloader.py"
   github_path: "kimi-agent-tracker/scripts/kimi_downloader.py"
 ---
 """
 
-import os
-import sys
-import json
-import time
-import hashlib
-import shutil
-import random
 import argparse
-from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import shutil
+import sys
+import time
+import traceback
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Tuple
 from urllib.parse import urlparse
 
+# Third-party imports with graceful fallback
 try:
     import nest_asyncio
     nest_asyncio.apply()
 except ImportError:
-    print("[WARN] nest_asyncio not installed. Run: python3 -m pip install nest_asyncio --user")
+    pass
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+try:
+    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+except ImportError:
+    print("[FATAL] Playwright not installed. Run: python3 -m pip install playwright")
+    sys.exit(1)
+
+# Constants
+DEFAULT_PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
+DEFAULT_CONFIG_PATH = Path.home() / ".workbuddy" / "skills" / "kimi-agent-tracker" / ".config" / "kimi_tracker_config.json"
+DEFAULT_DOWNLOADS_RECORD = Path.home() / ".workbuddy" / "skills" / "kimi-agent-tracker" / ".config" / "downloads.json"
+DEFAULT_PENDING_RECORD = Path.home() / ".workbuddy" / "skills" / "kimi-agent-tracker" / ".config" / "pending.json"
+DEFAULT_DIAGNOSE_DIR = Path.home() / ".workbuddy" / "skills" / "kimi-agent-tracker" / ".logs" / "diagnose"
+
+# File type classification
+TEXT_EXTENSIONS = {".md", ".txt", ".json", ".csv", ".yml", ".yaml", ".html", ".js", ".css", ".xml", ".sh", ".bash"}
+BINARY_EXTENSIONS = {".zip", ".rar", ".7z", ".tar", ".gz", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".gif", ".mp3", ".mp4", ".avi", ".mov", ".webp", ".svg", ".ico", ".ttf", ".woff", ".woff2", ".eot"}
+
+# Strategy mapping
+STRATEGY_ANCHOR = "anchor_injection"       # Fast, headless, for text files
+STRATEGY_PREVIEW = "preview_extraction"    # DOM extraction, for .py files
+STRATEGY_VISIBLE = "visible_fallback"        # Visible browser moved off-screen, for binary files
 
 
-def _now_iso():
+def _timestamp() -> str:
+    """Return ISO format timestamp with timezone."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
 
 
-def log_event(msg):
-    print(f"[{_now_iso()}] {msg}")
+def _log(level: str, message: str) -> None:
+    """Print structured log line."""
+    print(f"[{_timestamp()}] [{level}] {message}", flush=True)
 
-
-def get_base_dir():
-    return Path(__file__).resolve().parent.parent
-
-
-def load_config():
-    p = get_base_dir() / ".config" / "kimi_tracker_config.json"
-    if not p.exists():
-        log_event(f"[ERROR] Config not found: {p}")
-        sys.exit(1)
-    with open(p, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def ensure_dir(path):
-    p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def expand_path(path_str):
-    if path_str.startswith("~/"):
-        return os.path.expanduser(path_str)
-    return path_str
-
-
-def compute_sha256(filepath):
-    h = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def get_profile_dir():
-    p = Path.home() / ".kimi_auth" / "browser_profile_chromium"
-    ensure_dir(p)
-    return str(p)
-
-
-def load_downloads_json():
-    p = get_base_dir() / ".config" / "downloads.json"
-    if p.exists():
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"downloaded": {}, "duplicates": []}
-
-
-def save_downloads_json(data):
-    p = get_base_dir() / ".config" / "downloads.json"
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 class KimiDownloader:
-    def __init__(self, config):
-        self.config = config
-        self.profile_dir = get_profile_dir()
-        self.downloads_record = load_downloads_json()
-        self.dedup = config.get("download", {}).get("deduplicate", True)
-        self.unique_name = config.get("download", {}).get("unique_filename", True)
-        self.timeout = config.get("login", {}).get("timeout_sec", 30)
-        self.download_dir = expand_path(config.get("daemon", {}).get("download_dir", "~/Downloads"))
-        self.duplicate_dir = expand_path(config.get("daemon", {}).get("duplicate_dir", "~/skills_moved/.duplicate_downloads"))
-        self.browser_default_dir = Path.home() / "Downloads"
-        self.diag_dir = get_base_dir() / ".logs" / "diagnose" / "download"
-        ensure_dir(self.download_dir)
-        ensure_dir(self.duplicate_dir)
-        ensure_dir(self.diag_dir)
+    """
+    Incremental download pipeline for Kimi conversation files.
 
-    def _get_browser_context(self, p, visible=False):
+    Pipeline stages:
+        1. DISCOVERY: Scan conversation page for file links.
+        2. DEDUPLICATE: Compare against downloads.json and pending.json.
+        3. DOWNLOAD: Apply strategy per file type (anchor / preview / visible).
+        4. RECORD: Update pending.json and downloads.json.
+    """
+
+    def __init__(
+        self,
+        profile_dir: Optional[str] = None,
+        download_dir: Optional[str] = None,
+        duplicate_dir: Optional[str] = None,
+        config_path: Optional[str] = None,
+        downloads_record_path: Optional[str] = None,
+        pending_record_path: Optional[str] = None,
+        dedup: bool = True,
+        diagnose: bool = True,
+        visible: bool = False,
+    ):
+        self.profile_dir = self._expand_path(profile_dir) or str(DEFAULT_PROFILE_DIR)
+        self.download_dir = self._expand_path(download_dir) or str(Path.home() / "Downloads")
+        self.duplicate_dir = self._expand_path(duplicate_dir) or str(
+            Path.home() / "skills_moved" / ".duplicate_downloads"
+        )
+        self.config_path = self._expand_path(config_path) or str(DEFAULT_CONFIG_PATH)
+        self.downloads_record_path = self._expand_path(downloads_record_path) or str(DEFAULT_DOWNLOADS_RECORD)
+        self.pending_record_path = self._expand_path(pending_record_path) or str(DEFAULT_PENDING_RECORD)
+        self.dedup = dedup
+        self.diagnose = diagnose
+        self.visible = visible
+
+        # Ensure directories exist
+        Path(self.download_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.duplicate_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.pending_record_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # Load config
+        self.config = self._load_config()
+
+        # Load state files
+        self.downloads_record = self._load_json(self.downloads_record_path, default={"downloaded": {}, "_meta": {}})
+        self.pending_record = self._load_json(self.pending_record_path, default={"pending": [], "_meta": {}})
+
+        # Ensure _meta exists
+        self._ensure_meta(self.downloads_record, "downloads_record")
+        self._ensure_meta(self.pending_record, "pending_record")
+
+    def _expand_path(self, path: Optional[str]) -> Optional[str]:
+        """Expand user home directory (~) to absolute path."""
+        if not path:
+            return None
+        if path.startswith("~/"):
+            return str(Path.home() / path[2:])
+        return str(Path(path).expanduser().resolve())
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load tracker config, skipping frontmatter if present."""
+        try:
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            # Skip frontmatter (lines starting with # or --- block)
+            lines = content.splitlines()
+            json_start = 0
+            in_frontmatter = False
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped == "---":
+                    if not in_frontmatter:
+                        in_frontmatter = True
+                    else:
+                        in_frontmatter = False
+                        json_start = i + 1
+                        break
+                elif not in_frontmatter and stripped.startswith("{"):
+                    json_start = i
+                    break
+            json_content = "\n".join(lines[json_start:])
+            return json.loads(json_content) if json_content.strip() else {}
+        except Exception as e:
+            _log("WARN", f"Config load failed: {e}. Using defaults.")
+            return {}
+
+    def _load_json(self, path: str, default: Any = None) -> Any:
+        """Load JSON file with fallback default."""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return default if default is not None else {}
+
+    def _save_json(self, path: str, data: Any) -> None:
+        """Save JSON file with pretty formatting."""
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            _log("ERROR", f"Failed to save JSON to {path}: {e}")
+
+    def _ensure_meta(self, data: Dict, record_type: str) -> None:
+        """Ensure _meta block exists in state file."""
+        if "_meta" not in data:
+            data["_meta"] = {
+                "record_type": record_type,
+                "skill_name": "kimi-agent-tracker",
+                "version": "v1.3.0",
+                "last_updated": _timestamp(),
+                "github_repository": "nervlin4444/ai.skills.incubation",
+                "target_branch": "main",
+            }
+        else:
+            data["_meta"]["last_updated"] = _timestamp()
+
+    def _get_browser_context(self, p, visible: bool = False, hide_window: bool = False):
+        """
+        Launch persistent browser context.
+
+        Args:
+            visible: If True, run in headed mode (window shown).
+            hide_window: If True and visible, move window off-screen via Chromium args.
+        """
+        args = ["--disable-blink-features=AutomationControlled"]
+        if hide_window and visible:
+            # Move window off-screen to avoid interfering with user workflow
+            args.extend([
+                "--window-position=-10000,-10000",
+                "--window-size=1,1",
+            ])
+
+        headless = not visible
         return p.chromium.launch_persistent_context(
-            self.profile_dir, headless=not visible,
-            args=["--disable-blink-features=AutomationControlled"],
+            self.profile_dir,
+            headless=headless,
+            args=args,
             accept_downloads=True,
         )
 
-    def _capture(self, page, step_name):
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        png_path = self.diag_dir / f"{step_name}_{ts}.png"
+    def _compute_sha256(self, file_path: str) -> str:
+        """Compute SHA256 hash of file contents."""
+        h = hashlib.sha256()
         try:
-            page.screenshot(path=str(png_path), full_page=True)
-            log_event(f"[DIAG] Screenshot: {png_path.name}")
-        except Exception as e:
-            log_event(f"[DIAG] Screenshot failed: {e}")
-
-    def _dismiss_overlay(self, page):
-        try:
-            page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    h.update(chunk)
+            return h.hexdigest()
         except Exception:
-            pass
+            return ""
+
+    def _extract_conversation_id(self, url: str) -> str:
+        """Extract conversation ID from Kimi chat URL."""
+        parsed = urlparse(url)
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) >= 2 and parts[0] == "chat":
+            return parts[1]
+        return "unknown"
+
+    def _extract_page_title(self, page) -> str:
+        """Extract conversation title from page."""
         try:
-            mask = page.query_selector(".mask, [class*='mask'], .sidebar-mask")
-            if mask and mask.is_visible():
-                mask.click()
-                page.wait_for_timeout(300)
+            title = page.title()
+            # Remove " - Kimi" suffix
+            if " - Kimi" in title:
+                title = title.replace(" - Kimi", "").strip()
+            return title or "unknown"
         except Exception:
-            pass
-        try:
-            main = page.query_selector("main, .main-content, .chat-container, #app")
-            if main:
-                main.click()
-                page.wait_for_timeout(200)
-        except Exception:
-            pass
+            return "unknown"
 
-    def _scroll_element_into_view(self, page, href):
-        js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { links[i].scrollIntoView({block: "center", inline: "center", behavior: "instant"}); return true; } } return false; }'
-        return page.evaluate(js, href)
 
-    def _get_element_position(self, page, href):
-        js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { var rect = links[i].getBoundingClientRect(); return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, w: rect.width, h: rect.height, in_viewport: rect.top >= 0 && rect.bottom <= window.innerHeight}; } } return null; }'
-        return page.evaluate(js, href)
 
-    def _find_file_links(self, page):
+    # =====================================================================
+    # STAGE 1: DISCOVERY - Scan page for downloadable file links
+    # =====================================================================
+
+    def _find_file_links(self, page) -> List[Dict[str, str]]:
+        """
+        Scan conversation page for all file attachment links.
+
+        Returns list of dicts with keys:
+            href, filename, file_ext, text_content
+        """
         links = []
-        selectors = [
-            'a[href*="sandbox://"]', 'a[href*=".zip"]', 'a[href*=".py"]',
-            'a[href*=".csv"]', 'a[href*=".json"]', 'a[href*=".md"]',
-            'a[href*=".txt"]', 'a[href*=".html"]', 'a[href*=".yml"]',
-            'a[href*=".yaml"]',
-        ]
-        for sel in selectors:
-            try:
-                for el in page.query_selector_all(sel):
-                    href = el.get_attribute("href") or ""
-                    text = (el.inner_text() or "").strip()
-                    if href and href not in [l["href"] for l in links]:
-                        links.append({"href": href, "text": text, "type": "direct"})
-            except Exception:
-                pass
-        return links
-
-    def _record_download(self, dest_path, filename, conversation_title, file_hash):
-        if self.dedup and file_hash in self.downloads_record.get("downloaded", {}):
-            dup_path = Path(self.duplicate_dir) / filename
-            shutil.move(str(dest_path), str(dup_path))
-            self.downloads_record["duplicates"].append({
-                "file": filename, "hash": file_hash, "conversation": conversation_title,
-                "time": datetime.now(timezone.utc).isoformat(),
-            })
-            log_event(f"[DEDUP] Duplicate moved to {dup_path}")
-            return {"status": "duplicate", "file": filename, "hash": file_hash}
-        else:
-            self.downloads_record["downloaded"][file_hash] = {
-                "file": filename, "conversation": conversation_title,
-                "time": datetime.now(timezone.utc).isoformat(),
-            }
-            log_event(f"[SAVED] {dest_path}")
-            return {"status": "success", "file": filename, "hash": file_hash, "path": str(dest_path)}
-
-    def _wait_for_browser_download(self, filename_hint, max_wait_sec=15):
-        if not self.browser_default_dir.exists():
-            return None
-        start_time = time.time()
-        while time.time() - start_time < max_wait_sec:
-            candidates = []
-            for p in self.browser_default_dir.iterdir():
-                if p.is_file():
-                    mtime = p.stat().st_mtime
-                    if mtime > start_time - 60:
-                        candidates.append((p, mtime))
-            if candidates:
-                candidates.sort(key=lambda x: x[1], reverse=True)
-                if filename_hint:
-                    for c, m in candidates:
-                        if filename_hint.lower() in c.name.lower():
-                            return c
-                return candidates[0][0]
-            time.sleep(0.5)
-        return None
-
-    def _download_by_extraction(self, page, link, conversation_title):
-        """Primary strategy: click link, wait for preview panel, extract content from DOM."""
-        href = link["href"]
-        filename = os.path.basename(urlparse(href).path) or "unknown"
-        if not filename or filename == "unknown":
-            filename = f"download_{int(time.time())}"
-        if self.unique_name:
-            safe_title = "".join(c for c in conversation_title if c.isalnum() or c in "-_ ").replace(" ", "_")[:30]
-            filename = f"{safe_title}_{filename}"
-        dest_path = Path(self.download_dir) / filename
-
         try:
-            self._dismiss_overlay(page)
-
-            # Step 1: Click the file link to open preview panel
-            log_event(f"[EXTRACT-1] Clicking link for {filename}")
-            scrolled = self._scroll_element_into_view(page, href)
-            if scrolled:
-                page.wait_for_timeout(800)
-                pos = self._get_element_position(page, href)
-                if pos and pos.get("in_viewport") and pos["y"] > 0:
-                    page.mouse.move(pos["x"], pos["y"])
-                    page.wait_for_timeout(300)
-                    page.mouse.click(pos["x"], pos["y"])
-                else:
-                    js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { links[i].click(); return true; } } return false; }'
-                    page.evaluate(js, href)
-            else:
-                js = 'href => { var links = document.querySelectorAll("a[href]"); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute("href") === href) { links[i].click(); return true; } } return false; }'
-                page.evaluate(js, href)
-
-            # Step 2: Wait for preview panel to appear
-            # CRITICAL FIX v1.2.1: Removed [class*="sidebar"] which matched conversation sidebar
-            log_event("[EXTRACT-2] Waiting for preview panel...")
-            preview_selectors = [
-                '[class*="preview"]', '[class*="panel"]', '[class*="drawer"]',
-                '[class*="file-view"]', '[class*="code"]', '.monaco-editor',
-                '[role="dialog"]', '.ant-drawer', '[class*="content"]',
-                '[class*="file-preview"]', '[class*="doc-preview"]',
+            # Primary selector: links containing sandbox:// or file-like hrefs
+            selectors = [
+                'a[href*="sandbox://"]',
+                'a[href*="/mnt/agents/output/"]',
+                'a[href*=".py"]',
+                'a[href*=".md"]',
+                'a[href*=".zip"]',
+                'a[href*=".json"]',
+                'a[href*=".txt"]',
+                'a[href*=".csv"]',
+                'a[href*=".yml"]',
+                'a[href*=".yaml"]',
+                'a[href*=".html"]',
+                'a[href*=".js"]',
+                'a[href*=".css"]',
+                'a[href*=".xml"]',
+                'a[href*=".sh"]',
+                'a[href*=".bash"]',
+                'a[href*=".pdf"]',
+                'a[href*=".png"]',
+                'a[href*=".jpg"]',
+                'a[href*=".jpeg"]',
+                'a[href*=".gif"]',
+                'a[href*=".mp3"]',
+                'a[href*=".mp4"]',
+                'a[href*=".webp"]',
+                'a[href*=".svg"]',
+                'a[href*=".ico"]',
+                'a[href*=".woff"]',
+                'a[href*=".woff2"]',
+                'a[href*=".ttf"]',
+                'a[href*=".eot"]',
+                'a[href*=".doc"]',
+                'a[href*=".docx"]',
+                'a[href*=".xls"]',
+                'a[href*=".xlsx"]',
+                'a[href*=".ppt"]',
+                'a[href*=".pptx"]',
+                'a[href*=".rar"]',
+                'a[href*=".7z"]',
+                'a[href*=".tar"]',
+                'a[href*=".gz"]',
             ]
-            preview_found = False
-            preview_sel = None
-            for sel in preview_selectors:
+
+            seen_hrefs = set()
+            for selector in selectors:
                 try:
-                    el = page.wait_for_selector(sel, timeout=5000)
-                    if el and el.is_visible():
-                        # Verify it's not the conversation sidebar by checking dimensions
-                        bbox = el.bounding_box()
-                        if bbox and bbox.get("width", 0) > 200 and bbox.get("height", 0) > 200:
-                            preview_found = True
-                            preview_sel = sel
-                            log_event(f"[EXTRACT-2] Preview panel found: {sel} ({bbox.get('width', 0):.0f}x{bbox.get('height', 0):.0f})")
-                            break
+                    elements = page.query_selector_all(selector)
+                    for el in elements:
+                        href = el.get_attribute("href") or ""
+                        text = el.inner_text() or ""
+                        if href and href not in seen_hrefs:
+                            seen_hrefs.add(href)
+                            # Extract filename from href
+                            filename = self._extract_filename_from_href(href, text)
+                            file_ext = Path(filename).suffix.lower()
+                            links.append({
+                                "href": href,
+                                "filename": filename,
+                                "file_ext": file_ext,
+                                "text_content": text.strip(),
+                            })
                 except Exception:
                     continue
+        except Exception as e:
+            _log("ERROR", f"Link discovery failed: {e}")
+
+        return links
+
+    def _extract_filename_from_href(self, href: str, text: str) -> str:
+        """Extract clean filename from href or fallback to text."""
+        # Try to extract from href path
+        if "/" in href:
+            parts = href.split("/")
+            for part in reversed(parts):
+                if part and "." in part:
+                    return part
+        # Fallback: use text content, sanitize
+        safe_text = re.sub(r'[^\w\.\-]', '_', text.strip())
+        if safe_text and "." in safe_text:
+            return safe_text
+        # Last resort: generic name with hash
+        return f"unknown_file_{hash(href) % 10000:04d}"
+
+    # =====================================================================
+    # STAGE 2: DEDUPLICATION - Compare against local records
+    # =====================================================================
+
+    def _deduplicate_links(
+        self,
+        links: List[Dict[str, str]],
+        conversation_id: str,
+        conversation_title: str,
+    ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, str]]]:
+        """
+        Filter links against downloads.json and pending.json.
+
+        Returns:
+            (new_links, pending_links, skipped_links)
+            new_links: Not in downloads and not in pending -> add to pending
+            pending_links: Already in pending -> keep for processing
+            skipped_links: Already in downloads -> skip entirely
+        """
+        new_links = []
+        pending_links = []
+        skipped_links = []
+
+        downloaded_map = self.downloads_record.get("downloaded", {})
+        pending_list = self.pending_record.get("pending", [])
+
+        # Build lookup sets for fast checking
+        downloaded_keys = set()
+        for record in downloaded_map.values():
+            conv = record.get("conversation", "")
+            fname = record.get("file", "")
+            downloaded_keys.add(f"{conv}::{fname}")
+
+        pending_keys = set()
+        for record in pending_list:
+            conv = record.get("conversation_id", "")
+            fname = record.get("filename", "")
+            pending_keys.add(f"{conv}::{fname}")
+
+        for link in links:
+            key = f"{conversation_title}::{link['filename']}"
+
+            if key in downloaded_keys:
+                skipped_links.append({
+                    **link,
+                    "reason": "Already downloaded",
+                    "conversation_id": conversation_id,
+                    "conversation_title": conversation_title,
+                })
+            elif key in pending_keys:
+                pending_links.append({
+                    **link,
+                    "reason": "In pending queue",
+                    "conversation_id": conversation_id,
+                    "conversation_title": conversation_title,
+                })
+            else:
+                new_links.append({
+                    **link,
+                    "conversation_id": conversation_id,
+                    "conversation_title": conversation_title,
+                })
+
+        return new_links, pending_links, skipped_links
+
+    def _add_to_pending(self, links: List[Dict[str, str]]) -> int:
+        """Add new links to pending.json. Returns count added."""
+        pending_list = self.pending_record.get("pending", [])
+        added = 0
+
+        for link in links:
+            record = {
+                "conversation_id": link.get("conversation_id", ""),
+                "conversation_title": link.get("conversation_title", ""),
+                "file_url": link.get("href", ""),
+                "filename": link.get("filename", ""),
+                "file_ext": link.get("file_ext", ""),
+                "detected_at": _timestamp(),
+                "retry_count": 0,
+                "last_error": None,
+                "strategy": self._determine_strategy(link.get("file_ext", "")),
+            }
+            pending_list.append(record)
+            added += 1
+
+        self.pending_record["pending"] = pending_list
+        self._ensure_meta(self.pending_record, "pending_record")
+        self._save_json(self.pending_record_path, self.pending_record)
+        return added
+
+    def _determine_strategy(self, file_ext: str) -> str:
+        """Determine download strategy based on file extension."""
+        ext = file_ext.lower()
+        if ext in TEXT_EXTENSIONS and ext != ".py":
+            return STRATEGY_ANCHOR
+        elif ext == ".py":
+            return STRATEGY_PREVIEW
+        else:
+            return STRATEGY_VISIBLE
+
+    def _remove_from_pending(self, conversation_id: str, filename: str) -> None:
+        """Remove successfully downloaded file from pending.json."""
+        pending_list = self.pending_record.get("pending", [])
+        original_len = len(pending_list)
+        pending_list = [
+            p for p in pending_list
+            if not (p.get("conversation_id") == conversation_id and p.get("filename") == filename)
+        ]
+        if len(pending_list) < original_len:
+            self.pending_record["pending"] = pending_list
+            self._ensure_meta(self.pending_record, "pending_record")
+            self._save_json(self.pending_record_path, self.pending_record)
+
+    def _increment_retry(self, conversation_id: str, filename: str, error: str) -> None:
+        """Increment retry count for failed download in pending.json."""
+        pending_list = self.pending_record.get("pending", [])
+        for p in pending_list:
+            if p.get("conversation_id") == conversation_id and p.get("filename") == filename:
+                p["retry_count"] = p.get("retry_count", 0) + 1
+                p["last_error"] = error
+                p["last_attempt"] = _timestamp()
+                break
+        self.pending_record["pending"] = pending_list
+        self._ensure_meta(self.pending_record, "pending_record")
+        self._save_json(self.pending_record_path, self.pending_record)
+
+
+
+    # =====================================================================
+    # STAGE 3: DOWNLOAD - Strategy implementations
+    # =====================================================================
+
+    def _download_anchor_injection(
+        self,
+        page,
+        link: Dict[str, str],
+        conversation_title: str,
+        timeout_sec: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Strategy A: Create anchor element with download attribute and click.
+        Works in headless mode for text files. Fast (~8s per file).
+        """
+        href = link["href"]
+        filename = link["filename"]
+        result = {"status": "error", "file": filename, "reason": "", "path": "", "hash": ""}
+
+        try:
+            _log("STRAT-A", f"Anchor injection for {filename}")
+
+            # Use JS to create anchor and trigger download
+            js_code = """
+                (args) => {
+                    const href = args[0];
+                    const filename = args[1];
+                    const a = document.createElement('a');
+                    a.href = href;
+                    a.download = filename;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    return 'injected';
+                }
+            """
+            page.evaluate(js_code, [href, filename])
+
+            # Wait for download to appear in browser download directory
+            dest_path = self._wait_for_browser_download(filename, timeout_sec)
+            if dest_path:
+                file_hash = self._compute_sha256(dest_path)
+                result.update({
+                    "status": "success",
+                    "path": dest_path,
+                    "hash": file_hash,
+                })
+                _log("SAVED", dest_path)
+            else:
+                result["reason"] = "Browser download not detected after anchor injection"
+                _log("SKIP", f"No download for {filename} after anchor injection")
+        except Exception as e:
+            result["reason"] = f"Anchor injection error: {e}"
+            _log("ERROR", f"Anchor injection failed for {filename}: {e}")
+
+        return result
+
+    def _download_preview_extraction(
+        self,
+        page,
+        link: Dict[str, str],
+        conversation_title: str,
+        max_attempts: int = 10,
+        wait_sec: int = 3,
+    ) -> Dict[str, Any]:
+        """
+        Strategy B: Click link, wait for preview panel, extract content from DOM.
+        For .py files in headless mode. Extended wait for slow loading.
+        """
+        href = link["href"]
+        filename = link["filename"]
+        result = {"status": "error", "file": filename, "reason": "", "path": "", "hash": ""}
+
+        try:
+            _log("STRAT-B", f"Preview extraction for {filename}")
+
+            # Step 1: Click the link to open preview panel
+            _log("EXTRACT-1", f"Clicking link for {filename}")
+            self._click_link_safe(page, href)
+
+            # Step 2: Wait for preview panel with extended retry
+            _log("EXTRACT-2", "Waiting for preview panel...")
+            preview_selectors = self.config.get("download", {}).get("extraction", {}).get(
+                "preview_selectors",
+                [
+                    '[class*="preview"]',
+                    '[class*="panel"]',
+                    '[class*="drawer"]',
+                    '[class*="file-preview"]',
+                    '[class*="code-preview"]',
+                    '[class*="markdown-body"]',
+                    'pre',
+                    'code',
+                    '.view-lines',
+                    '[class*="monaco-editor"]',
+                    '[class*="cm-editor"]',
+                ]
+            )
+
+            preview_found = False
+            preview_selector = ""
+            for attempt in range(max_attempts):
+                for selector in preview_selectors:
+                    try:
+                        el = page.query_selector(selector)
+                        if el:
+                            # Validate dimensions (must be reasonably large)
+                            box = el.bounding_box()
+                            if box and box.get("width", 0) > 200 and box.get("height", 0) > 200:
+                                preview_found = True
+                                preview_selector = selector
+                                _log("EXTRACT-2", f"Preview panel found: {selector} ({box.get('width', 0):.0f}x{box.get('height', 0):.0f})")
+                                break
+                    except Exception:
+                        continue
+                if preview_found:
+                    break
+                _log("EXTRACT-2", f"Preview not ready, attempt {attempt + 1}/{max_attempts}")
+                time.sleep(wait_sec)
 
             if not preview_found:
-                log_event(f"[EXTRACT-FAIL] Preview panel not found for {filename}")
-                self._capture(page, f"extract_no_preview_{filename[:30]}")
-                return {"status": "skipped", "file": filename, "reason": "Preview panel not found"}
+                result["reason"] = "Preview panel not found after max attempts"
+                _log("EXTRACT-FAIL", f"Preview panel timeout for {filename}")
+                return result
 
-            # Step 3: Wait for content to load (check multiple times)
-            log_event("[EXTRACT-3] Waiting for content to load...")
-            content = None
-            for attempt in range(5):
-                page.wait_for_timeout(2000)
-                content = self._extract_preview_content(page)
-                if content and len(content.strip()) > 100:
-                    log_event(f"[EXTRACT-3] Content loaded: {len(content)} chars")
-                    break
-                log_event(f"[EXTRACT-3] Content not ready, attempt {attempt+1}/5")
+            # Step 3: Wait for content to load with extended retry
+            _log("EXTRACT-3", "Waiting for content to load...")
+            content_selectors = self.config.get("download", {}).get("extraction", {}).get(
+                "content_selectors",
+                [
+                    'pre code',
+                    '.view-lines',
+                    '.markdown-body',
+                    '[class*="cm-content"]',
+                    '[class*="monaco-editor"] .view-lines',
+                    'pre',
+                    'code',
+                ]
+            )
 
-            # Validate content length and quality
-            if not content or len(content.strip()) < 100:
-                log_event(f"[EXTRACT-FAIL] Content empty or too short ({len(content or '')} chars) for {filename}")
-                self._capture(page, f"extract_empty_{filename[:30]}")
-                return {"status": "skipped", "file": filename, "reason": "Preview content empty or too short"}
+            content_text = ""
+            content_loaded = False
+            min_length = self.config.get("download", {}).get("extraction", {}).get("min_content_length", 100)
 
-            # Extra validation for code files
-            ext = Path(filename).suffix.lower()
-            if ext == ".py" and ("def " not in content and "import " not in content and "class " not in content):
-                log_event(f"[EXTRACT-FAIL] Content does not look like Python code for {filename}")
-                self._capture(page, f"extract_wrong_format_{filename[:30]}")
-                return {"status": "skipped", "file": filename, "reason": "Content validation failed (not valid Python)"}
-
-            # Step 4: Write content to file
-            log_event(f"[EXTRACT-4] Writing {len(content)} chars to {dest_path}")
-            with open(dest_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            file_hash = compute_sha256(dest_path)
-            return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-        except Exception as e:
-            log_event(f"[EXTRACT-ERROR] {filename}: {e}")
-            self._capture(page, f"extract_error_{filename[:30]}")
-            return {"status": "error", "file": filename, "error": str(e)}
-
-    def _extract_preview_content(self, page):
-        """Extract text content from preview panel DOM."""
-        js = """() => {
-            var selectors = [
-                '[class*="preview"] pre', '[class*="panel"] pre',
-                '[class*="code"] pre', '.monaco-editor .view-lines',
-                '[class*="file-view"] pre', '[class*="content"] pre',
-                '.ant-drawer pre', '[role="dialog"] pre',
-                'pre[class*="code"]', 'code[class*="language"]',
-                '[class*="markdown-body"]', '[class*="article"]',
-                '.preview-panel pre', '.file-preview pre',
-                '[class*="text"] pre', 'pre',
-            ];
-            for (var i = 0; i < selectors.length; i++) {
-                var el = document.querySelector(selectors[i]);
-                if (el && el.innerText && el.innerText.trim().length > 10) {
-                    return el.innerText;
-                }
-            }
-            // Fallback: get all text from preview-like containers
-            var containers = document.querySelectorAll('[class*="preview"], [class*="panel"], [class*="drawer"], [class*="file-view"]');
-            for (var j = 0; j < containers.length; j++) {
-                var text = containers[j].innerText;
-                if (text && text.trim().length > 50) {
-                    return text;
-                }
-            }
-            return null;
-        }"""
-        try:
-            return page.evaluate(js)
-        except Exception as e:
-            log_event(f"[EXTRACT-ERROR] JS extraction failed: {e}")
-            return None
-
-    def _download_by_browser(self, page, link, conversation_title):
-        """Fallback strategy: trigger browser download for binary files (zip, etc)."""
-        href = link["href"]
-        filename = os.path.basename(urlparse(href).path) or "unknown"
-        if not filename or filename == "unknown":
-            filename = f"download_{int(time.time())}"
-        if self.unique_name:
-            safe_title = "".join(c for c in conversation_title if c.isalnum() or c in "-_ ").replace(" ", "_")[:30]
-            filename = f"{safe_title}_{filename}"
-        dest_path = Path(self.download_dir) / filename
-
-        downloads_collected = []
-        def on_download(download):
-            downloads_collected.append(download)
-        page.on("download", on_download)
-
-        try:
-            self._dismiss_overlay(page)
-
-            # Strategy A: Anchor injection with download attribute
-            log_event(f"[BROWSER-A] Anchor injection for {filename}")
-            js_inject = f"""() => {{
-            var a = document.createElement("a");
-            a.href = "{href.replace(chr(34), chr(92)+chr(34))}";
-            a.download = "{filename.replace(chr(34), chr(92)+chr(34))}";
-            a.style.display = "none";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            return "injected";
-            }}"""
-            page.evaluate(js_inject)
-            page.wait_for_timeout(8000)
-
-            if downloads_collected:
-                download = downloads_collected[-1]
-                tmp_path = Path(download.path())
-                if tmp_path.exists():
-                    shutil.move(str(tmp_path), str(dest_path))
-                    file_hash = compute_sha256(dest_path)
-                    return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
-            if browser_file and browser_file.exists():
-                shutil.copy2(str(browser_file), str(dest_path))
-                file_hash = compute_sha256(dest_path)
-                return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            # Strategy B: Mouse click on original element
-            log_event(f"[BROWSER-B] Mouse click for {filename}")
-            scrolled = self._scroll_element_into_view(page, href)
-            if scrolled:
-                page.wait_for_timeout(1000)
-                pos = self._get_element_position(page, href)
-                if pos and pos.get("in_viewport") and pos["y"] > 0:
-                    page.mouse.move(pos["x"], pos["y"])
-                    page.wait_for_timeout(300)
-                    page.mouse.click(pos["x"], pos["y"])
-                    log_event(f"[MOUSE] Clicked at ({pos['x']:.0f}, {pos['y']:.0f}) for {filename}")
-                    page.wait_for_timeout(8000)
-
-                    if downloads_collected:
-                        download = downloads_collected[-1]
-                        tmp_path = Path(download.path())
-                        if tmp_path.exists():
-                            shutil.move(str(tmp_path), str(dest_path))
-                            file_hash = compute_sha256(dest_path)
-                            return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-                    browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
-                    if browser_file and browser_file.exists():
-                        shutil.copy2(str(browser_file), str(dest_path))
-                        file_hash = compute_sha256(dest_path)
-                        return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            log_event(f"[SKIP] Browser download failed for {filename}")
-            return {"status": "skipped", "file": filename, "reason": "Browser download failed"}
-        except Exception as e:
-            log_event(f"[ERROR] Browser download failed for {filename}: {e}")
-            return {"status": "error", "file": filename, "error": str(e)}
-        finally:
-            page.remove_listener("download", on_download)
-
-    def download_conversation(self, url, title="unknown", visible=False):
-        log_event(f"[DOWNLOAD] Navigating to: {url}")
-        results = {"success": [], "duplicates": [], "errors": [], "skipped": []}
-        with sync_playwright() as p:
-            browser = self._get_browser_context(p, visible=visible)
-            page = browser.new_page()
-            try:
-                page.goto(url, timeout=self.timeout * 1000)
-                page.wait_for_load_state("networkidle", timeout=self.timeout * 1000)
-                page.wait_for_timeout(3000)
-
-                if title == "unknown":
+            for attempt in range(max_attempts):
+                for selector in content_selectors:
                     try:
-                        title_el = page.query_selector(".chat-name, .conversation-title, h1, title")
-                        if title_el:
-                            title = (title_el.inner_text() or title).strip()[:50]
+                        el = page.query_selector(selector)
+                        if el:
+                            text = el.inner_text() or ""
+                            if len(text) >= min_length:
+                                content_text = text
+                                content_loaded = True
+                                _log("EXTRACT-3", f"Content loaded: {len(text)} chars")
+                                break
+                            elif len(text) > 0:
+                                _log("EXTRACT-3", f"Content partial: {len(text)} chars (need {min_length})")
                     except Exception:
-                        pass
+                        continue
+                if content_loaded:
+                    break
+                _log("EXTRACT-3", f"Content not ready, attempt {attempt + 1}/{max_attempts}")
+                time.sleep(wait_sec)
 
+            if not content_loaded:
+                result["reason"] = f"Content empty or too short after {max_attempts} attempts"
+                _log("EXTRACT-FAIL", f"Content extraction failed for {filename}")
+                return result
+
+            # Step 4: Write content to local file
+            _log("EXTRACT-4", f"Writing {len(content_text)} chars to {filename}")
+            dest_path = os.path.join(self.download_dir, filename)
+            with open(dest_path, "w", encoding="utf-8") as f:
+                f.write(content_text)
+
+            # Validate Python syntax if .py file
+            if filename.endswith(".py"):
+                try:
+                    import py_compile
+                    py_compile.compile(dest_path, doraise=True)
+                    _log("VALIDATE", f"Python syntax OK: {filename}")
+                except Exception as e:
+                    _log("WARN", f"Python syntax error in {filename}: {e}")
+                    # Do not fail - content might be valid but with edge cases
+
+            file_hash = self._compute_sha256(dest_path)
+            result.update({
+                "status": "success",
+                "path": dest_path,
+                "hash": file_hash,
+            })
+            _log("SAVED", dest_path)
+
+        except Exception as e:
+            result["reason"] = f"Preview extraction error: {e}"
+            _log("ERROR", f"Preview extraction failed for {filename}: {e}")
+
+        return result
+
+    def _download_visible_fallback(
+        self,
+        link: Dict[str, str],
+        conversation_title: str,
+        timeout_sec: int = 30,
+    ) -> Dict[str, Any]:
+        """
+        Strategy C: Visible browser with window moved off-screen.
+        For binary files that refuse to download in headless mode.
+        """
+        href = link["href"]
+        filename = link["filename"]
+        result = {"status": "error", "file": filename, "reason": "", "path": "", "hash": ""}
+
+        _log("STRAT-C", f"Visible fallback for {filename}")
+
+        try:
+            with sync_playwright() as p:
+                # Launch visible but hidden off-screen
+                context = self._get_browser_context(p, visible=True, hide_window=True)
+                page = context.new_page()
+
+                try:
+                    # Re-navigate to conversation
+                    conv_url = link.get("conversation_url", "")
+                    if conv_url:
+                        page.goto(conv_url, wait_until="domcontentloaded", timeout=30000)
+                        time.sleep(2)
+
+                    # Use anchor injection in visible mode
+                    js_code = """
+                        (args) => {
+                            const href = args[0];
+                            const filename = args[1];
+                            const a = document.createElement('a');
+                            a.href = href;
+                            a.download = filename;
+                            a.style.display = 'none';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            return 'injected';
+                        }
+                    """
+                    page.evaluate(js_code, [href, filename])
+
+                    # Wait for download
+                    dest_path = self._wait_for_browser_download(filename, timeout_sec)
+                    if dest_path:
+                        file_hash = self._compute_sha256(dest_path)
+                        result.update({
+                            "status": "success",
+                            "path": dest_path,
+                            "hash": file_hash,
+                        })
+                        _log("SAVED", dest_path)
+                    else:
+                        result["reason"] = "Browser download not detected in visible mode"
+                        _log("SKIP", f"No download for {filename} in visible mode")
+
+                finally:
+                    context.close()
+
+        except Exception as e:
+            result["reason"] = f"Visible fallback error: {e}"
+            _log("ERROR", f"Visible fallback failed for {filename}: {e}")
+
+        return result
+
+    def _click_link_safe(self, page, href: str) -> bool:
+        """Safely click a link by href using multiple strategies."""
+        try:
+            # Strategy 1: Find by href and scroll into view
+            js_code = """
+                (href) => {
+                    const links = Array.from(document.querySelectorAll('a'));
+                    const target = links.find(a => a.href === href || a.getAttribute('href') === href);
+                    if (target) {
+                        target.scrollIntoView({block: 'center', inline: 'center'});
+                        return {found: true, x: 0, y: 0};
+                    }
+                    return {found: false};
+                }
+            """
+            res = page.evaluate(js_code, href)
+            if res and res.get("found"):
+                time.sleep(0.5)
+                # Try mouse click at center of viewport
+                viewport = page.viewport_size
+                if viewport:
+                    x = viewport["width"] // 2
+                    y = viewport["height"] // 2
+                    page.mouse.move(x, y)
+                    page.mouse.down()
+                    time.sleep(0.15)
+                    page.mouse.up()
+                    return True
+            return False
+        except Exception as e:
+            _log("WARN", f"Safe click failed: {e}")
+            return False
+
+    def _wait_for_browser_download(self, filename: str, timeout_sec: int) -> Optional[str]:
+        """Wait for file to appear in browser download directory."""
+        download_dir = Path(self.download_dir)
+        start_time = time.time()
+
+        while time.time() - start_time < timeout_sec:
+            # Check for exact filename
+            exact_path = download_dir / filename
+            if exact_path.exists() and exact_path.stat().st_size > 0:
+                return str(exact_path)
+
+            # Check for partial downloads (.crdownload, .download)
+            for f in download_dir.iterdir():
+                if f.is_file():
+                    name = f.name
+                    if name == filename or name.startswith(filename) or filename in name:
+                        if not name.endswith(".crdownload") and not name.endswith(".download"):
+                            if f.stat().st_size > 0:
+                                return str(f)
+
+            time.sleep(1)
+
+        return None
+
+
+
+    # =====================================================================
+    # STAGE 4: RECORD - Update downloads.json and pending.json
+    # =====================================================================
+
+    def _record_download(
+        self,
+        dest_path: str,
+        filename: str,
+        conversation_title: str,
+        conversation_id: str,
+        file_hash: str,
+    ) -> Dict[str, Any]:
+        """
+        Record successful download. Handle deduplication.
+        Returns record dict with status: success | duplicate.
+        """
+        downloaded_map = self.downloads_record.get("downloaded", {})
+
+        # Check for duplicate by hash
+        if self.dedup and file_hash in downloaded_map:
+            # Move to duplicate directory
+            dup_path = os.path.join(self.duplicate_dir, filename)
+            shutil.move(dest_path, dup_path)
+            _log("DEDUP", f"Duplicate moved to {dup_path}")
+            return {
+                "status": "duplicate",
+                "file": filename,
+                "hash": file_hash,
+                "path": dup_path,
+                "conversation": conversation_title,
+                "conversation_id": conversation_id,
+            }
+
+        # Record as new download
+        record = {
+            "file": filename,
+            "hash": file_hash,
+            "path": dest_path,
+            "conversation": conversation_title,
+            "conversation_id": conversation_id,
+            "downloaded_at": _timestamp(),
+        }
+        downloaded_map[file_hash] = record
+        self.downloads_record["downloaded"] = downloaded_map
+        self._ensure_meta(self.downloads_record, "downloads_record")
+        self._save_json(self.downloads_record_path, self.downloads_record)
+
+        return {
+            "status": "success",
+            "file": filename,
+            "hash": file_hash,
+            "path": dest_path,
+            "conversation": conversation_title,
+            "conversation_id": conversation_id,
+        }
+
+    # =====================================================================
+    # MAIN DOWNLOAD FLOW
+    # =====================================================================
+
+    def download_conversation(
+        self,
+        url: str,
+        title: Optional[str] = None,
+        auto_add_pending: bool = True,
+        process_pending: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Full pipeline for a single conversation:
+            1. Navigate to page
+            2. DISCOVER: Find all file links
+            3. DEDUPLICATE: Filter against downloads.json and pending.json
+            4. If auto_add_pending: Add new links to pending.json
+            5. If process_pending: Process pending files for this conversation
+            6. RECORD: Update state files
+
+        Returns result dict with success/duplicate/error/skip lists.
+        """
+        conversation_id = self._extract_conversation_id(url)
+        results = {
+            "conversation_id": conversation_id,
+            "conversation_title": title or "unknown",
+            "success": [],
+            "duplicates": [],
+            "errors": [],
+            "skipped": [],
+            "pending_added": 0,
+        }
+
+        _log("DOWNLOAD", f"Navigating to: {url}")
+
+        with sync_playwright() as p:
+            context = self._get_browser_context(p, visible=self.visible)
+            page = context.new_page()
+
+            try:
+                # Navigate
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(3)
+
+                # Extract title if not provided
+                if not title or title == "unknown":
+                    title = self._extract_page_title(page)
+                results["conversation_title"] = title
+
+                # STAGE 1: DISCOVERY
                 links = self._find_file_links(page)
-                log_event(f"[DOWNLOAD] Found {len(links)} file links in '{title}'")
-                for link in links:
-                    href = link["href"]
-                    filename = os.path.basename(urlparse(href).path) or ""
-                    ext = Path(filename).suffix.lower()
-                    is_text = ext in [".py", ".md", ".txt", ".json", ".csv", ".yml", ".yaml", ".html", ".js", ".css", ".xml"]
-                    is_binary = ext in [".zip", ".rar", ".7z", ".tar", ".gz", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".gif", ".mp3", ".mp4"]
-                    if is_text or not is_binary:
-                        res = self._download_by_extraction(page, link, title)
-                        if res.get("status") in ["skipped", "error"]:
-                            log_event(f"[FALLBACK] Extraction failed, trying browser download for {filename}")
-                            res = self._download_by_browser(page, link, title)
-                    else:
-                        res = self._download_by_browser(page, link, title)
-                    if res is None:
-                        results["errors"].append({"file": "unknown", "error": "Download returned None"})
-                    elif res.get("status") == "success":
-                        results["success"].append(res)
-                    elif res.get("status") == "duplicate":
-                        results["duplicates"].append(res)
-                    elif res.get("status") == "skipped":
-                        results["skipped"].append(res)
-                    else:
-                        results["errors"].append({"file": res.get("file", "unknown"), "error": res.get("error", "unknown")})
-                    page.wait_for_timeout(800)
+                _log("DOWNLOAD", f"Found {len(links)} file links in '{title}'")
+
+                if not links:
+                    _log("INFO", f"No file links found in conversation: {title}")
+                    return results
+
+                # STAGE 2: DEDUPLICATION
+                new_links, pending_links, skipped_links = self._deduplicate_links(
+                    links, conversation_id, title
+                )
+
+                # Report skipped
+                for sk in skipped_links:
+                    results["skipped"].append({
+                        "status": "skipped",
+                        "file": sk["filename"],
+                        "reason": sk["reason"],
+                    })
+
+                # STAGE 3: ADD NEW TO PENDING
+                if auto_add_pending and new_links:
+                    added = self._add_to_pending(new_links)
+                    results["pending_added"] = added
+                    _log("PENDING", f"Added {added} new files to pending queue")
+
+                # STAGE 4: PROCESS PENDING FILES FOR THIS CONVERSATION
+                if process_pending:
+                    pending_to_process = [
+                        p for p in self.pending_record.get("pending", [])
+                        if p.get("conversation_id") == conversation_id
+                    ]
+
+                    _log("DOWNLOAD", f"Processing {len(pending_to_process)} pending files for '{title}'")
+
+                    for pending_item in pending_to_process:
+                        filename = pending_item.get("filename", "")
+                        href = pending_item.get("file_url", "")
+                        strategy = pending_item.get("strategy", STRATEGY_PREVIEW)
+
+                        # Build link dict
+                        link = {
+                            "href": href,
+                            "filename": filename,
+                            "file_ext": pending_item.get("file_ext", ""),
+                            "conversation_url": url,
+                        }
+
+                        # Apply strategy
+                        download_result = None
+                        if strategy == STRATEGY_ANCHOR:
+                            download_result = self._download_anchor_injection(page, link, title)
+                        elif strategy == STRATEGY_PREVIEW:
+                            download_result = self._download_preview_extraction(page, link, title)
+                        else:
+                            download_result = self._download_visible_fallback(link, title)
+
+                        # Handle result
+                        if download_result["status"] == "success":
+                            dest_path = download_result["path"]
+                            file_hash = download_result["hash"]
+
+                            # Record download
+                            record = self._record_download(
+                                dest_path, filename, title, conversation_id, file_hash
+                            )
+
+                            if record["status"] == "duplicate":
+                                results["duplicates"].append(record)
+                            else:
+                                results["success"].append(record)
+
+                            # Remove from pending
+                            self._remove_from_pending(conversation_id, filename)
+
+                        elif download_result["status"] == "error":
+                            error_reason = download_result.get("reason", "Unknown error")
+                            results["errors"].append({
+                                "status": "error",
+                                "file": filename,
+                                "reason": error_reason,
+                            })
+                            # Increment retry in pending
+                            self._increment_retry(conversation_id, filename, error_reason)
+                        else:
+                            results["skipped"].append({
+                                "status": "skipped",
+                                "file": filename,
+                                "reason": download_result.get("reason", "Unknown"),
+                            })
+
             except PlaywrightTimeout:
-                log_event(f"[TIMEOUT] Navigation timeout for {url}")
-                results["errors"].append({"conversation": title, "error": "Navigation timeout"})
+                _log("TIMEOUT", f"Navigation timeout for {url}")
+                results["errors"].append({
+                    "conversation": title,
+                    "error": "Navigation timeout",
+                })
             except Exception as e:
-                log_event(f"[ERROR] Unexpected error: {e}")
-                results["errors"].append({"conversation": title, "error": str(e)})
+                _log("ERROR", f"Download error: {e}")
+                results["errors"].append({
+                    "conversation": title,
+                    "error": str(e),
+                })
             finally:
-                browser.close()
-        save_downloads_json(self.downloads_record)
-        log_event(f"[RESULT] {title}: {len(results['success'])} success, {len(results['duplicates'])} duplicates, {len(results['errors'])} errors, {len(results['skipped'])} skipped")
+                context.close()
+
         return results
 
-    def download_from_list(self, conversations_path, visible=False):
-        with open(conversations_path, "r", encoding="utf-8") as f:
-            conversations = json.load(f)
-        all_results = {"success": [], "duplicates": [], "errors": [], "skipped": []}
-        for conv in conversations:
-            url = conv.get("url", "")
-            title = conv.get("title", "unknown")
-            if not url:
-                continue
-            res = self.download_conversation(url, title=title, visible=visible)
-            all_results["success"].extend(res["success"])
-            all_results["duplicates"].extend(res["duplicates"])
-            all_results["errors"].extend(res["errors"])
-            all_results["skipped"].extend(res["skipped"])
-            time.sleep(2)
-        log_event(f"[BATCH] Complete: {len(all_results['success'])} success, {len(all_results['duplicates'])} duplicates, {len(all_results['errors'])} errors, {len(all_results['skipped'])} skipped")
+    def download_from_list(self, list_path: str) -> Dict[str, Any]:
+        """
+        Batch download from conversations.json or pending.json.
+
+        If list_path points to pending.json, process only pending items.
+        If list_path points to conversations.json, discover + dedup + process.
+        """
+        list_path = self._expand_path(list_path) or list_path
+        data = self._load_json(list_path, default={})
+
+        all_results = {
+            "total_conversations": 0,
+            "total_success": 0,
+            "total_duplicates": 0,
+            "total_errors": 0,
+            "total_skipped": 0,
+            "conversations": [],
+        }
+
+        # Detect file type by content structure
+        if "pending" in data:
+            # Processing pending.json
+            pending_items = data.get("pending", [])
+            _log("BATCH", f"Processing {len(pending_items)} pending items")
+
+            # Group by conversation
+            conv_map = {}
+            for item in pending_items:
+                conv_id = item.get("conversation_id", "unknown")
+                if conv_id not in conv_map:
+                    conv_map[conv_id] = {
+                        "id": conv_id,
+                        "title": item.get("conversation_title", "unknown"),
+                        "url": f"https://www.kimi.com/chat/{conv_id}",
+                        "items": [],
+                    }
+                conv_map[conv_id]["items"].append(item)
+
+            for conv in conv_map.values():
+                result = self.download_conversation(
+                    conv["url"],
+                    title=conv["title"],
+                    auto_add_pending=False,  # Already in pending
+                    process_pending=True,
+                )
+                all_results["conversations"].append(result)
+                all_results["total_success"] += len(result["success"])
+                all_results["total_duplicates"] += len(result["duplicates"])
+                all_results["total_errors"] += len(result["errors"])
+                all_results["total_skipped"] += len(result["skipped"])
+                all_results["total_conversations"] += 1
+
+        elif "conversations" in data or isinstance(data, list):
+            # Processing conversations.json
+            conversations = data.get("conversations", []) if isinstance(data, dict) else data
+            _log("BATCH", f"Processing {len(conversations)} conversations")
+
+            for conv in conversations:
+                if isinstance(conv, dict):
+                    url = conv.get("url", "")
+                    title = conv.get("title", "unknown")
+                else:
+                    url = str(conv)
+                    title = "unknown"
+
+                if not url:
+                    continue
+
+                result = self.download_conversation(url, title=title)
+                all_results["conversations"].append(result)
+                all_results["total_success"] += len(result["success"])
+                all_results["total_duplicates"] += len(result["duplicates"])
+                all_results["total_errors"] += len(result["errors"])
+                all_results["total_skipped"] += len(result["skipped"])
+                all_results["total_conversations"] += 1
+
         return all_results
 
 
+
+# =====================================================================
+# CLI INTERFACE
+# =====================================================================
+
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.2.1")
-    parser.add_argument("--url", help="Single conversation URL to download from")
-    parser.add_argument("--from-list", help="Path to conversations.json for batch download")
+    parser = argparse.ArgumentParser(
+        description="Kimi File Downloader v1.3.0 - Incremental Download Pipeline"
+    )
+    parser.add_argument("--url", type=str, help="Single conversation URL to download")
+    parser.add_argument("--from-list", type=str, help="Path to conversations.json or pending.json")
+    parser.add_argument("--profile-dir", type=str, default=None, help="Browser profile directory")
+    parser.add_argument("--download-dir", type=str, default=None, help="Download destination directory")
+    parser.add_argument("--duplicate-dir", type=str, default=None, help="Duplicate files directory")
+    parser.add_argument("--config", type=str, default=None, help="Config file path")
+    parser.add_argument("--downloads-record", type=str, default=None, help="Downloads record JSON path")
+    parser.add_argument("--pending-record", type=str, default=None, help="Pending record JSON path")
+    parser.add_argument("--no-dedup", action="store_true", help="Disable deduplication")
+    parser.add_argument("--no-diagnose", action="store_true", help="Disable diagnostic screenshots")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
+    parser.add_argument("--discover-only", action="store_true", help="Only discover files, add to pending, do not download")
+    parser.add_argument("--process-pending", action="store_true", help="Only process pending.json items")
+
     args = parser.parse_args()
-    config = load_config()
-    downloader = KimiDownloader(config)
-    if args.url:
-        results = downloader.download_conversation(args.url, visible=args.visible)
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+
+    downloader = KimiDownloader(
+        profile_dir=args.profile_dir,
+        download_dir=args.download_dir,
+        duplicate_dir=args.duplicate_dir,
+        config_path=args.config,
+        downloads_record_path=args.downloads_record,
+        pending_record_path=args.pending_record,
+        dedup=not args.no_dedup,
+        diagnose=not args.no_diagnose,
+        visible=args.visible,
+    )
+
+    if args.discover_only and args.url:
+        # Only discover and add to pending
+        result = downloader.download_conversation(
+            args.url,
+            auto_add_pending=True,
+            process_pending=False,
+        )
+        _log("RESULT", f"'{result['conversation_title']}': {result['pending_added']} added to pending")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    elif args.process_pending:
+        # Only process pending items
+        result = downloader.download_from_list(downloader.pending_record_path)
+        _log("RESULT", f"Batch complete: {result['total_success']} success, {result['total_duplicates']} dup, {result['total_errors']} err, {result['total_skipped']} skip")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    elif args.url:
+        # Full pipeline: discover + dedup + add pending + process pending
+        result = downloader.download_conversation(args.url)
+        _log("RESULT", f"'{result['conversation_title']}': {len(result['success'])} success, {len(result['duplicates'])} dup, {len(result['errors'])} err, {len(result['skipped'])} skip")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
     elif args.from_list:
-        results = downloader.download_from_list(args.from_list, visible=args.visible)
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        # Batch from list
+        result = downloader.download_from_list(args.from_list)
+        _log("RESULT", f"Batch complete: {result['total_success']} success, {result['total_duplicates']} dup, {result['total_errors']} err, {result['total_skipped']} skip")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
     else:
         parser.print_help()
         sys.exit(1)
