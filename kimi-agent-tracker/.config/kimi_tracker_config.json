@@ -51,8 +51,8 @@
     "interval_sec": 60,
     "visible": false,
     "conversation_count": 10,
-    "download_dir": "{baseDir}/Downloads",
-    "duplicate_dir": "{baseDir}/skills_moved/.duplicate_downloads",
+    "download_dir": "~/Downloads",
+    "duplicate_dir": "~/skills_moved/.duplicate_downloads",
     "max_retry_per_conversation": 2
   },
   "download": {
