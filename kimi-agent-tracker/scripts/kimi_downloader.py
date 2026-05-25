@@ -2,11 +2,11 @@
 ---
 title: Kimi Conversation File Downloader
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations. v1.1.4 fixes viewport scroll, hover+click sequence, and extended wait for sandbox:// links.
-version: "1.1.4"
+description: F-003 Auto-download files from Kimi chat conversations. v1.1.6 removes visibility check, adds page scroll-to-bottom before search, and retries after scroll.
+version: "1.1.6"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T13:15:00+00:00"
+updated_at: "2026-05-25T13:43:00+00:00"
 auth_config:
   provider: kimi
   auth_method: persistent_profile
@@ -141,25 +141,26 @@ class KimiDownloader:
         except Exception:
             pass
 
-    def _safe_js_click(self, page, href):
-        safe = href.replace("\\\\", "\\\\\\\\").replace('"', '\\"').replace("\n", "")
-        js_parts = [
-            "(function() {",
-            '  var safe = "' + safe + '";',
-            '  var links = document.querySelectorAll(\'a[href="' + safe + '"]\');',
-            "  for (var i = 0; i < links.length; i++) {",
-            "    if (links[i].offsetParent !== null) {",
-            "      links[i].click(); return \"clicked_visible\";",
-            "    }",
-            "  }",
-            "  if (links.length > 0) { links[0].click(); return \"clicked_first\"; }",
-            "  var a = document.createElement(\"a\"); a.href = safe; a.target = \"_blank\";",
-            "  document.body.appendChild(a); a.click(); document.body.removeChild(a);",
-            "  return \"created_anchor\";",
-            "})()"
-        ]
-        js = " ".join(js_parts)
-        return page.evaluate(js)
+    def _scroll_to_bottom(self, page):
+        """Scroll page to bottom to load all lazy content."""
+        try:
+            page.evaluate("() => { window.scrollTo(0, document.body.scrollHeight); }")
+            page.wait_for_timeout(1500)
+            # Scroll again in case of infinite scroll
+            page.evaluate("() => { window.scrollTo(0, document.body.scrollHeight); }")
+            page.wait_for_timeout(1000)
+            log_event("[SCROLL] Scrolled to bottom")
+        except Exception as e:
+            log_event(f"[SCROLL] Scroll failed: {e}")
+
+    def _find_link_position(self, page, href):
+        """Find link position. Returns (x, y) or None. No visibility check."""
+        js_get_links = "() => { var result = []; var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { var rect = links[i].getBoundingClientRect(); result.push({href: links[i].getAttribute('href'), x: rect.left + rect.width/2, y: rect.top + rect.height/2, w: rect.width, h: rect.height}); } return result; }"
+        all_links = page.evaluate(js_get_links)
+        for l in all_links:
+            if l.get("href") == href and l.get("w", 0) > 0 and l.get("h", 0) > 0:
+                return (l.get("x"), l.get("y"))
+        return None
 
     def _find_file_links(self, page):
         links = []
@@ -229,39 +230,37 @@ class KimiDownloader:
             filename = f"{safe_title}_{filename}"
         dest_path = Path(self.download_dir) / filename
 
-        # Setup download listener
         downloads_collected = []
         def on_download(download):
             downloads_collected.append(download)
         page.on("download", on_download)
 
-        # Also listen for popup/new page (some sandbox:// links open new tab)
-        popups_collected = []
-        def on_popup(popup):
-            popups_collected.append(popup)
-        page.on("popup", on_popup)
-
-        result = None
         try:
             self._dismiss_overlay(page)
 
-            # STRATEGY 1: Playwright locator with scroll + hover + click (most realistic)
-            try:
-                safe_href = href.replace('"', '\\"')
-                locator = page.locator(f'a[href="{safe_href}"]').first
-                locator.scroll_into_view_if_needed()
-                page.wait_for_timeout(500)
-                locator.hover()
-                page.wait_for_timeout(300)
-                locator.click()
-                log_event(f"[CLICK-v1] locator.click() for {filename}")
-            except Exception as e1:
-                log_event(f"[CLICK-v1-FAILED] {filename}: {e1}")
-                # STRATEGY 2: JS evaluate click fallback
-                result = self._safe_js_click(page, href)
-                log_event(f"[CLICK-v2] JS click for {filename} -> {result}")
+            # Step 1: Scroll to bottom to load all content
+            self._scroll_to_bottom(page)
 
-            # Extended wait for download to trigger (Kimi sandbox:// can be slow)
+            # Step 2: Find link position (no visibility check - any element with dimensions)
+            pos = self._find_link_position(page, href)
+            if not pos:
+                log_event(f"[SKIP] Element not found for href={href[:60]}...")
+                return {"status": "skipped", "file": filename, "reason": "Element not found in DOM"}
+            x, y = pos
+            log_event(f"[MOUSE] Target found at ({x:.0f}, {y:.0f}), clicking {filename}")
+
+            # Step 3: Scroll element into center view
+            js_scroll = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].scrollIntoView({block: \"center\", inline: \"center\"}); break; } } }"
+            page.evaluate(js_scroll, href)
+            page.wait_for_timeout(800)
+
+            # Step 4: Physical mouse simulation (move -> hover -> down -> up)
+            page.mouse.move(x, y)
+            page.wait_for_timeout(500)
+            page.mouse.down()
+            page.wait_for_timeout(150)
+            page.mouse.up()
+            log_event(f"[MOUSE] Clicked at ({x:.0f}, {y:.0f}) for {filename}")
             page.wait_for_timeout(10000)
 
             # Check Playwright download event
@@ -273,20 +272,6 @@ class KimiDownloader:
                     file_hash = compute_sha256(dest_path)
                     return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            # Check popup/new page (some links open file in new tab)
-            if popups_collected:
-                popup = popups_collected[-1]
-                log_event(f"[POPUP] New page opened for {filename}: {popup.url}")
-                # If popup has a download link, try to trigger it
-                try:
-                    popup_links = popup.query_selector_all('a[href*="download"], button:has-text("download")')
-                    if popup_links:
-                        popup_links[0].click()
-                        popup.wait_for_timeout(5000)
-                except Exception:
-                    pass
-                popup.close()
-
             # Check browser default download directory
             browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=15)
             if browser_file and browser_file.exists():
@@ -294,23 +279,20 @@ class KimiDownloader:
                 file_hash = compute_sha256(dest_path)
                 return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            # STRATEGY 3: Retry once after dismissing any overlay/dialog
-            log_event(f"[RETRY] First attempt failed for {filename}, retrying...")
-            self._dismiss_overlay(page)
+            # RETRY: Escape + re-scroll + offset click
+            log_event(f"[RETRY] First click failed for {filename}, retrying with offset...")
             page.keyboard.press("Escape")
             page.wait_for_timeout(500)
-            try:
-                locator = page.locator(f'a[href="{safe_href}"]').first
-                locator.scroll_into_view_if_needed()
-                page.wait_for_timeout(500)
-                locator.click(force=True)
-                log_event(f"[CLICK-v3] force click retry for {filename}")
-            except Exception as e3:
-                self._safe_js_click(page, href)
-                log_event(f"[CLICK-v3] JS click retry for {filename}")
+            page.evaluate(js_scroll, href)
+            page.wait_for_timeout(800)
+            page.mouse.move(x + 5, y + 2)
+            page.wait_for_timeout(300)
+            page.mouse.down()
+            page.wait_for_timeout(150)
+            page.mouse.up()
+            log_event(f"[MOUSE] Retry clicked at ({x+5:.0f}, {y+2:.0f}) for {filename}")
             page.wait_for_timeout(10000)
 
-            # Re-check after retry
             if downloads_collected:
                 download = downloads_collected[-1]
                 tmp_path = Path(download.path())
@@ -325,17 +307,15 @@ class KimiDownloader:
                 file_hash = compute_sha256(dest_path)
                 return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            # All strategies exhausted
-            log_event(f"[SKIP] No download captured for {filename} after all strategies")
-            self._capture(page, f"skip_{filename[:30]}")
-            return {"status": "skipped", "file": filename, "reason": "No download captured after click"}
+            log_event(f"[SKIP] No download captured for {filename} after mouse simulation")
+            self._capture(page, f"skip_mouse_{filename[:30]}")
+            return {"status": "skipped", "file": filename, "reason": "No download captured after mouse simulation"}
         except Exception as e:
             log_event(f"[ERROR] Direct download failed for {filename}: {e}")
-            self._capture(page, f"error_{filename[:30]}")
+            self._capture(page, f"error_mouse_{filename[:30]}")
             return {"status": "error", "file": filename, "error": str(e)}
         finally:
             page.remove_listener("download", on_download)
-            page.remove_listener("popup", on_popup)
 
     def _download_md_preview(self, page, link, conversation_title):
         href = link["href"]
@@ -346,11 +326,24 @@ class KimiDownloader:
 
         try:
             self._dismiss_overlay(page)
-            self._safe_js_click(page, href)
+            self._scroll_to_bottom(page)
+
+            # Step 1: Find link position and click via mouse to open preview
+            pos = self._find_link_position(page, href)
+            if not pos:
+                log_event(f"[SKIP] No MD link found for {filename}")
+                return {"status": "skipped", "file": filename, "reason": "No MD link found"}
+            x, y = pos
+            page.mouse.move(x, y)
+            page.wait_for_timeout(500)
+            page.mouse.down()
+            page.wait_for_timeout(150)
+            page.mouse.up()
             log_event(f"[MD-STEP1] Opened preview for {filename}")
             page.wait_for_timeout(3000)
             self._capture(page, f"md_step1_{filename_base}")
 
+            # Step 2: Find download icon in preview panel and click via mouse
             icon_selectors = [
                 '[class*="download"]', 'button[class*="download"]',
                 'svg[class*="download"]', '[title*="download" i]',
@@ -362,12 +355,15 @@ class KimiDownloader:
                 try:
                     icon = page.wait_for_selector(sel, timeout=3000)
                     if icon and icon.is_visible():
-                        try:
-                            icon.click()
-                        except Exception:
-                            page.evaluate(f'document.querySelector("{sel.replace(chr(34), chr(92)+chr(34))}").click()')
-                        clicked = True
-                        break
+                        bbox = icon.bounding_box()
+                        if bbox:
+                            page.mouse.move(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
+                            page.wait_for_timeout(300)
+                            page.mouse.down()
+                            page.wait_for_timeout(150)
+                            page.mouse.up()
+                            clicked = True
+                            break
                 except Exception:
                     continue
 
@@ -380,6 +376,7 @@ class KimiDownloader:
             page.wait_for_timeout(2000)
             self._capture(page, f"md_step2_{filename_base}")
 
+            # Step 3: Select Markdown format via mouse if dialog appears
             md_selectors = [
                 "text=Markdown", "text=Save as Markdown",
                 '[class*="markdown"]', "button:has-text(\"Markdown\")",
@@ -390,11 +387,14 @@ class KimiDownloader:
                 try:
                     opt = page.wait_for_selector(sel, timeout=3000)
                     if opt and opt.is_visible():
-                        try:
-                            opt.click()
-                        except Exception:
-                            page.evaluate(f'document.querySelector("{sel.replace(chr(34), chr(92)+chr(34))}").click()')
-                        break
+                        bbox = opt.bounding_box()
+                        if bbox:
+                            page.mouse.move(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
+                            page.wait_for_timeout(300)
+                            page.mouse.down()
+                            page.wait_for_timeout(150)
+                            page.mouse.up()
+                            break
                 except Exception:
                     continue
             else:
@@ -495,7 +495,7 @@ class KimiDownloader:
         return all_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.4")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.6")
     parser.add_argument("--url", help="Single conversation URL to download from")
     parser.add_argument("--from-list", help="Path to conversations.json for batch download")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
