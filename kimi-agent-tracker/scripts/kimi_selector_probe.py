@@ -1,12 +1,12 @@
 """
 ---
-title: Kimi Selector Probe v1.0.4
+title: Kimi Selector Probe v1.0.5
 name: kimi-agent-tracker
 description: Auto-detect working selectors for .py/.md/.json/.zip file extraction from Kimi chat pages.
-version: 1.0.4
+version: 1.0.5
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-25T23:25:00+08:00
+updated_at: 2026-05-25T23:55:00+08:00
 auth_config:
   provider: none
   auth_method: none
@@ -23,6 +23,7 @@ import json
 import sys
 import time
 import argparse
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
@@ -38,10 +39,25 @@ except ImportError:
 PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
 REPORT_PATH = Path.home() / "Downloads" / "selector_test_report.json"
 
-# Selectors
-FILE_CARD_SELECTOR = 'div[class*="file-card-container"]'
-FILE_NAME_SELECTOR = 'div[class*="file-card-info-name"]'
-FILE_EXT_SELECTOR = 'div[class*="file-card-info-ext"]'
+# Multiple candidate selectors for file cards (ordered by preference)
+FILE_CARD_SELECTORS = [
+    'div[class*="file-card-container"]',
+    'div[class*="file-card"]',
+    'div[data-v-][class*="file"]',
+    'div[class*="file-item"]',
+    'div[class*="attachment"]',
+    'a[class*="file"]',
+    'div[data-v-]',  # Vue scoped style fallback
+]
+
+# File extension pattern to detect filenames in text
+# Matches: filename.py, file-name.md, file_name.json, etc.
+# Using [.] instead of escaped dot to avoid SyntaxWarning in raw string
+FILE_PATTERN = re.compile(
+    r'([A-Za-z0-9_.-]+[.](py|md|json|zip|env|txt|csv|yaml|yml|js|html|css|xml))',
+    re.IGNORECASE
+)
+
 PREVIEW_PANEL_SELECTOR = 'div[class*="preview-panel"], div[class*="file-preview"], div[class*="preview-content"]'
 MARKDOWN_CONTENT_SELECTOR = 'div[class*="markdown"], article[class*="markdown"]'
 MONACO_EDITOR_SELECTOR = 'div[class*="monaco-editor"]'
@@ -318,44 +334,62 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool) -> Dict[str,
 
 
 async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
+    """Scan page for file cards using multiple candidate selectors."""
     log("[SCAN] Scanning for file cards...")
-    file_cards = await page.query_selector_all(FILE_CARD_SELECTOR)
-    log(f"[SCAN] Found {len(file_cards)} file card elements")
+
+    all_cards = []
+    used_selector = None
+
+    for sel in FILE_CARD_SELECTORS:
+        cards = await page.query_selector_all(sel)
+        if cards:
+            log(f"[SCAN] Selector '{sel}' matched {len(cards)} elements")
+            all_cards = cards
+            used_selector = sel
+            break
+
+    if not all_cards:
+        log("[SCAN] No file cards found with any selector")
+        return []
+
+    log(f"[SCAN] Using selector: {used_selector}")
 
     all_files = []
-    for idx, card in enumerate(file_cards):
+    for idx, card in enumerate(all_cards):
         try:
-            name_el = await card.query_selector(FILE_NAME_SELECTOR)
-            ext_el = await card.query_selector(FILE_EXT_SELECTOR)
-            name_text = await name_el.text_content() if name_el else None
-            ext_text = await ext_el.text_content() if ext_el else None
-
-            if not name_text:
+            # Get full text content of the card element
+            full_text = await card.text_content()
+            if not full_text:
                 continue
 
-            filename = name_text.strip()
-            if ext_text:
-                ext = ext_text.strip().lower().replace(".", "")
+            full_text = full_text.strip()
+            log(f"[SCAN] Card {idx} text: '{full_text[:80]}...'")
+
+            # Try to extract filename using regex
+            match = FILE_PATTERN.search(full_text)
+            if match:
+                filename = match.group(1)
+                ext = match.group(2).lower()
+                log(f"[SCAN] Card {idx} extracted filename: {filename} (.{ext})")
+
+                # Build selector using the working selector + nth-of-type
+                selector = f'{used_selector}:nth-of-type({idx + 1})'
+
+                all_files.append({
+                    "filename": filename,
+                    "ext": ext,
+                    "selector": selector,
+                    "index": idx,
+                    "card_text": full_text[:100],
+                })
             else:
-                ext = Path(filename).suffix.lstrip(".").lower()
-
-            if len(filename) <= 4 and filename.upper() in ("MD", "PY", "JSON", "ZIP", "ENV", "TXT", "CSV"):
-                log(f"[SKIP] Element {idx} looks like extension tag: '{filename}', skipping")
-                continue
-
-            selector = f'{FILE_CARD_SELECTOR}:nth-of-type({idx + 1})'
-
-            all_files.append({
-                "filename": filename,
-                "ext": ext,
-                "selector": selector,
-                "index": idx,
-            })
+                log(f"[SCAN] Card {idx} no filename pattern found in text")
         except Exception as e:
             log(f"[WARN] Error processing card {idx}: {e}")
 
-    log(f"[SCAN] Filtered to {len(all_files)} valid files")
+    log(f"[SCAN] Extracted {len(all_files)} valid files from {len(all_cards)} cards")
 
+    # Group by extension and limit per type
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for f in all_files:
         ext = f["ext"]
@@ -380,7 +414,7 @@ async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
 
 async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> Dict[str, Any]:
     report = {
-        "probe_version": "1.0.4",
+        "probe_version": "1.0.5",
         "url": url,
         "mode": "visible" if visible else "headless",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -420,10 +454,9 @@ async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> D
 
         try:
             log(f"[MAIN] Navigating to {url}")
-            # FIX: Use domcontentloaded instead of networkidle to avoid WebSocket heartbeat timeout
             await page.goto(url, wait_until="domcontentloaded", timeout=60000)
             log("[MAIN] DOM loaded, waiting for dynamic content...")
-            await asyncio.sleep(5.0)  # Extra wait for React/Vue to render file cards
+            await asyncio.sleep(5.0)
         except Exception as e:
             log(f"[FATAL] Navigation failed: {e}")
             report["error"] = f"Navigation failed: {e}"
@@ -462,8 +495,6 @@ async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> D
 
 
 def save_and_print_report(report: Dict[str, Any]) -> None:
-    """Save report to file AND print full JSON to console."""
-    # Save to file
     try:
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -471,14 +502,12 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
     except Exception as e:
         print(f"\n[REPORT] Failed to save file: {e}")
 
-    # Print full JSON to console (so user can copy-paste even if file fails)
     print("\n" + "=" * 60)
     print("FULL JSON REPORT (copy-paste this if file not found)")
     print("=" * 60)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     print("=" * 60)
 
-    # Print human-readable summary
     print("\n" + "=" * 60)
     print("PROBE SUMMARY")
     print("=" * 60)
@@ -497,7 +526,7 @@ def save_and_print_report(report: Dict[str, Any]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.4")
+    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.0.5")
     parser.add_argument("--url", required=True, help="Kimi chat URL to probe")
     parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
     parser.add_argument("--max-per-type", type=int, default=2, help="Max files to test per extension type")
