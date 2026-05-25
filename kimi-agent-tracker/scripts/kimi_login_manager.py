@@ -2,16 +2,16 @@
 ---
 title: "Kimi Login Manager - F001"
 name: "kimi-agent-tracker"
-description: "Kimi 平台 SMS 登入與 persistent profile 維護。所有可調參數從 config 讀取，禁止硬編碼。"
-version: "1.1.0"
+description: "Kimi 平台 SMS 登入與 persistent profile 維護。config 分離，診斷增強。"
+version: "1.1.1"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T02:05:00+08:00"
+updated_at: "2026-05-25T11:00:00+08:00"
 auth_config:
   provider: "local"
   auth_method: "none"
   token_env_var: "N/A"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: "N/A"
 file_mapping:
   local_path: "{baseDir}/scripts/kimi_login_manager.py"
   github_path: "kimi-agent-tracker/scripts/kimi_login_manager.py"
@@ -24,9 +24,6 @@ import time
 import argparse
 from pathlib import Path
 
-# ------------------------------------------------------------------
-# 動態注入 chrome-playwright-connector
-# ------------------------------------------------------------------
 connector_path = Path(__file__).parent.parent.parent / "chrome-playwright-connector" / "scripts"
 if str(connector_path) not in sys.path:
     sys.path.insert(0, str(connector_path))
@@ -34,13 +31,11 @@ if str(connector_path) not in sys.path:
 from browser_connector import BrowserConnector
 from profile_manager import url_to_profile_name
 
-# ------------------------------------------------------------------
-# 配置加載（禁止硬編碼，全部從 config 讀取）
-# ------------------------------------------------------------------
+
 def _load_config():
-    """讀取 .config/kimi_tracker_config.json，不存在則返回默認值。"""
     config_path = Path(__file__).parent.parent / ".config" / "kimi_tracker_config.json"
     defaults = {
+        "platform": {"base_url": "https://www.kimi.com"},
         "login": {
             "stay_open_default": 300,
             "validate_timeout_ms": 5000,
@@ -50,26 +45,14 @@ def _load_config():
             "profile_name": "kimi_com"
         },
         "selectors": {
-            "login_indicators": [
-                ".chat-info-item",
-                ".user-avatar",
-                ".user-name"
-            ],
-            "conversation_items": ".chat-info-item",
-            "user_avatar": ".user-avatar",
-            "user_name": ".user-name"
+            "login_indicators": [".chat-info-item", ".user-avatar", ".user-name"]
         },
-        "daemon": {
-            "interval_sec": 900,
-            "visible": False,
-            "conversation_count": 10
-        }
+        "diagnose": {"diagnose_dir": "{baseDir}/.logs/diagnose"}
     }
     if config_path.exists():
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 user_cfg = json.load(f)
-            # 深度合併
             for section in defaults:
                 if section in user_cfg and isinstance(user_cfg[section], dict):
                     defaults[section].update(user_cfg[section])
@@ -80,32 +63,68 @@ def _load_config():
 
 CONFIG = _load_config()
 
+
+def _resolve_path(path_tpl: str) -> Path:
+    base = Path(__file__).parent.parent
+    return Path(path_tpl.replace("{baseDir}", str(base)))
+
+
 # ------------------------------------------------------------------
-# 核心函數
+# 核心檢測函數（帶詳細診斷輸出）
 # ------------------------------------------------------------------
-def _check_login_success(page) -> bool:
-    """組合判斷：對話項 OR 頭像 OR 用戶名，任一命中即判定已登入。"""
+def _check_login_success(page, verbose: bool = False) -> bool:
+    """組合判斷：對話項 OR 頭像 OR 用戶名，任一命中即判定已登入。
+    verbose=True 時輸出每個 selector 的詳細結果。"""
     selectors = CONFIG["selectors"]["login_indicators"]
+    results = {}
     for sel in selectors:
         try:
-            if page.query_selector(sel):
-                return True
-        except Exception:
-            continue
+            # 先嘗試 query_selector（單個）
+            el = page.query_selector(sel)
+            if el:
+                # 進一步驗證元素是否可見且有內容
+                try:
+                    text = el.inner_text().strip() if hasattr(el, "inner_text") else ""
+                    visible = el.is_visible() if hasattr(el, "is_visible") else True
+                    results[sel] = {"found": True, "text": text[:50], "visible": visible}
+                    if verbose:
+                        print(f"  [CHECK] {sel}: FOUND (text='{text[:30]}...', visible={visible})")
+                    return True
+                except Exception as inner_e:
+                    results[sel] = {"found": True, "error": str(inner_e)}
+                    if verbose:
+                        print(f"  [CHECK] {sel}: FOUND but inner check failed: {inner_e}")
+                    return True  # 至少找到了
+            else:
+                # 嘗試 query_selector_all 統計數量
+                all_els = page.query_selector_all(sel)
+                count = len(all_els)
+                results[sel] = {"found": False, "count": count}
+                if verbose:
+                    print(f"  [CHECK] {sel}: NOT FOUND (query_selector_all count={count})")
+        except Exception as e:
+            results[sel] = {"found": False, "error": str(e)}
+            if verbose:
+                print(f"  [CHECK] {sel}: EXCEPTION - {e}")
+
+    if verbose:
+        print(f"  [CHECK] Summary: {json.dumps(results, ensure_ascii=False)}")
     return False
 
 
-def validate_login(profile_name: str = None) -> bool:
-    """快速檢查登入態是否有效。headless 模式執行，無需人工介入。"""
+# ------------------------------------------------------------------
+# validate_login — 支持 visible 參數傳入
+# ------------------------------------------------------------------
+def validate_login(profile_name: str = None, visible: bool = False) -> bool:
+    """快速檢查登入態。visible=True 用於排查 headless 問題。"""
     profile = profile_name or CONFIG["login"]["profile_name"]
     timeout = CONFIG["login"]["validate_timeout_ms"]
-    driver = BrowserConnector(profile_name=profile, visible=False)
+    driver = BrowserConnector(profile_name=profile, visible=visible)
     try:
         context = driver.launch()
-        page = driver.navigate("https://www.kimi.com/")
-        # 等待頁面穩定
+        page = driver.navigate(CONFIG["platform"]["base_url"])
         page.wait_for_load_state("networkidle", timeout=timeout)
-        result = _check_login_success(page)
+        result = _check_login_success(page, verbose=True)
         print(f"[VALIDATE] Login valid: {result}")
         return result
     except Exception as e:
@@ -118,10 +137,12 @@ def validate_login(profile_name: str = None) -> bool:
             pass
 
 
+# ------------------------------------------------------------------
+# login — 循環檢測，帶詳細日誌
+# ------------------------------------------------------------------
 def login(profile_name: str = None, visible: bool = None,
           stay_open: int = None, force_login: bool = False,
           diagnose: bool = False) -> bool:
-    """啟動瀏覽器，導航到 Kimi，循環檢測登入態完成。"""
     profile = profile_name or CONFIG["login"]["profile_name"]
     vis = visible if visible is not None else CONFIG["login"]["visible_default"]
     stay = stay_open if stay_open is not None else CONFIG["login"]["stay_open_default"]
@@ -130,30 +151,35 @@ def login(profile_name: str = None, visible: bool = None,
 
     # 非強制模式先驗證
     if not force_login:
-        if validate_login(profile):
+        print("[LOGIN] Checking existing session...")
+        if validate_login(profile, visible=vis):
             print("[LOGIN] Existing session valid, skipping SMS.")
             return True
+        print("[LOGIN] No valid session found, opening browser for SMS login.")
 
     driver = BrowserConnector(profile_name=profile, visible=vis)
     try:
         context = driver.launch()
-        page = driver.navigate("https://www.kimi.com/")
+        page = driver.navigate(CONFIG["platform"]["base_url"])
         print(f"[LOGIN] Browser opened. Please complete SMS login within {max_wait}s.")
-        print(f"[LOGIN] Checking every {interval}s...")
+        print(f"[LOGIN] Checking every {interval}s with selectors: {CONFIG['selectors']['login_indicators']}")
 
         elapsed = 0
         while elapsed < max_wait:
             time.sleep(interval)
             elapsed += interval
-            if _check_login_success(page):
+
+            # 詳細檢測輸出
+            print(f"[LOGIN] Checking login state at {elapsed}s...")
+            if _check_login_success(page, verbose=True):
                 print(f"[LOGIN] Login detected after {elapsed}s. Session saved.")
                 return True
-            print(f"[LOGIN] Waiting... {elapsed}s / {max_wait}s")
+            print(f"[LOGIN] Still waiting... ({elapsed}/{max_wait}s)")
 
         print(f"[LOGIN] Timeout after {max_wait}s. Login not detected.")
         return False
     except Exception as e:
-        print(f"[LOGIN] Error: {e}")
+        print(f"[LOGIN] Fatal error: {e}")
         return False
     finally:
         try:
@@ -162,67 +188,76 @@ def login(profile_name: str = None, visible: bool = None,
             pass
 
 
+# ------------------------------------------------------------------
+# diagnose_login_page — 增強診斷
+# ------------------------------------------------------------------
 def diagnose_login_page(profile_name: str = None) -> dict:
-    """診斷模式：導出登入頁面 HTML + 元素統計。"""
     profile = profile_name or CONFIG["login"]["profile_name"]
     driver = BrowserConnector(profile_name=profile, visible=False)
     results = {
         "login_detected": False,
-        "method": "none",
-        "conversation_items": 0,
-        "avatar_elements": 0,
-        "user_name_elements": 0,
         "url": "",
         "title": "",
-        "selector_hits": {}
+        "selector_results": {},
+        "html_path": "",
+        "screenshot_path": ""
     }
     try:
         context = driver.launch()
-        page = driver.navigate("https://www.kimi.com/")
+        page = driver.navigate(CONFIG["platform"]["base_url"])
         page.wait_for_load_state("networkidle", timeout=10000)
 
         results["url"] = page.url
         results["title"] = page.title()
 
-        # 統計各 selector 命中數
-        for sel in CONFIG["selectors"]["login_indicators"]:
+        print(f"[DIAGNOSE] URL: {results['url']}")
+        print(f"[DIAGNOSE] Title: {results['title']}")
+
+        # 詳細 selector 檢測
+        selectors = CONFIG["selectors"]["login_indicators"]
+        for sel in selectors:
             try:
                 count = len(page.query_selector_all(sel))
-                results["selector_hits"][sel] = count
-            except Exception:
-                results["selector_hits"][sel] = -1
+                single = page.query_selector(sel)
+                text = ""
+                if single:
+                    try:
+                        text = single.inner_text().strip()[:50]
+                    except:
+                        pass
+                results["selector_results"][sel] = {
+                    "count": count,
+                    "single_found": single is not None,
+                    "sample_text": text
+                }
+                print(f"[DIAGNOSE] {sel}: count={count}, single={single is not None}, text='{text}'")
+            except Exception as e:
+                results["selector_results"][sel] = {"error": str(e)}
+                print(f"[DIAGNOSE] {sel}: ERROR - {e}")
 
-        results["conversation_items"] = results["selector_hits"].get(".chat-info-item", 0)
-        results["avatar_elements"] = results["selector_hits"].get(".user-avatar", 0)
-        results["user_name_elements"] = results["selector_hits"].get(".user-name", 0)
+        results["login_detected"] = _check_login_success(page, verbose=False)
+        print(f"[DIAGNOSE] Login detected: {results['login_detected']}")
 
-        if _check_login_success(page):
-            results["login_detected"] = True
-            results["method"] = "composite"
-
-        # 保存診斷 HTML
-        log_dir = Path(__file__).parent.parent / ".logs" / "diagnose"
+        # 保存診斷文件
+        log_dir = _resolve_path(CONFIG["diagnose"]["diagnose_dir"])
         log_dir.mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
+
         html_path = log_dir / f"login_diagnose_{ts}.html"
-        screenshot_path = log_dir / f"login_diagnose_{ts}.png"
-        html_content = page.content()
         with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
+            f.write(page.content())
+
+        screenshot_path = log_dir / f"login_diagnose_{ts}.png"
         page.screenshot(path=str(screenshot_path))
+
         results["html_path"] = str(html_path)
         results["screenshot_path"] = str(screenshot_path)
-
-        print(f"[DIAGNOSE] Login detected: {results['login_detected']}")
-        print(f"[DIAGNOSE] Method: {results['method']}")
-        print(f"[DIAGNOSE] Conversation items: {results['conversation_items']}")
-        print(f"[DIAGNOSE] Avatar elements: {results['avatar_elements']}")
-        print(f"[DIAGNOSE] User name elements: {results['user_name_elements']}")
         print(f"[DIAGNOSE] HTML saved: {html_path}")
         print(f"[DIAGNOSE] Screenshot saved: {screenshot_path}")
+
         return results
     except Exception as e:
-        print(f"[DIAGNOSE] Error: {e}")
+        print(f"[DIAGNOSE] Fatal error: {e}")
         return results
     finally:
         try:
@@ -232,20 +267,22 @@ def diagnose_login_page(profile_name: str = None) -> dict:
 
 
 # ------------------------------------------------------------------
-# CLI 入口
+# CLI
 # ------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Login Manager F-001")
+    parser = argparse.ArgumentParser(description="Kimi Login Manager F-001 v1.1.1")
     parser.add_argument("--profile", default=None, help="Profile name")
     parser.add_argument("--visible", action="store_true", default=None, help="Show browser window")
-    parser.add_argument("--stay-open", type=int, default=None, help="Max wait seconds for login")
+    parser.add_argument("--stay-open", type=int, default=None, help="Max wait seconds")
     parser.add_argument("--force-login", action="store_true", help="Force re-login")
     parser.add_argument("--validate", action="store_true", help="Validate existing session")
     parser.add_argument("--diagnose", action="store_true", help="Diagnose login page")
     args = parser.parse_args()
 
     if args.validate:
-        result = validate_login(args.profile)
+        # 重要：--validate 也支持 --visible 參數
+        vis = args.visible if args.visible is not None else False
+        result = validate_login(args.profile, visible=vis)
         sys.exit(0 if result else 1)
     elif args.diagnose:
         diagnose_login_page(args.profile)
