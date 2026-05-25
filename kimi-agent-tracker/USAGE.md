@@ -1,252 +1,206 @@
 ---
-title: Kimi Agent Tracker - Usage Guide
+title: Kimi Agent Tracker Usage Manual
 name: kimi-agent-tracker
-description: Human-readable usage guide for the Kimi Agent Tracker. Covers installation, configuration, CLI commands, and troubleshooting based on v1.2.1 operational experience.
-version: "1.2.1"
-github_repository: "nervlin4444/ai.skills.incubation"
-target_branch: "main"
-updated_at: "2026-05-25T15:01:00+00:00"
+description: Human-readable usage guide for the Kimi file download automation suite. CLI commands, troubleshooting, and incremental pipeline workflow.
+version: v1.3.0
+github_repository: nervlin4444/ai.skills.incubation
+target_branch: main
+updated_at: 2026-05-25T16:53:00+0800
+fixes: []
 auth_config:
-  provider: kimi
-  auth_method: persistent_profile
-  token_env_var: ""
-  env_file_path: ""
+  provider: github
+  auth_method: token
+  token_env_var: GITHUB_TOKEN
+  env_file_path: .env
 file_mapping:
   local_path: "{baseDir}/USAGE.md"
   github_path: "kimi-agent-tracker/USAGE.md"
 ---
 
-# Kimi Agent Tracker - Usage Guide v1.2.1
+# Kimi Agent Tracker - Usage Manual v1.3.0
 
-## Installation
+## Prerequisites
 
 ```bash
-# 1. Install Python dependencies
+# Install dependencies
 python3 -m pip install playwright nest_asyncio
 
-# 2. Install Playwright Chromium browser
+# Install browser (one-time)
 python3 -m playwright install chromium
 
-# 3. Verify installation
-python3 scripts/kimi_login_manager.py --help
+# Verify login profile exists
+ls ~/.kimi_auth/browser_profile_chromium/
 ```
 
-## Configuration
+## CLI Reference
 
-All settings are in `.config/kimi_tracker_config.json`:
+### kimi_downloader.py
+
+| Command | Purpose | Example |
+|---|---|---|
+| `--url URL` | Full pipeline for single conversation | `python3 scripts/kimi_downloader.py --url "https://www.kimi.com/chat/ID"` |
+| `--url URL --discover-only` | Scan and add to pending, no download | `python3 scripts/kimi_downloader.py --url URL --discover-only` |
+| `--process-pending` | Download all pending.json items | `python3 scripts/kimi_downloader.py --process-pending` |
+| `--from-list PATH` | Batch from conversations.json | `python3 scripts/kimi_downloader.py --from-list .config/conversations.json` |
+| `--visible` | Run browser in visible mode | Add to any command above |
+| `--no-dedup` | Disable deduplication | Add to any command above |
+| `--download-dir PATH` | Override download directory | `--download-dir ~/MyDownloads` |
+| `--pending-record PATH` | Override pending.json path | `--pending-record ./custom_pending.json` |
+
+### tracker_daemon.py
+
+| Command | Purpose |
+|---|---|
+| `--start` | Start daemon in background |
+| `--stop` | Stop running daemon |
+| `--status` | Check if daemon is running |
+| `--run-once` | Execute single cycle and exit |
+| `--visible` | Use visible browser for all downloads |
+| `--interval N` | Cycle interval in seconds (default: 900) |
+| `--max-conversations N` | Max conversations per cycle (default: 3) |
+| `--timeout N` | Timeout per conversation in seconds (default: 600) |
+
+### kimi_login_manager.py
+
+| Command | Purpose |
+|---|---|
+| `--validate` | Check if login session is valid |
+| `--force-login` | Force re-login (opens browser for SMS) |
+| `--diagnose` | Run diagnostic checks |
+
+### kimi_conversation_lister.py
+
+Run without arguments. Outputs conversation list to `.config/conversations.json`.
+
+## Incremental Pipeline Workflow
+
+### Day 1: Initial Setup
+
+```bash
+# 1. Validate login
+python3 scripts/kimi_login_manager.py --validate
+
+# 2. List conversations
+python3 scripts/kimi_conversation_lister.py
+
+# 3. Discover all files (add to pending)
+python3 scripts/kimi_downloader.py --from-list .config/conversations.json --discover-only
+
+# 4. Check pending queue
+cat .config/pending.json | python3 -m json.tool | grep filename
+
+# 5. Process pending queue
+python3 scripts/kimi_downloader.py --process-pending
+```
+
+### Day 2+: Incremental Update
+
+```bash
+# Start daemon (auto-runs every 15 minutes)
+python3 scripts/tracker_daemon.py --start
+
+# Or manual incremental run
+python3 scripts/tracker_daemon.py --run-once
+```
+
+The daemon will:
+1. Check for new conversations
+2. Discover new files (add to pending)
+3. Skip already-downloaded files (checks downloads.json)
+4. Download only new pending items
+5. Update state files
+
+## State File Inspection
+
+```bash
+# Check pending queue
+python3 -c "import json; d=json.load(open('.config/pending.json')); print(f'Pending: {len(d["pending"])} items')"
+
+# Check download history
+python3 -c "import json; d=json.load(open('.config/downloads.json')); print(f'Downloaded: {len(d["downloaded"])} files')"
+
+# Find duplicates
+ls ~/skills_moved/.duplicate_downloads/
+```
+
+## Troubleshooting
+
+### Issue: "No file links found"
+
+- Conversation may have no file attachments
+- Try `--visible` mode to see actual page state
+- Check if conversation is accessible (not deleted)
+
+### Issue: "Preview panel not found" (for .py files)
+
+- Kimi preview loading is slow. Increase `max_wait_attempts` in config.json
+- Try `--visible` mode to observe preview panel behavior
+- Check if file is actually a text file (not corrupted)
+
+### Issue: "All strategies failed" (for binary files)
+
+- Binary files require visible mode. Ensure `--visible` is used
+- Check if browser profile has valid login session
+- Verify download directory permissions
+
+### Issue: Daemon timeout
+
+- Increase `per_conversation_timeout_sec` in config.json (default: 600)
+- Reduce `max_conversations_per_cycle` (default: 3)
+- Check if specific conversation has many files (47+ files = slow)
+
+### Issue: "Duplicate moved" but file is new
+
+- Deduplication uses SHA256 hash. If two files have identical content, they are duplicates
+- To force re-download: `--no-dedup` or delete entry from downloads.json
+
+### Issue: Pending queue grows indefinitely
+
+- Some files may consistently fail. Check `retry_count` in pending.json
+- After max retries, item is skipped but remains in pending
+- Manual cleanup: edit pending.json and remove stuck items
+
+## File Locations
+
+| Purpose | Default Path |
+|---|---|
+| Downloaded files | `~/Downloads/` |
+| Duplicate files | `~/skills_moved/.duplicate_downloads/` |
+| Browser profile | `~/.kimi_auth/browser_profile_chromium/` |
+| Config | `~/.workbuddy/skills/kimi-agent-tracker/.config/kimi_tracker_config.json` |
+| Downloads record | `~/.workbuddy/skills/kimi-agent-tracker/.config/downloads.json` |
+| Pending queue | `~/.workbuddy/skills/kimi-agent-tracker/.config/pending.json` |
+| Conversation cache | `~/.workbuddy/skills/kimi-agent-tracker/.config/conversations.json` |
+| Daemon log | `~/.workbuddy/skills/kimi-agent-tracker/.logs/daemon.log` |
+| Diagnostic screenshots | `~/.workbuddy/skills/kimi-agent-tracker/.logs/diagnose/` |
+
+## Configuration Tuning
+
+Edit `.config/kimi_tracker_config.json`:
 
 ```json
 {
-  "platform": {
-    "base_url": "https://www.kimi.com"
-  },
-  "login": {
-    "timeout_sec": 30,
-    "max_retry": 2
-  },
-  "daemon": {
-    "interval_sec": 900,
-    "visible": false,
-    "conversation_count": 10,
-    "download_dir": "~/Downloads",
-    "duplicate_dir": "~/skills_moved/.duplicate_downloads"
-  },
   "download": {
-    "deduplicate": true,
-    "unique_filename": true,
-    "strategy": "extraction",
     "extraction": {
-      "preview_selectors": [
-        "[class*="preview"]",
-        "[class*="panel"]",
-        "[class*="drawer"]",
-        "[class*="file-view"]",
-        "[class*="code"]",
-        ".monaco-editor",
-        "[role="dialog"]",
-        ".ant-drawer",
-        "[class*="content"]",
-        "[class*="file-preview"]",
-        "[class*="doc-preview"]"
-      ],
-      "content_selectors": [
-        "[class*="preview"] pre",
-        "[class*="panel"] pre",
-        "[class*="code"] pre",
-        ".monaco-editor .view-lines",
-        "pre[class*="code"]",
-        "code[class*="language"]",
-        "[class*="markdown-body"]",
-        "pre"
-      ],
-      "min_content_length": 100,
-      "max_wait_attempts": 5,
-      "wait_interval_ms": 2000
+      "max_wait_attempts": 15,
+      "wait_interval_sec": 5,
+      "min_content_length": 50
+    },
+    "anchor_injection": {
+      "timeout_sec": 30
     }
   },
-  "logging": {
-    "level": "INFO",
-    "log_dir": "{baseDir}/.logs"
+  "daemon": {
+    "max_conversations_per_cycle": 2,
+    "per_conversation_timeout_sec": 900,
+    "interval_sec": 1800
   }
 }
 ```
 
-### Key Settings
+## Safety Rules
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `daemon.interval_sec` | 900 | Seconds between daemon cycles (15 min) |
-| `daemon.visible` | false | Run browser in visible mode (set true for debugging) |
-| `daemon.download_dir` | ~/Downloads | Where downloaded files are saved |
-| `download.deduplicate` | true | Skip files already downloaded (by SHA256) |
-| `download.unique_filename` | true | Prefix files with conversation title |
-| `download.extraction.min_content_length` | 100 | Minimum chars for valid content extraction |
-| `download.extraction.max_wait_attempts` | 5 | Number of retries waiting for preview content |
-| `download.extraction.wait_interval_ms` | 2000 | Milliseconds between content check attempts |
-
-## CLI Commands
-
-### F-001: Login Management
-
-```bash
-# First-time login (requires SMS verification)
-python3 scripts/kimi_login_manager.py --force-login --visible --stay-open 300
-
-# Validate existing session
-python3 scripts/kimi_login_manager.py --validate
-
-# Diagnose login state (screenshots + selector analysis)
-python3 scripts/kimi_login_manager.py --diagnose
-```
-
-### F-002: Conversation Listing
-
-```bash
-# List recent conversations
-python3 scripts/kimi_conversation_lister.py --count 10
-
-# With diagnostics
-python3 scripts/kimi_conversation_lister.py --count 10 --diagnose
-```
-
-### F-003: File Download
-
-```bash
-# Download from single conversation URL
-python3 scripts/kimi_downloader.py --url "https://www.kimi.com/chat/..."
-
-# Batch download from conversation list
-python3 scripts/kimi_downloader.py --from-list .config/conversations.json
-
-# Visible mode (for debugging)
-python3 scripts/kimi_downloader.py --url "..." --visible
-```
-
-### F-005: Daemon Control
-
-```bash
-# Start background monitoring
-python3 scripts/tracker_daemon.py --start
-
-# Run single cycle (foreground, for testing)
-python3 scripts/tracker_daemon.py --run-once
-
-# Check status
-python3 scripts/tracker_daemon.py --status
-
-# Stop daemon
-python3 scripts/tracker_daemon.py --stop
-```
-
-## How Downloads Work (v1.2.1)
-
-### For Text Files (.py, .md, .txt, .json, etc.)
-
-The script uses **Content Extraction** instead of browser download:
-
-1. Clicks the file link in the conversation
-2. Waits for Kimi's preview panel to open (right side of screen)
-3. Validates the panel is actually a file preview (dimensions > 200x200px, not sidebar)
-4. Extracts the file content directly from the preview panel's DOM
-5. Validates content length (default: > 100 chars)
-6. For .py files: validates presence of `def ` / `import ` / `class `
-7. Writes the content to a local file with UTF-8 encoding
-
-This bypasses all browser download dialogs and sandbox:// protocol limitations.
-
-### For Binary Files (.zip, .pdf, .png, etc.)
-
-Falls back to traditional browser download triggering.
-
-## Troubleshooting
-
-### "Preview panel not found" or "Content empty"
-
-The preview panel selector may be matching the wrong element. Check:
-
-```bash
-# Run in visible mode to see what's happening
-python3 scripts/kimi_downloader.py --url "..." --visible
-
-# Check diagnostic screenshots
-ls -lt .logs/diagnose/download/
-```
-
-**Common cause (fixed in v1.2.1)**: The selector `[class*="sidebar"]` used to match the conversation sidebar instead of the file preview panel. The script now validates panel dimensions (width > 200px, height > 200px) to exclude the sidebar.
-
-### "42 chars extracted" (content too short)
-
-The script extracted text from the wrong DOM element (e.g., sidebar text instead of file content). The content validation (min 100 chars) should catch this. If it persists:
-
-1. Check `.logs/diagnose/` screenshots
-2. Adjust `extraction.content_selectors` in config.json
-3. Increase `extraction.max_wait_attempts` if the preview loads slowly
-
-### "Login invalid" when daemon starts
-
-The Kimi session has expired (typically 7-14 days). Re-authenticate:
-
-```bash
-python3 scripts/kimi_login_manager.py --force-login --visible --stay-open 300
-# Complete SMS verification in the browser window
-python3 scripts/kimi_login_manager.py --validate
-```
-
-### Files not appearing in ~/Downloads
-
-Check if `download_dir` in config.json uses `~/` (tilde). The script auto-expands this to your home directory. Verify:
-
-```bash
-ls -lt ~/Downloads/
-# or check config path
-python3 -c "import os; print(os.path.expanduser('~/Downloads'))"
-```
-
-### Daemon stops with "asyncio loop" error
-
-Install nest_asyncio:
-
-```bash
-python3 -m pip install nest_asyncio --user
-```
-
-## Operational Notes
-
-### Session Persistence
-
-The persistent profile is saved at `~/.kimi_auth/browser_profile_chromium/`. Do not delete this directory unless you want to force re-authentication.
-
-### Duplicate Handling
-
-Downloaded files are tracked by SHA256 hash in `.config/downloads.json`. If the same file appears in multiple conversations, it will be moved to the `duplicate_dir` instead of overwriting.
-
-### Rate Limiting
-
-If running the daemon with short intervals, be aware that frequent page loads may trigger Kimi's rate limiting. The default 900-second interval is conservative.
-
-## Version History
-
-- **v1.2.1** (2026-05-25): Fixed preview panel selector — added dimension validation (width>200, height>200) to prevent matching conversation sidebar.
-- **v1.2.0** (2026-05-25): Content extraction strategy for text files. Bypasses browser download entirely by extracting from Kimi's preview panel DOM.
-- **v1.1.0** (2026-05-25): Unified config.json, nest_asyncio fix, removed .env dependency.
-- **v1.0.x** (2026-05-24): Initial release with basic Playwright download.
+- Never delete `downloads.json` unless you want to re-download everything
+- Backup `pending.json` before manual editing
+- Daemon `--stop` sends SIGTERM; if stuck, use `--stop` twice or `kill -9 PID`
+- Visible mode windows are moved off-screen but still consume resources; close when done
