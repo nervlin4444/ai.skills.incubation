@@ -3,10 +3,10 @@
 title: "jira_restful_core.py"
 name: "jira-restful-api-connector"
 description: "F-001: Unified HTTP client for Jira REST API v2. Auto-auth, retry, pagination, rate-limit handling."
-version: "v0.1.2"
+version: "v0.1.3"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T17:09:00+08:00"
+updated_at: "2026-05-25T22:05:00+08:00"
 fixes: [26]
 auth_config:
   provider: jira
@@ -47,8 +47,19 @@ def load_env(env_path=".env"):
 class JiraClient:
     """Unified HTTP client for Jira REST API v2.
 
-    Provides low-level _request() plus high-level wrappers used by F-002~F-005.
-    All high-level methods are thin wrappers around _request() / get() / post().
+    Auth architecture:
+      - Jira Cloud (xxx.atlassian.net): Use username + API Token via Basic Auth.
+      - Jira Server/DC (self-hosted, e.g. IP:8080): Use username + PASSWORD
+        via Basic Auth. Server/DC does NOT use API Tokens; the value in
+        JIRA_API_TOKEN env var is actually your login password (or a PAT
+        if your admin enabled Personal Access Tokens).
+      - Bearer Token: Rarely used; only if explicitly configured with PAT.
+
+    403 Forbidden troubleshooting:
+      1. Check if instance is Cloud or Server/DC.
+      2. If Server/DC: ensure JIRA_API_TOKEN contains your PASSWORD, not a Cloud token.
+      3. Verify JIRA_USERNAME matches the login username (case-sensitive).
+      4. Check user has "Browse Projects" permission in Jira.
     """
 
     def __init__(self, jira_url=None, username=None, token=None):
@@ -79,7 +90,10 @@ class JiraClient:
             except urllib.error.HTTPError as e:
                 last_err = e
                 if e.code == 401:
-                    raise RuntimeError(f"401 Unauthorized - check token/username")
+                    raise RuntimeError(
+                        f"401 Unauthorized - check token/username. "
+                        f"If Jira Server/DC, ensure JIRA_API_TOKEN is your PASSWORD not a Cloud API Token."
+                    )
                 if e.code == 403:
                     time.sleep(2 ** attempt)
                     continue
@@ -94,38 +108,17 @@ class JiraClient:
                 time.sleep(1)
         raise last_err
 
-    # ------------------------------------------------------------------
-    # Low-level generic methods
-    # ------------------------------------------------------------------
     def get(self, endpoint):
-        """Generic GET. Returns JSON dict."""
         return self._request(endpoint, "GET")
 
     def post(self, endpoint, data):
-        """Generic POST. Returns JSON dict."""
         return self._request(endpoint, "POST", data)
 
-    # ------------------------------------------------------------------
-    # High-level wrappers (F-002~F-005 depend on these)
-    # These are thin wrappers; they do NOT add business logic.
-    # ------------------------------------------------------------------
     def search_issues(self, jql, fields="*all", max_results=500):
-        """JQL search via POST /search. Returns raw Jira API response dict.
-
-        F-002 jira_query_basic.fetch_issues_by_jql() calls this method.
-        """
-        payload = {
-            "jql": jql,
-            "fields": fields,
-            "maxResults": max_results
-        }
+        payload = {"jql": jql, "fields": fields, "maxResults": max_results}
         return self.post("/search", payload)
 
     def get_issue(self, issue_key, fields="*all", expand=None):
-        """Fetch single issue by key. Returns issue dict.
-
-        F-002 jira_query_basic.fetch_issue_by_key() calls this method.
-        """
         endpoint = f"/issue/{issue_key}"
         params = []
         if fields:
@@ -137,8 +130,4 @@ class JiraClient:
         return self.get(endpoint)
 
     def get_changelog(self, issue_key):
-        """Fetch changelog for single issue. Returns changelog dict.
-
-        F-002 jira_query_basic.fetch_changelog_by_key() calls this method.
-        """
         return self.get(f"/issue/{issue_key}?expand=changelog")
