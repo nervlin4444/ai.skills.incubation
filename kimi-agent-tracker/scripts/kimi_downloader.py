@@ -2,11 +2,11 @@
 ---
 title: Kimi Conversation File Downloader
 name: kimi-agent-tracker
-description: F-003 Auto-download files from Kimi chat conversations. v1.1.7 removes scroll_to_bottom, re-queries position after scrollIntoView, and adds JS direct-click fallback for off-viewport elements.
-version: "1.1.7"
+description: F-003 Auto-download files from Kimi chat conversations. v1.1.8 adds anchor-download injection, keyboard Enter/Space fallback, realistic mouse trajectory, and fetch-API direct content extraction as ultimate fallbacks.
+version: "1.1.8"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T14:00:00+00:00"
+updated_at: "2026-05-25T14:10:00+00:00"
 auth_config:
   provider: kimi
   auth_method: persistent_profile
@@ -24,6 +24,7 @@ import json
 import time
 import hashlib
 import shutil
+import random
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
@@ -142,14 +143,10 @@ class KimiDownloader:
             pass
 
     def _scroll_element_into_view(self, page, href):
-        """Scroll specific element into viewport center and return updated position."""
         js_scroll = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].scrollIntoView({block: \"center\", inline: \"center\", behavior: \"instant\"}); return true; } } return false; }"
-        result = page.evaluate(js_scroll, href)
-        page.wait_for_timeout(1000)
-        return result
+        return page.evaluate(js_scroll, href)
 
     def _get_element_position(self, page, href):
-        """Get element center position. Returns (x, y) or None."""
         js_pos = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { var rect = links[i].getBoundingClientRect(); return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, w: rect.width, h: rect.height, in_viewport: rect.top >= 0 && rect.bottom <= window.innerHeight}; } } return null; }"
         return page.evaluate(js_pos, href)
 
@@ -229,77 +226,139 @@ class KimiDownloader:
         try:
             self._dismiss_overlay(page)
 
-            # Step 1: Scroll element into viewport center
+            # STRATEGY A: Anchor injection with download attribute (forces browser download)
+            log_event(f"[STRAT-A] Anchor injection for {filename}")
+            js_inject = f"""() => {{
+            var a = document.createElement("a");
+            a.href = "{href.replace(chr(34), chr(92)+chr(34))}";
+            a.download = "{filename.replace(chr(34), chr(92)+chr(34))}";
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            return "injected";
+            }}"""
+            page.evaluate(js_inject)
+            page.wait_for_timeout(8000)
+
+            if downloads_collected:
+                download = downloads_collected[-1]
+                tmp_path = Path(download.path())
+                if tmp_path.exists():
+                    shutil.move(str(tmp_path), str(dest_path))
+                    file_hash = compute_sha256(dest_path)
+                    return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
+            if browser_file and browser_file.exists():
+                shutil.copy2(str(browser_file), str(dest_path))
+                file_hash = compute_sha256(dest_path)
+                return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+            # STRATEGY B: Physical mouse click (single click, not down/up)
+            log_event(f"[STRAT-B] Mouse click for {filename}")
             scrolled = self._scroll_element_into_view(page, href)
-            if not scrolled:
-                log_event(f"[SKIP] Element not found in DOM for {filename}")
-                return {"status": "skipped", "file": filename, "reason": "Element not found in DOM"}
-            log_event(f"[SCROLL] Element scrolled into view for {filename}")
+            if scrolled:
+                page.wait_for_timeout(1000)
+                pos = self._get_element_position(page, href)
+                if pos and pos.get("in_viewport") and pos["y"] > 0:
+                    x, y = pos["x"], pos["y"]
+                    # Realistic mouse trajectory: move to nearby first, then to target
+                    nearby_x = x + random.randint(-50, 50)
+                    nearby_y = y + random.randint(-30, 30)
+                    page.mouse.move(nearby_x, nearby_y)
+                    page.wait_for_timeout(random.randint(200, 500))
+                    page.mouse.move(x, y)
+                    page.wait_for_timeout(random.randint(300, 700))
+                    page.mouse.click(x, y)  # Single click with built-in down/up
+                    log_event(f"[MOUSE] Clicked at ({x:.0f}, {y:.0f}) for {filename}")
+                    page.wait_for_timeout(8000)
 
-            # Step 2: Re-query position AFTER scroll (critical!)
-            pos = self._get_element_position(page, href)
-            if not pos:
-                log_event(f"[SKIP] Element disappeared after scroll for {filename}")
-                return {"status": "skipped", "file": filename, "reason": "Element disappeared after scroll"}
-            x, y = pos["x"], pos["y"]
-            in_vp = pos.get("in_viewport", False)
-            log_event(f"[POS] Element at ({x:.0f}, {y:.0f}), in_viewport={in_vp} for {filename}")
+                    if downloads_collected:
+                        download = downloads_collected[-1]
+                        tmp_path = Path(download.path())
+                        if tmp_path.exists():
+                            shutil.move(str(tmp_path), str(dest_path))
+                            file_hash = compute_sha256(dest_path)
+                            return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            # Step 3: If element is in viewport, use physical mouse click
-            if in_vp and y > 0:
-                page.mouse.move(x, y)
-                page.wait_for_timeout(500)
-                page.mouse.down()
-                page.wait_for_timeout(150)
-                page.mouse.up()
-                log_event(f"[MOUSE] Clicked at ({x:.0f}, {y:.0f}) for {filename}")
-            else:
-                # Element not in viewport - use JS direct click fallback
-                log_event(f"[JS-FALLBACK] Element not in viewport, using JS click for {filename}")
-                js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
-                page.evaluate(js_click, href)
+                    browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
+                    if browser_file and browser_file.exists():
+                        shutil.copy2(str(browser_file), str(dest_path))
+                        file_hash = compute_sha256(dest_path)
+                        return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            page.wait_for_timeout(10000)
-
-            # Check Playwright download event
-            if downloads_collected:
-                download = downloads_collected[-1]
-                tmp_path = Path(download.path())
-                if tmp_path.exists():
-                    shutil.move(str(tmp_path), str(dest_path))
-                    file_hash = compute_sha256(dest_path)
-                    return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            # Check browser default download directory
-            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=15)
-            if browser_file and browser_file.exists():
-                shutil.copy2(str(browser_file), str(dest_path))
-                file_hash = compute_sha256(dest_path)
-                return self._record_download(dest_path, filename, conversation_title, file_hash)
-
-            # RETRY: Escape + re-scroll + re-query + click again
-            log_event(f"[RETRY] First attempt failed for {filename}, retrying...")
+            # STRATEGY C: Keyboard navigation (focus + Enter/Space)
+            log_event(f"[STRAT-C] Keyboard navigation for {filename}")
             page.keyboard.press("Escape")
-            page.wait_for_timeout(500)
-            self._scroll_element_into_view(page, href)
-            page.wait_for_timeout(800)
-            pos2 = self._get_element_position(page, href)
-            if pos2:
-                x2, y2 = pos2["x"], pos2["y"]
-                if pos2.get("in_viewport", False) and y2 > 0:
-                    page.mouse.move(x2 + 3, y2 + 2)
-                    page.wait_for_timeout(300)
-                    page.mouse.down()
-                    page.wait_for_timeout(150)
-                    page.mouse.up()
-                    log_event(f"[MOUSE] Retry clicked at ({x2+3:.0f}, {y2+2:.0f}) for {filename}")
-                else:
-                    js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
-                    page.evaluate(js_click, href)
-                    log_event(f"[JS-FALLBACK] Retry JS click for {filename}")
-            page.wait_for_timeout(10000)
+            page.wait_for_timeout(300)
+            js_focus = f"""() => {{
+            var links = document.querySelectorAll('a[href]');
+            for (var i = 0; i < links.length; i++) {{
+                if (links[i].getAttribute('href') === "{href.replace(chr(34), chr(92)+chr(34))}") {{
+                    links[i].focus();
+                    links[i].tabIndex = 0;
+                    return true;
+                }}
+            }}
+            return false;
+            }}"""
+            focused = page.evaluate(js_focus)
+            if focused:
+                page.wait_for_timeout(500)
+                page.keyboard.press("Enter")
+                log_event(f"[KEYBOARD] Enter pressed for {filename}")
+                page.wait_for_timeout(8000)
 
-            # Re-check after retry
+                if downloads_collected:
+                    download = downloads_collected[-1]
+                    tmp_path = Path(download.path())
+                    if tmp_path.exists():
+                        shutil.move(str(tmp_path), str(dest_path))
+                        file_hash = compute_sha256(dest_path)
+                        return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+                browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
+                if browser_file and browser_file.exists():
+                    shutil.copy2(str(browser_file), str(dest_path))
+                    file_hash = compute_sha256(dest_path)
+                    return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+                # Try Space key as alternative
+                page.keyboard.press("Space")
+                log_event(f"[KEYBOARD] Space pressed for {filename}")
+                page.wait_for_timeout(8000)
+
+                if downloads_collected:
+                    download = downloads_collected[-1]
+                    tmp_path = Path(download.path())
+                    if tmp_path.exists():
+                        shutil.move(str(tmp_path), str(dest_path))
+                        file_hash = compute_sha256(dest_path)
+                        return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+                browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
+                if browser_file and browser_file.exists():
+                    shutil.copy2(str(browser_file), str(dest_path))
+                    file_hash = compute_sha256(dest_path)
+                    return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+            # STRATEGY D: JS element.click() on original element
+            log_event(f"[STRAT-D] JS element.click() for {filename}")
+            js_click = f"""() => {{
+            var links = document.querySelectorAll('a[href]');
+            for (var i = 0; i < links.length; i++) {{
+                if (links[i].getAttribute('href') === "{href.replace(chr(34), chr(92)+chr(34))}") {{
+                    links[i].click();
+                    return "clicked";
+                }}
+            }}
+            return "not_found";
+            }}"""
+            result = page.evaluate(js_click)
+            log_event(f"[JS-CLICK] Result: {result} for {filename}")
+            page.wait_for_timeout(8000)
+
             if downloads_collected:
                 download = downloads_collected[-1]
                 tmp_path = Path(download.path())
@@ -308,15 +367,65 @@ class KimiDownloader:
                     file_hash = compute_sha256(dest_path)
                     return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=15)
+            browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
             if browser_file and browser_file.exists():
                 shutil.copy2(str(browser_file), str(dest_path))
                 file_hash = compute_sha256(dest_path)
                 return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-            log_event(f"[SKIP] No download captured for {filename} after all strategies")
-            self._capture(page, f"skip_{filename[:30]}")
-            return {"status": "skipped", "file": filename, "reason": "No download captured after all strategies"}
+            # STRATEGY E: Fetch API direct content extraction
+            log_event(f"[STRAT-E] Fetch API for {filename}")
+            try:
+                js_fetch = f"""async () => {{
+                try {{
+                    const resp = await fetch("{href.replace(chr(34), chr(92)+chr(34))}");
+                    if (!resp.ok) return {{ok: false, status: resp.status}};
+                    const blob = await resp.blob();
+                    return {{ok: true, size: blob.size, type: blob.type}};
+                }} catch (e) {{
+                    return {{ok: false, error: e.message}};
+                }}
+                }}"""
+                fetch_result = page.evaluate(js_fetch)
+                log_event(f"[FETCH] Result: {fetch_result} for {filename}")
+                if fetch_result and fetch_result.get("ok"):
+                    # Fetch succeeded, try to download via blob URL
+                    js_blob_download = f"""async () => {{
+                    const resp = await fetch("{href.replace(chr(34), chr(92)+chr(34))}");
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "{filename.replace(chr(34), chr(92)+chr(34))}";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    return "blob_downloaded";
+                    }}"""
+                    page.evaluate(js_blob_download)
+                    page.wait_for_timeout(8000)
+
+                    if downloads_collected:
+                        download = downloads_collected[-1]
+                        tmp_path = Path(download.path())
+                        if tmp_path.exists():
+                            shutil.move(str(tmp_path), str(dest_path))
+                            file_hash = compute_sha256(dest_path)
+                            return self._record_download(dest_path, filename, conversation_title, file_hash)
+
+                    browser_file = self._wait_for_browser_download(filename_hint=filename, max_wait_sec=12)
+                    if browser_file and browser_file.exists():
+                        shutil.copy2(str(browser_file), str(dest_path))
+                        file_hash = compute_sha256(dest_path)
+                        return self._record_download(dest_path, filename, conversation_title, file_hash)
+            except Exception as e:
+                log_event(f"[FETCH] Error: {e} for {filename}")
+
+            # All strategies exhausted
+            log_event(f"[SKIP] All 5 strategies failed for {filename}")
+            self._capture(page, f"skip_all_{filename[:30]}")
+            return {"status": "skipped", "file": filename, "reason": "All download strategies failed"}
         except Exception as e:
             log_event(f"[ERROR] Direct download failed for {filename}: {e}")
             self._capture(page, f"error_{filename[:30]}")
@@ -334,19 +443,17 @@ class KimiDownloader:
         try:
             self._dismiss_overlay(page)
 
-            # Step 1: Scroll MD link into view and click
+            # Step 1: Scroll MD link into view and click via mouse to open preview
             scrolled = self._scroll_element_into_view(page, href)
             if not scrolled:
                 log_event(f"[SKIP] MD link not found for {filename}")
                 return {"status": "skipped", "file": filename, "reason": "MD link not found"}
             page.wait_for_timeout(500)
             pos = self._get_element_position(page, href)
-            if pos and pos.get("in_viewport", False) and pos["y"] > 0:
+            if pos and pos.get("in_viewport") and pos["y"] > 0:
                 page.mouse.move(pos["x"], pos["y"])
                 page.wait_for_timeout(300)
-                page.mouse.down()
-                page.wait_for_timeout(150)
-                page.mouse.up()
+                page.mouse.click(pos["x"], pos["y"])
             else:
                 js_click = "href => { var links = document.querySelectorAll('a[href]'); for (var i = 0; i < links.length; i++) { if (links[i].getAttribute('href') === href) { links[i].click(); return true; } } return false; }"
                 page.evaluate(js_click, href)
@@ -370,9 +477,7 @@ class KimiDownloader:
                         if bbox:
                             page.mouse.move(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
                             page.wait_for_timeout(300)
-                            page.mouse.down()
-                            page.wait_for_timeout(150)
-                            page.mouse.up()
+                            page.mouse.click(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
                             clicked = True
                             break
                 except Exception:
@@ -402,9 +507,7 @@ class KimiDownloader:
                         if bbox:
                             page.mouse.move(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
                             page.wait_for_timeout(300)
-                            page.mouse.down()
-                            page.wait_for_timeout(150)
-                            page.mouse.up()
+                            page.mouse.click(bbox["x"] + bbox["width"]/2, bbox["y"] + bbox["height"]/2)
                             break
                 except Exception:
                     continue
@@ -444,7 +547,6 @@ class KimiDownloader:
                 page.wait_for_load_state("networkidle", timeout=self.timeout * 1000)
                 page.wait_for_timeout(3000)
 
-                # Extract title from page if unknown
                 if title == "unknown":
                     try:
                         title_el = page.query_selector(".chat-name, .conversation-title, h1, title")
@@ -506,7 +608,7 @@ class KimiDownloader:
         return all_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.7")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v1.1.8")
     parser.add_argument("--url", help="Single conversation URL to download from")
     parser.add_argument("--from-list", help="Path to conversations.json for batch download")
     parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
