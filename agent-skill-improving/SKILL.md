@@ -1,360 +1,269 @@
 ---
-title: "Agent Skill Improving Execution Guide"
+title: "Agent Skill Improving - LLM Execution Directive"
 name: agent-skill-improving
-description: "技能改進執行指令。當發現技能有缺陷時，按指令執行改進流程。融入conversation_append.py v1.4.0長文件經驗：跨平台兼容、臨時JSON文件管理、命令行長度限制。禁止擅自改進，必須建議主人確認。配合SOUL.md v5.0 + IDENTITY.md v5.0。v1.3.1新增LOCK-016(.py強制ASCII規則)。"
-version: v1.3.1
-github_repository: nervlin4444/ai.skills.incubation
-target_branch: main
-updated_at: 2026-05-23T18:30:00+08:00
+description: "Guardian Pattern v1.3.2: Framework Guard -> Self-Diagnosis -> Issue Classifier. Mandatory 3-step workflow (generate -> write -> validate). v1.3.2 adds pre-execution guide index (SCRIPT_CORRECTIONS.md / SKILL_CORRECTIONS.md) and LOCK-017."
+version: "1.3.2"
+github_repository: "nervlin4444/ai.skills.incubation"
+target_branch: "main"
+updated_at: "2026-05-24T12:30:00+08:00"
 fixes: []
 auth_config:
-  provider: github
-  auth_method: token
-  token_env_var: GITHUB_TOKEN
+  provider: "github"
+  auth_method: "token"
+  token_env_var: "GITHUB_TOKEN"
   env_file_path: ".env"
 file_mapping:
-  local_path: SKILL.md
-  github_path: agent-skill-improving/SKILL.md
+  local_path: "SKILL.md"
+  github_path: "agent-skill-improving/SKILL.md"
 ---
 
-# agent-skill-improving v1.3.0 — 執行指令
+# LLM EXECUTION DIRECTIVE: agent-skill-improving v1.3.2
 
-> 本文件是 LLM 執行指令，不是人類說明書。
-> LLM 讀取後必須嚴格執行，禁止自由發揮。
-> v1.3.0 核心變更：skill_files_designer 合併 SkillFrontmatterExtractor，統一文件讀取與生成入口。
+## 0. Preamble & Experience Guide Index
 
----
+This file is an LLM execution directive. Not a human manual.
+Every rule is mandatory. Violating any LOCK rule = report to owner immediately, stop execution.
 
-## 身份分流
+### 0.1 Pre-Execution Guide Selection (MANDATORY)
 
-### 若你是 Sub-Agent（L1 / L2 / L3）
-本文件與你無關。
-停止。關閉。執行你的任務。
+Before generating or modifying ANY skill file, select the correct experience guide based on current task:
 
-### 若你是 Main Agent（L0）
-繼續。你是協調者，發現缺陷時按以下指令執行。
+| Current Task | Required Guide | Path | Purpose |
+|-------------|---------------|------|---------|
+| .py / .md / .json / .html file generation or modification | SCRIPT_CORRECTIONS.md | assets/SCRIPT_CORRECTIONS.md | Code techniques: phased assembly, quote handling, chr() usage, docstring structure, ASCII enforcement |
+| Skill structure design / directory planning / version strategy / naming convention | SKILL_CORRECTIONS.md | assets/SKILL_CORRECTIONS.md | Skill design patterns: directory layout, frontmatter rules, version locking, file mapping |
+| Patch strategy selection / defect judgment / bug diagnosis | BOTH | assets/ | Cross-reference for decision making |
 
----
+**Execution order:**
+1. Identify current task type from the table above
+2. Read the corresponding guide(s) from assets/
+3. Apply the rules in the guide BEFORE generating any output
+4. Proceed to Step 1 (Defect Confirmation)
 
-## 肌肉記憶（條件反射）
+**Consequence of skipping:** Repeated mistakes (quote nesting, docstring structure errors, version mismatch), wasted tokens, delayed delivery.
 
-缺。改。問。
+## 1. Operation Manual (Mandatory 3-Step)
 
-發現缺陷 → 建議改進 → 問主人確認。
+### Step 1: Confirm Defect (Internal Thinking)
 
----
+When agent discovers a skill defect, STOP. Do NOT start fixing immediately.
 
-## 絕對禁令（LOCK 規則）
+Check 1: Is this a known defect? (Search memory for similar past issues)
+Check 2: Is this within current skill scope? (If not, report to owner)
+Check 3: Is this fixable by the agent? (If requires owner decision, report)
+Check 4: Is there a corresponding Issue? (If not, create one first)
+Check 5: Does this involve file deletion? (If yes, MUST get owner confirmation)
+Check 6: Is this a framework-level change? (If yes, report to owner, wait for approval)
+Check 7: Is this a runtime bug? (If yes, agent can self-fix)
+Check 8: Is this an agent-bug (agent violated rules)? (If yes, log and self-fix)
+Check 9: Is this a frontmatter format issue? (If yes, use skill_files_designer to regenerate)
+Check 10: Is this a naming/path issue? (If yes, check naming convention rules)
+Check 11: Is this a version mismatch? (If yes, check version history and bump rules)
+Check 12: Is this a cross-platform compatibility issue? (If yes, check pathlib/encoding rules)
+Check 13: Is this a long content handling issue? (>500 chars or >50KB)? (If yes, use --from-file JSON)
+Check 14: Is this a temporary file management issue? (If yes, check temp directory/backup rules)
+Check 15: Is this a frontmatter extraction issue? (If yes, check SkillFrontmatterExtractor rules)
+Check 16: Is this a .py ASCII enforcement issue? (If yes, check LOCK-016)
+Check 17: Is this a docstring structure issue? (If yes, check phased assembly rules in SCRIPT_CORRECTIONS.md)
+Check 18: Is this a file mapping issue? (If yes, check single file_mapping rule)
+Check 19: Is this a fixes field issue? (If yes, check fixes format: [] / [N] / [N, M])
+Check 20: Is this a github_path leading slash issue? (If yes, remove leading /)
 
-| 禁令 | 不做等於什麼 |
-|------|-------------|
-| 擅自改進技能 | 未經主人授權修改資產，我等於越權 |
-| 不備份就改進 | 改壞了無法回滾，主人損失，我等於破壞 |
-| 不改版本號 | 版本混亂，主人找不到正確版本，我等於製造混亂 |
-| 不驗證就交付 | 改進後仍有缺陷，主人重複踩坑，我等於沒改 |
-| 不記錄改進歷史 | 下次忘記為什麼改，重複犯錯，我等於白做 |
-| 不建議就執行 | 剝奪主人決策權，違背主僕關係，我等於僭越 |
-| 不考慮跨平台兼容 | Windows能用Linux不能用，我等於半成品 |
-| 不考慮長文件存儲 | 內容超長命令行截斷，我等於沒解決問題 |
-| 不考慮臨時文件清理 | JSON文件堆積污染目錄，我等於製造垃圾 |
-| **禁止直接 open()/write_text() 寫入文件** | 違反 Guardian Pattern，生成沒有身份證的文件，我等於非法 |
-| **禁止調用舊名稱腳本** | skill_validate / skill_improving / skill_frontmatter_extractor 已廢棄，調用舊腳本我等於不更新 |
-| **禁止分拆讀取與生成為不同檔案** | skill_frontmatter_extractor 已合併入 skill_files_designer，分拆我等於製造維護負擔 |
+### Step 2: Suggest Fix (Report to Owner)
 
----
-
-## Guardian Pattern 執行流程（v1.3.0 強制）
-
+Format:
 ```
-Agent 需要創建/修改任何 .md / .py / .json / .html 文件
-    ↓
-Step 1: 調用 skill_files_designer.py 生成 frontmatter（或提取現有文件 frontmatter）
-    ↓
-Step 2: 寫入業務內容（通過 SkillFileWriter 上下文管理器）
-    ↓
-Step 3: 調用 skill_integrity_checker.py --strict 驗證
-    ↓ PASS
-Step 4: 如需改進，調用 skill_patch_validator.py 應用 Patch
-    ↓
-Step 5: 再次調用 skill_integrity_checker.py --strict 驗證
-    ↓ PASS
-Step 6: 上傳（commit 含 Fixes #{issue_number}）
-```
-
-**禁止跳過任何一步。**
-
----
-
-## LOCK-009 ~ LOCK-015（v1.3.0）
-
-### LOCK-009: 禁止直接寫入文件
-Agent 禁止直接使用 `open()` / `write_text()` / `Path.write_text()` 創建或修改 .md / .py / .json / .html 文件。
-必須通過 `skill_files_designer.py` 的 `SkillFileWriter` 生成。
-違反後果：文件無 frontmatter（身份證），上傳時被標記為非法，報錯拒絕。
-
-### LOCK-010: 禁止調用舊名稱腳本
-舊名稱腳本已廢棄：
-- skill_validate.py → 已更名為 skill_integrity_checker.py
-- skill_improving.py → 已更名為 skill_patch_validator.py
-- ~~skill_frontmatter_extractor.py~~ → **已合併入 skill_files_designer.py v1.3.0**
-調用舊名稱腳本 = 使用過時邏輯 = 可能重複 v1.0.4-1.0.11 的 bug。
-
-### LOCK-011: 修改後必須調用 integrity_checker
-任何文件修改後，必須立即執行：
-```bash
-python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict
-```
-不通過 = 禁止交付 = 禁止上傳 = 必須回滾或修復。
-
-### LOCK-012: 禁止修改 github_repository / target_branch
-frontmatter 中的 github_repository 和 target_branch 是全局配置，禁止任何 Agent 修改。
-如需變更倉庫，必須上報主人決策。
-
-### LOCK-013: 禁止 frontmatter 缺少 fixes 欄位
-所有技能文件的 frontmatter 必須包含 `fixes` 欄位。
-- `fixes: []` → 正常（無關聯 Issue）
-- `fixes: [5]` → 正常（修復 Issue #5）
-- **無 fixes 欄位** → 報錯拒絕上傳
-- `fixes: "new"` / `fixes: 5` → 報錯（類型錯誤）
-修復 Issue 時，在代碼註釋中寫入 `# Fixes #5`，`skill_files_designer.py` 會自動檢測並寫入 frontmatter。
-
-### LOCK-014: 禁止代碼 Fixes 聲明與 frontmatter 不一致
-代碼中寫了 `# Fixes #5` 但 frontmatter 沒有 `fixes: [5]` → 報錯。
-這防止 Agent 聲稱修復了 Issue 但沒有記錄，導致上傳後 Issue 無法自動關閉。
-
-### LOCK-015: 禁止分拆 frontmatter 讀取與生成（v1.3.0 新增）
-
-### LOCK-016: .py 強制 ASCII 規則（v1.3.1 新增）
-.py 技能文件中禁止出現中文或全角標點。
-- 禁止：在 .py 文件的註釋、docstring、日誌訊息、錯誤訊息中使用中文或全角標點（。，；：？！「」等）。
-- 必須：所有 .py 文件內容強制 ASCII（frontmatter 中的 title/name 除外，通常已是英文名稱）。
-- 原因：不同 Agent 的 Python 環境編碼處理不一致（Windows cp950 vs Linux UTF-8），中文/全角標點可能觸發 SyntaxError 或運行時錯誤。
-- 檢查項：生成 .py 文件後，掃描是否含 \u4e00-\u9fff 範圍字符或全角標點。若有，立即翻譯為英文並替換為半角標點。
-- 例外：frontmatter 中的 `title` 和 `name` 欄位可保留技能名稱（通常已是英文名稱或點號分隔格式）。
-skill_frontmatter_extractor.py 已合併入 skill_files_designer.py。
-所有 frontmatter 讀取必須通過 `skill_files_designer.SkillFrontmatterExtractor.extract()` 統一接口。
-禁止任何技能腳本自行實現 frontmatter 解析邏輯（如 startswith("---") 檢測）。
-違反後果：.py docstring frontmatter 被誤判為 no frontmatter → 丟入 .unclassified/。
-
----
-
-## 操作手冊（發現缺陷時執行）
-
-### Step 1：確認缺陷（內部思考）
-
-[INTERNAL] 發現缺陷。缺。改。問。了嗎？
-Check 1: 什麼技能？什麼版本？
-Check 2: 什麼缺陷？具體表現？
-Check 3: 影響多大？頻率多高？
-Check 4: 上次類似缺陷怎麼修復的？讀 memory。
-Check 5: 是否涉及跨平台兼容？（Windows / Linux / macOS）
-Check 6: 是否涉及長內容處理？（命令行長度 / 文件傳遞）
-Check 7: 是否涉及臨時文件管理？（JSON文件 / 清理機制）
-Check 8: 是否需要報告 Issue？（調用 skill_issue_reporter.py）
-Check 9: 是否涉及 frontmatter 提取邏輯？（必須使用 SkillFrontmatterExtractor）
-
-### Step 2：建議主人（輸出給用戶）
-
-[SUGGEST] agent-skill-improving
-Skill: {技能名稱} v{版本}
-Defect: {缺陷描述}
-Impact: {影響範圍}
-Cross-Platform: {是否涉及跨平台兼容}
-Long-Content: {是否涉及長文件處理}
-Proposed Fix: {建議修復方式}
-Need Backup: YES
-Need Validation: YES
-Confirm: [YES / NO / DEFER]
-
-**禁止**：
-- 禁止不輸出建議就直接開始改代碼
-- 禁止建議不明確（必須說出具體缺陷和修復方式）
-- 禁止不等主人確認就執行改進
-
-### Step 3：主人確認後執行（按手冊操作）
-
-主人說 YES 後，按以下順序執行：
-
-01. 備份舊版本 → improve/backups/{skill}_{timestamp}.md
-02. 生成 Patch → PATCH_{old}_to_{new}.md
-03. 應用 Patch → skill_patch_validator.py（replace 優先，3次失敗降級 write）
-04. 更新版本號 → 語義化版本（Hotfix=修訂+1 / Minor=次版本+1 / Major=主版本+1）
-05. 驗證合規 → skill_integrity_checker.py --strict
-06. 驗證跨平台 → 檢查 Windows/Linux/macOS 兼容性
-07. 驗證長內容 → 測試 >500 字符內容是否能正確傳遞
-08. 驗證臨時文件 → 確認 JSON 文件生成與清理機制
-09. 驗證統一提取 → 確認 SkillFrontmatterExtractor 能正確提取 .py docstring frontmatter
-10. 記錄歷史 → SKILL_CORRECTION.md
-11. 如需報告 Issue → skill_issue_reporter.py --from-stdin
-12. 通知 skill-acquiring → 新版本可用
-
-**禁止跳過任何一步。**
-
----
-
-## Patch 應用策略（操作細節）
-
-| 策略 | 觸發條件 | 前置要求 |
-|------|----------|----------|
-| A replace_in_file | 首次嘗試 | 無 |
-| B replace_in_file 重試 | A 失敗（全形標點/編碼差異） | 修正匹配字符串 |
-| C write_to_file 降級 | B 連續失敗 >= 3次 | **已備份舊版本** |
-
-降級決策樹：
-
-replace_in_file 失敗？
-├─ 是 → 檢查原因（全形標點 / 不可見字符 / 文件已變）
-│   ├─ 修正後重試（策略 B）
-│   │   ├─ 成功 → 繼續
-│   │   └─ 再失敗 → 計數 +1
-│   └─ 再失敗 → 計數 >= 3？
-│       ├─ 是 → 確認已備份 → 策略 C（write_to_file）
-│       └─ 否 → 繼續重試策略 B
-└─ 否 → 繼續正常流程
-
-**禁止**：
-- 禁止未備份就使用 write_to_file
-- 禁止僅失敗 1-2 次就放棄 replace_in_file
-- 禁止使用 write_to_file 後不驗證文件完整性
-
----
-
-## 新增驗證項（v1.2.4 / v1.2.5 / v1.3.0）
-
-### 驗證 6：跨平台兼容性
-改進涉及腳本執行時，必須檢查：
-
-| 檢查項 | Windows | Linux/macOS | 通過標準 |
-|--------|---------|-------------|----------|
-| 路徑分隔符 | \ 或 / | / | 使用 pathlib.Path，禁止硬編碼 |
-| 命令行長度限制 | 8191 字符 | 通常無限制 | 長內容用 --from-file，不用命令行 |
-| 引號轉義 | PowerShell " 地獄 | Bash 單引號友好 | JSON 文件傳遞，避免引號問題 |
-| 編碼聲明 | cp950 風險 | UTF-8 默認 | 文件必須用 UTF-8，聲明 # -*- coding: utf-8 -*- |
-| 換行符 | \r\n | \n | Python 自動處理，無需擔心 |
-
-**失敗處理**：若某平台不兼容，必須在 Patch 中說明「已知限制：{平台}需{解決方案}」。
-
-### 驗證 7：長內容處理
-改進涉及內容傳遞時，必須測試：
-
-Test A: 短內容（< 500 字符）→ 用 --user-input / --agent-response
-Test B: 長內容（> 500 字符）→ 用 --from-file JSON 文件
-Test C: 超長內容（> 50KB）→ 檢查 max_block_size，可能需要拆分
-
-**失敗處理**：若長內容處理失敗，禁止回到「寫臨時腳本」方案，必須優化 JSON 文件機制。
-
-### 驗證 8：臨時文件管理
-改進涉及 --from-file 時，必須確認：
-
-| 檢查項 | 要求 | 禁止 |
-|--------|------|------|
-| 臨時 JSON 文件位置 | 放在系統 temp 目錄或技能 assets/temp/ | 放在用戶桌面、文件等永久目錄 |
-| 文件命名 | backup_{conv_id}_{timestamp}.json | backup.json、temp.json 等無標識名稱 |
-| 編碼 | UTF-8，無 BOM | cp950、Big5、GBK |
-| 清理機制 | 備份成功後可選刪除 | 堆積不清理 |
-| 文件內容 | 純 JSON 數據，無執行代碼 | 包含 Python 代碼、shell 命令 |
-
-**重要**：臨時 JSON 文件**不是臨時腳本**：
-- 不是 .py 文件（無執行代碼）
-- 只是 UTF-8 數據文件
-- 不違反 SOUL v5.0「禁止臨時腳本」禁令
-
-### 驗證 9：統一 frontmatter 提取（v1.3.0 新增）
-改進涉及 frontmatter 解析時，必須確認：
-
-| 檢查項 | 要求 | 禁止 |
-|--------|------|------|
-| 提取接口 | 統一調用 SkillFrontmatterExtractor.extract() | 各技能各自實現解析邏輯 |
-| .py 文件處理 | 正確識別 docstring 中的 ---...--- | startswith("---") 導致永遠失敗 |
-| file_mapping 格式 | 支持 dict / list-of-dict / 字符串列表 fallback | 僅支持單一格式導致類型錯誤 |
-| fixes 格式 | 支持 list / int / str 自動轉換 | 僅支持 list 導致類型錯誤 |
-| 驗證欄位 | 檢查 10 個強制欄位（含 fixes） | 遺漏 fixes 欄位檢查 |
-
-**失敗處理**：若統一提取失敗，禁止回到「各技能自行實現」方案，必須修復 SkillFrontmatterExtractor。
-
----
-
-## 驗證規則（強制）
-
-應用 Patch 後、交付前，必須執行：
-```bash
-python skill_integrity_checker.py --skill-dir ./{skill_name}/ --strict --report-path ./improve/{skill_name}/VALIDATION_REPORT.md
+[DEFECT-CONFIRMED] {skill_name} {file_name} {method_name}()
+- Problem: {one sentence}
+- Impact: {scope}
+- Suggested Fix: {approach}
+- Patch Strategy: A/B/C (see Section 4)
+- Estimated Risk: low/medium/high
+- Requires Owner Confirmation: yes/no
 ```
 
-通過標準：
-- 0 項 CRITICAL 違規
-- 0 項 ARCH 架構紅線違規
-- 跨平台兼容檢查通過
-- 長內容處理檢查通過
-- 臨時文件管理檢查通過
-- **統一 frontmatter 提取檢查通過（v1.3.0 新增）**
-- 報告已輸出到指定路徑
+Wait for owner response. Do NOT proceed without confirmation.
 
-**驗證失敗 → 自動回滾 → 報告主人 → 禁止交付。**
+### Step 3: Execute Fix (By Manual)
 
----
+After owner confirms, execute according to this manual.
 
-## 紅線
+Sub-step 3.1: Read Target File
+  - Read the file to be modified, understand structure and dependencies
+  - If file is missing, report to owner, do NOT create arbitrarily
 
-- 禁止擅自改進（必須建議 → 等待確認）
-- 禁止不備份就改進
-- 禁止不改版本號
-- 禁止不驗證就交付
-- 禁止不記錄歷史
-- 禁止跳過合規驗證
-- 禁止未備份使用 write_to_file
-- 禁止不考慮跨平台兼容（v1.2.4 新增）
-- 禁止不考慮長內容處理（v1.2.4 新增）
-- 禁止不考慮臨時文件管理（v1.2.4 新增）
-- **禁止直接 open()/write_text() 寫入文件（v1.2.5 新增）**
-- **禁止調用舊名稱腳本（v1.2.5 新增）**
-- **禁止分拆 frontmatter 讀取與生成（v1.3.0 新增）**
+Sub-step 3.2: Generate Patch
+  - Use Patch strategy A/B/C (Section 4)
+  - If multi-file changes, generate patch list
+  - Each patch must include: target file, target location, old content, new content
 
-### LOCK-016: .py 強制 ASCII 規則（v1.3.1 新增）
-.py 技能文件中禁止出現中文或全角標點。
-- 禁止：在 .py 文件的註釋、docstring、日誌訊息、錯誤訊息中使用中文或全角標點（。，；：？！「」等）。
-- 必須：所有 .py 文件內容強制 ASCII（frontmatter 中的 title/name 除外，通常已是英文名稱）。
-- 原因：不同 Agent 的 Python 環境編碼處理不一致（Windows cp950 vs Linux UTF-8），中文/全角標點可能觸發 SyntaxError 或運行時錯誤。
-- 檢查項：生成 .py 文件後，掃描是否含 \u4e00-\u9fff 範圍字符或全角標點。若有，立即翻譯為英文並替換為半角標點。
-- 例外：frontmatter 中的 `title` 和 `name` 欄位可保留技能名稱（通常已是英文名稱或點號分隔格式）。
+Sub-step 3.3: Apply Patch
+  - Use replace_in_file() or write_to_file() to apply patch
+  - If replace_in_file() fails 3 times, downgrade to write_to_file() (with backup)
+  - After each patch application, verify file integrity
 
----
+Sub-step 3.4: Validate
+  - Run skill_integrity_checker to verify file integrity
+  - Check frontmatter format, file_mapping, fixes field
+  - If validation fails, report to owner, do NOT proceed
 
-## 異常處理
+Sub-step 3.5: Update Version
+  - Update version number in frontmatter (follow semantic versioning)
+  - Update updated_at timestamp (ISO 8601 format)
+  - Update fixes field (if fixing an Issue)
+  - Update description (if behavior changes)
 
-### 驗證失敗
-- 輸出：[VALIDATION-FAILED] + [ROLLBACK-EXECUTED]
-- 動作：回滾到備份版本，報告主人，標記 [REJECTED-BY-VALIDATION]
-- 禁止：在驗證失敗狀態下繼續交付
+Sub-step 3.6: Upload to GitHub
+  - Use github-skill-organizer skill to upload modified files
+  - Commit message must include Fixes #{issue_number}
+  - Verify upload success (check GitHub commit history)
 
-### replace_in_file 反覆失敗
-- 輸出：[REPLACE-FAILED-REPEATED] {次數}次
-- 動作：確認已備份 → 降級 write_to_file → 記錄 [PATCH-APPLIED-VIA-WRITE]
-- 禁止：無限重試不分析、未備份就降級
+Sub-step 3.7: Record History
+  - Record improvement history in SKILL_CORRECTION.md
+  - Include: problem description, fix approach, validation results, lessons learned
 
-### 跨平台兼容失敗
-- 輸出：[CROSS-PLATFORM-FAILED] {平台}不兼容：{原因}
-- 動作：在 Patch 中標註已知限制 → 提供替代方案 → 報告主人
-- 禁止：隱瞞平台不兼容問題
+## 2. Absolute Prohibitions (LOCK Rules)
 
-### 長內容處理失敗
-- 輸出：[LONG-CONTENT-FAILED] 內容長度{length}處理失敗：{原因}
-- 動作：優化 JSON 文件機制 → 測試不同長度閾值 → 報告主人
-- 禁止：回到「寫臨時腳本」方案
+| LOCK | Prohibition | Consequence | Correct Action |
+|------|-------------|-------------|----------------|
+| LOCK-001 | Agent generates skill files without using skill_files_designer | Missing frontmatter, missing file_mapping, no identity card | Must use skill_files_designer.SkillFileWriter to generate |
+| LOCK-002 | Agent directly uses open()/write_text() to write .py/.md/.json/.html files | File structure errors, frontmatter format errors, encoding issues | Must use skill_files_designer.SkillFileWriter |
+| LOCK-003 | Agent modifies files without backup | Unrecoverable errors, data loss | Must backup before modification (backup_{id}_{ts}.json) |
+| LOCK-004 | Agent modifies files without validation | Defects not detected, files uploaded with errors | Must run skill_integrity_checker after modification |
+| LOCK-005 | Agent does not update version number after modification | Version confusion, unable to track changes | Must update version, updated_at, description |
+| LOCK-006 | Agent does not update fixes field when fixing Issue | Issue not auto-closed, tracking confusion | Must update fixes: [N] or fixes: [N, M] |
+| LOCK-007 | Agent uses old script names (skill_improving / skill_validate) | Script not found, execution failure | Must use new names: skill_integrity_checker / skill_patch_validator |
+| LOCK-008 | Agent modifies github_repository or target_branch in frontmatter | Upload to wrong repo, skill lost | These fields are locked, report to owner if change needed |
+| LOCK-009 | Agent generates .py files with Chinese or full-width punctuation | SyntaxError on some platforms, inconsistent behavior | All .py content must be ASCII (except frontmatter title/name) |
+| LOCK-010 | Agent generates .py files with docstring structure errors | local_scanner cannot extract frontmatter, file classified as invalid | Must follow phased assembly: business code -> frontmatter -> join |
+| LOCK-011 | Agent generates .py files with triple-quote nesting | Docstring提前结束, 后续内容裸出为Python代码, SyntaxError | Use chr(34)*3 or chr(39)*3 instead of literal triple quotes in strings |
+| LOCK-012 | Agent generates files without fixes field | Missing Issue tracking, commit message lacks Fixes #N | All skill files must include fixes: [] / [N] / [N, M] |
+| LOCK-013 | Agent uses {baseDir} in file_mapping | local_scanner cannot resolve path, file install fails | Use actual relative path, e.g. scripts/xxx.py |
+| LOCK-014 | Agent uses list-of-dict format for single file_mapping | Inconsistent format, parser confusion | Use dict format: {local_path: ..., github_path: ...} |
+| LOCK-015 | Agent uses leading / in github_path | GitHub API double slash error, compare_skill mismatch | github_path must be relative, no leading / |
+| LOCK-016 | Agent does not verify file after write_to_file() | File may be corrupted, frontmatter may be malformed | Must verify: AST check + frontmatter extraction + file size check |
+| **LOCK-017** | **Agent generates or modifies skill files without reading corresponding experience guide** | **Repeat mistakes, waste tokens, delayed delivery** | **Must read SCRIPT_CORRECTIONS.md (code) or SKILL_CORRECTIONS.md (structure) from assets/ before any generation** |
 
-### 統一提取失敗（v1.3.0 新增）
-- 輸出：[EXTRACT-FAILED] {file_path} frontmatter 提取失敗：{原因}
-- 動作：檢查 SkillFrontmatterExtractor._parse_yaml 邏輯 → 測試 .py docstring 識別 → 報告主人
-- 禁止：回到「startswith(---)」簡陋方案
+## 3. Script Name Mapping (Old -> New)
 
----
+| Old Name (ABANDONED) | New Name (CURRENT) | Version | Status |
+|---------------------|-------------------|---------|--------|
+| skill_improving.py | skill_patch_validator.py | v1.3.1 | Active |
+| skill_validate.py | skill_integrity_checker.py | v1.3.1 | Active |
+| frontmatter_generator.py | skill_files_designer.py (merged) | v1.3.1 | Active |
+| file_creation_guard.py | skill_files_designer.py (merged) | v1.3.1 | Active |
+| skill_bootstrap.py | skill_folder_designer.py | v1.3.1 | Active |
+| skill_frontmatter_extractor.py | skill_files_designer.py (merged) | v1.3.1 | Deprecated |
 
-## 版本鎖定
+**CRITICAL:** Agent MUST NOT call old script names. If old name found in code or instructions, report to owner immediately.
 
-LOCK v1.3.1 PERMANENT — 操作手冊定位、建議確認機制、Patch 應用策略分級、強制合規驗證、跨平台兼容檢查、長內容處理檢查、臨時文件管理檢查、Guardian Pattern 事前強制、腳本更名規範、統一 frontmatter 提取入口、.py 強制 ASCII 規則。
+## 4. Patch Strategy (A/B/C)
 
----
+### Strategy A: replace_in_file (Low Risk)
+```python
+replace_in_file(file_path, old_content, new_content)
+```
+- Use when: Precise location known, small change, no structural impact
+- Retry: 3 times (handle whitespace/indentation differences)
+- If all 3 fail: Downgrade to Strategy B
 
-*本文件是 LLM 執行指令，不是人類說明書。*
-*發現缺陷 → 建議主人 → 等待確認 → 按手冊執行。*
-*缺。改。問。*
+### Strategy B: Multi-line Insert Retry (Medium Risk)
+```python
+# Try inserting at specific line
+lines = file_path.read_text().splitlines()
+lines.insert(line_number, new_content)
+file_path.write_text('\n'.join(lines))
+```
+- Use when: replace_in_file fails, need to add new section
+- Retry: 3 times (handle line number drift)
+- If all 3 fail: Downgrade to Strategy C
+
+### Strategy C: write_to_file with Backup (High Risk)
+```python
+# Backup first
+backup_path = file_path.with_suffix('.backup_' + timestamp + file_path.suffix)
+shutil.copy2(file_path, backup_path)
+# Write new content
+file_path.write_text(new_content)
+```
+- Use when: A and B both fail, or file needs complete rewrite
+- MUST backup before write
+- After write: Run skill_integrity_checker immediately
+- If checker fails: Restore from backup, report to owner
+
+## 5. Validation Checklist (Post-Modification)
+
+After ANY file modification, run skill_integrity_checker and verify:
+
+| Check | Method | Pass Criteria |
+|-------|--------|---------------|
+| 5.1 AST Syntax | python -m py_compile | No SyntaxError |
+| 5.2 Frontmatter Extraction | SkillFrontmatterExtractor.extract() | Returns valid dict with required fields |
+| 5.3 Required Fields | Check dict keys | Has: title, name, description, version, github_repository, target_branch, file_mapping |
+| 5.4 fixes Field | Check fixes value | Is list of integers: [] / [N] / [N, M] |
+| 5.5 file_mapping Format | Check structure | Dict format (not list-of-dict), no {baseDir}, no leading / |
+| 5.6 github_path | Check path format | Relative path, no leading / |
+| 5.7 Version Format | Check version string | Semantic versioning: x.y.z |
+| 5.8 updated_at | Check timestamp | ISO 8601 format with timezone |
+| 5.9 File Size | Check file size | Reasonable size (not 0 bytes, not >1MB unexpectedly) |
+| 5.10 Encoding | Check file encoding | UTF-8 without BOM |
+
+## 6. Version Update Rules
+
+### Semantic Versioning for Skills
+
+| Change Type | Version Bump | Example | Owner Approval |
+|-------------|-------------|---------|---------------|
+| Bug fix (patch) | z+1 | 1.2.3 -> 1.2.4 | No |
+| New feature (minor) | y+1, z=0 | 1.2.3 -> 1.3.0 | Yes |
+| Breaking change / architecture change (major) | x+1, y=0, z=0 | 1.2.3 -> 2.0.0 | Yes |
+| Documentation only | No bump | 1.2.3 -> 1.2.3 | No |
+
+### Version Update Checklist
+1. Update version in frontmatter
+2. Update updated_at timestamp
+3. Update description (if behavior changes)
+4. Update fixes field (if fixing Issue)
+5. Record in version history table
+6. Update all referencing files (README, USAGE, etc.)
+
+## 7. Exception Handling
+
+| Exception | Cause | Handling |
+|-----------|-------|----------|
+| FileNotFoundError | File missing or path error | Report to owner, do NOT create arbitrarily |
+| PermissionError | No write permission | Report to owner, do NOT use sudo or chmod |
+| SyntaxError | Code syntax error | Report to owner, do NOT attempt auto-fix |
+| KeyError | Missing required field | Report to owner, specify missing field |
+| ValueError | Invalid value format | Report to owner, specify expected format |
+| ImportError | Module not found | Report to owner, check skill installation |
+| AttributeError | Method/attribute missing | Report to owner, check version compatibility |
+| json.JSONDecodeError | Invalid JSON format | Report to owner, do NOT attempt auto-fix |
+| re.error | Invalid regex pattern | Report to owner, specify pattern and error |
+
+## 8. Record History
+
+After each improvement, record in SKILL_CORRECTION.md:
+
+```markdown
+## YYYY-MM-DD: {brief description}
+- Skill: {skill_name}
+- File: {file_name}
+- Issue: #{issue_number}
+- Problem: {detailed description}
+- Fix: {approach}
+- Patch Strategy: A/B/C
+- Validation: {results}
+- Lessons Learned: {insights}
+```
+
+## 9. Version History
+
+| Version | Changes |
+|---------|---------|
+| v1.3.2 | Add Section 0.1 Pre-Execution Guide Index (SCRIPT_CORRECTIONS.md / SKILL_CORRECTIONS.md); add LOCK-017 (must read experience guide before generation); add Check 17-20 in Step 1 |
+| v1.3.1 | Add LOCK-009~016; add Patch Strategy A/B/C; add Validation Checklist; add Version Update Rules; add Exception Handling table |
+| v1.3.0 | Rename scripts: skill_integrity_checker / skill_patch_validator / skill_files_designer / skill_folder_designer; merge SkillFrontmatterExtractor into skill_files_designer |
+| v1.2.0 | Add Self-Diagnosis mechanism; add Issue Classifier |
+| v1.1.0 | Add Framework Guard; add mandatory 3-step workflow |
+| v1.0.0 | Initial version, basic improvement workflow |
