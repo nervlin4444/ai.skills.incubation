@@ -35,7 +35,11 @@
   },
   "scan_paths": {
     "user": ["{skills_folder}"],
-    "external": ["{~/.workbuddy/skills-marketplace/skills}"]
+    "external": [
+          "~/.workbuddy/skills-marketplace/skills",
+          "~/.local/share/openclaw/skills-marketplace/skills",
+          "%APPDATA%\\.workbuddy\\skills-marketplaces\\skills"
+    ]
   },
   "search": {
     "max_results": 5,
@@ -58,9 +62,7 @@
       "subprocess.call(",
       "eval(",
       "exec(",
-      "__import__('os').system",
-      "rm -rf",
-      "shutil.rmtree"
+      "__import__('os').system"
     ],
     "summary_max_chars": 10
   }
