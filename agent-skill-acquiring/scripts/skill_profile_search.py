@@ -4,11 +4,11 @@
 title: Skill Profile Search
 name: agent-skill-acquiring
 description: Multi-keyword skill search with user-first ranking and adoption logging.
-version: v2.0.0
+version: v2.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T12:10:00+08:00
-fixes: []
+updated_at: 2026-05-26T16:10:00+08:00
+fixes: [37, 39]
 auth_config:
   provider: none
   auth_method: none
