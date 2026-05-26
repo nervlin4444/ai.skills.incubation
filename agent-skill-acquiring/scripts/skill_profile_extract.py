@@ -191,12 +191,15 @@ def _security_check(skill_dir: Path, dangerous_patterns: List[str]) -> Tuple[boo
             continue
         try:
             with open(fp, "r", encoding="utf-8") as f:
-                content = f.read()
+                for line in f:  # ✅ 逐行读取
+                    line = line.strip()
+                    if line.startswith("#"):  # ✅ 跳过注释行
+                        continue
+                    for pattern in dangerous_patterns:
+                        if pattern in line:
+                            warnings.append(f"Found dangerous pattern '{pattern}' in {fp.name}")
         except Exception:
             continue
-        for pattern in dangerous_patterns:
-            if pattern in content:
-                warnings.append(f"Found dangerous pattern '{pattern}' in {fp.name}")
     return (len(warnings) == 0), warnings
 
 
