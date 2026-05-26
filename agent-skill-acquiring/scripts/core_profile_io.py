@@ -3,12 +3,12 @@
 """---
 title: Skill Profile IO Core
 name: agent-skill-acquiring
-description: Unified read/write for skill_profile.json with UTF-8 no-BOM guarantee and cross-platform path resolution.
-version: v2.0.0
+description: Unified read/write for skill_profile.json with UTF-8 no-BOM guarantee and cross-platform path resolution. v2.0.1 added usage_stats reader.
+version: v2.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T12:10:00+08:00
-fixes: []
+updated_at: 2026-05-26T16:10:00+08:00
+fixes: [37, 39]
 auth_config:
   provider: none
   auth_method: none
@@ -22,6 +22,7 @@ file_mapping:
 """
 core_profile_io.py
 Unified read/write for skill_profile.json.
+v2.0.1: Added usage_stats reader for book ranking.
 """
 
 import json
@@ -81,6 +82,12 @@ def get_profile_path() -> Path:
     return data_dir / "skill_profile.json"
 
 
+def get_usage_log_path() -> Path:
+    data_dir = _get_default_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "usage_log.json"
+
+
 def load_profile() -> Dict[str, Any]:
     path = get_profile_path()
     if not path.exists():
@@ -121,3 +128,25 @@ def update_skill(profile: Dict[str, Any], skill_name: str, metadata: Dict[str, A
 def remove_skill(profile: Dict[str, Any], skill_name: str) -> Dict[str, Any]:
     profile.pop(skill_name, None)
     return profile
+
+
+def get_usage_stats() -> Dict[str, int]:
+    """Return usage count per skill from usage_log.json."""
+    path = get_usage_log_path()
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding=ENCODING) as f:
+            logs = json.load(f)
+        if not isinstance(logs, list):
+            return {}
+        counts = {}
+        for entry in logs:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("skill_name")
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+        return counts
+    except Exception:
+        return {}
