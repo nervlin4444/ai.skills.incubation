@@ -388,7 +388,7 @@ from pathlib import Path
 
 
 def main():
-    """Main entry point."""
+    '''Main entry point.'''
     print(f"[{self.skill_name}] Example script executed successfully")
     # TODO: Implement actual functionality
     return 0
