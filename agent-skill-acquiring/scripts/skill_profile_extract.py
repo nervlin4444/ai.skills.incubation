@@ -3,12 +3,12 @@
 """---
 title: Skill Profile Extractor
 name: agent-skill-acquiring
-description: Scan skill directories, extract frontmatter, run security checks, and update skill_profile.json.
-version: v2.0.0
+description: Scan skill directories, extract frontmatter, run security checks, and update skill_profile.json. v2.0.1 fixes single-directory layout, source detection via auth_config.provider, alias pending marker, dangerous_patterns false positive (#38), and _scan_skill_directory signature (#40).
+version: v2.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T12:10:00+08:00
-fixes: []
+updated_at: 2026-05-26T17:10:00+08:00
+fixes: [37, 38, 39, 40]
 auth_config:
   provider: none
   auth_method: none
@@ -22,6 +22,9 @@ file_mapping:
 """
 skill_profile_extract.py
 Extract skill metadata from directories and update profile.
+v2.0.1: Fixed single-directory layout, source via auth_config.provider, alias pending marker.
+         Fixed #38: removed shutil.rmtree and rm -rf from dangerous_patterns (false positive).
+         Fixed #40: removed unused source_hint parameter from _scan_skill_directory().
 """
 
 import argparse
@@ -78,10 +81,10 @@ def _get_scan_paths() -> Tuple[List[Path], List[Path]]:
     skills_folder = ws.get("skills_folder", "~/.workbuddy/skills")
     skills_folder = _expand_path(skills_folder)
     user_paths = []
-    for p in scan.get("user", ["{skills_folder}/user"]):
+    for p in scan.get("user", ["{skills_folder}"]):
         user_paths.append(_expand_path(p.replace("{skills_folder}", str(skills_folder))))
     external_paths = []
-    for p in scan.get("external", ["{skills_folder}/vendor", "{skills_folder}/shared"]):
+    for p in scan.get("external", []):
         external_paths.append(_expand_path(p.replace("{skills_folder}", str(skills_folder))))
     return user_paths, external_paths
 
@@ -191,15 +194,12 @@ def _security_check(skill_dir: Path, dangerous_patterns: List[str]) -> Tuple[boo
             continue
         try:
             with open(fp, "r", encoding="utf-8") as f:
-                for line in f:  # ✅ 逐行读取
-                    line = line.strip()
-                    if line.startswith("#"):  # ✅ 跳过注释行
-                        continue
-                    for pattern in dangerous_patterns:
-                        if pattern in line:
-                            warnings.append(f"Found dangerous pattern '{pattern}' in {fp.name}")
+                content = f.read()
         except Exception:
             continue
+        for pattern in dangerous_patterns:
+            if pattern in content:
+                warnings.append(f"Found dangerous pattern '{pattern}' in {fp.name}")
     return (len(warnings) == 0), warnings
 
 
@@ -224,7 +224,27 @@ def _make_summary(text: str, max_chars: int = 10) -> str:
     return text[:max_chars]
 
 
-def _scan_skill_directory(skill_dir: Path, source: str, dangerous_patterns: List[str]) -> Optional[Dict[str, Any]]:
+def _detect_source(frontmatter: Optional[Dict[str, Any]]) -> str:
+    """Determine source from auth_config.provider in frontmatter."""
+    if not frontmatter:
+        return "user"
+    auth = frontmatter.get("auth_config", {})
+    provider = auth.get("provider", "none") if isinstance(auth, dict) else "none"
+    if provider == "none" or not provider:
+        return "user"
+    return provider
+
+
+def _scan_skill_directory(skill_dir: Path, dangerous_patterns: List[str]) -> Optional[Dict[str, Any]]:
+    """Scan a single skill directory and return metadata dict.
+
+    Args:
+        skill_dir: Path to the skill directory.
+        dangerous_patterns: List of dangerous code patterns to scan for.
+
+    Returns:
+        Dict with skill metadata, or None if directory invalid.
+    """
     if not skill_dir.exists() or not skill_dir.is_dir():
         return None
     skill_name = skill_dir.name
@@ -238,11 +258,17 @@ def _scan_skill_directory(skill_dir: Path, source: str, dangerous_patterns: List
             if frontmatter:
                 break
     has_identity = frontmatter is not None and "name" in frontmatter
+    source = _detect_source(frontmatter)
     passed, warnings = _security_check(skill_dir, dangerous_patterns)
     description = ""
     if frontmatter:
         description = frontmatter.get("description", "")
     now = datetime.now(timezone.utc).isoformat()
+    alias = ""
+    if frontmatter:
+        alias = frontmatter.get("alias", "")
+    if not alias:
+        alias = "[PENDING-ALIAS]"
     meta = {
         "name": skill_name,
         "source": source,
@@ -251,7 +277,7 @@ def _scan_skill_directory(skill_dir: Path, source: str, dangerous_patterns: List
         "keywords": _extract_keywords(skill_name, description),
         "skill_summary": _make_summary(description, 10),
         "function_summary": _make_summary(description, 10),
-        "alias": "",
+        "alias": alias,
         "security_passed": passed,
         "security_warnings": warnings,
         "registered_at": now,
@@ -269,9 +295,10 @@ def extract(names: Optional[List[str]] = None) -> Dict[str, Any]:
     cfg = _load_config()
     dangerous_patterns = cfg.get("extract", {}).get("dangerous_patterns", [
         "os.system(", "subprocess.call(", "eval(", "exec(",
-        "__import__('os').system", "rm -rf", "shutil.rmtree"
+        "__import__('os').system"
     ])
     profile = load_profile()
+    seen = set()
     for base_path in user_paths:
         if not base_path.exists():
             continue
@@ -280,7 +307,10 @@ def extract(names: Optional[List[str]] = None) -> Dict[str, Any]:
                 continue
             if names and skill_dir.name not in names:
                 continue
-            meta = _scan_skill_directory(skill_dir, "user", dangerous_patterns)
+            if skill_dir.name in seen:
+                continue
+            seen.add(skill_dir.name)
+            meta = _scan_skill_directory(skill_dir, dangerous_patterns)
             if meta:
                 existing = profile.get(skill_dir.name, {})
                 if "registered_at" in existing:
@@ -294,7 +324,10 @@ def extract(names: Optional[List[str]] = None) -> Dict[str, Any]:
                 continue
             if names and skill_dir.name not in names:
                 continue
-            meta = _scan_skill_directory(skill_dir, "external", dangerous_patterns)
+            if skill_dir.name in seen:
+                continue
+            seen.add(skill_dir.name)
+            meta = _scan_skill_directory(skill_dir, dangerous_patterns)
             if meta:
                 existing = profile.get(skill_dir.name, {})
                 if "registered_at" in existing:
@@ -314,8 +347,11 @@ def main():
         print("[DRY-RUN] Preview only. Profile not saved.")
     count = len(profile)
     user_count = sum(1 for v in profile.values() if v.get("source") == "user")
-    ext_count = sum(1 for v in profile.values() if v.get("source") == "external")
+    ext_count = sum(1 for v in profile.values() if v.get("source") != "user")
+    pending_alias = sum(1 for v in profile.values() if v.get("alias", "") == "[PENDING-ALIAS]")
     print(f"[OK] Profile updated: {count} skills total ({user_count} user, {ext_count} external)")
+    if pending_alias > 0:
+        print(f"[PENDING-ALIAS] {pending_alias} skills need alias assignment. Agent should review and suggest Chinese aliases for batch confirmation.")
 
 
 if __name__ == "__main__":
