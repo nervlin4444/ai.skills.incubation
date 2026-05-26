@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "title": "Agent Skill Acquiring Configuration",
+    "name": "agent-skill-acquiring",
+    "description": "Unified configuration for skill scanning paths, workstation defaults, and search behavior.",
+    "version": "v2.0.0",
+    "github_repository": "nervlin4444/ai.skills.incubation",
+    "target_branch": "main",
+    "updated_at": "2026-05-26T12:10:00+08:00",
+    "fixes": [],
+    "auth_config": {
+      "provider": "none",
+      "auth_method": "none",
+      "token_env_var": "",
+      "env_file_path": ""
+    },
+    "file_mapping": {
+      "local_path": "{baseDir}/config/acquiring.config.json",
+      "github_path": "agent-skill-acquiring/config/acquiring.config.json"
+    }
+  },
+  "workstation_defaults": {
+    "linux": {
+      "skills_folder": "~/.local/share/openclaw/skills",
+      "data_folder": "~/.local/share/openclaw/skills/agent-skill-acquiring/data"
+    },
+    "macos": {
+      "skills_folder": "~/.workbuddy/skills",
+      "data_folder": "~/.workbuddy/skills/agent-skill-acquiring/data"
+    },
+    "windows": {
+      "skills_folder": "%APPDATA%\\.workbuddy\\skills",
+      "data_folder": "%APPDATA%\\.workbuddy\\skills\\agent-skill-acquiring\\data"
+    }
+  },
+  "scan_paths": {
+    "user": ["{skills_folder}"],
+    "external": ["{~/.workbuddy/skills-marketplace/skills}"]
+  },
+  "search": {
+    "max_results": 5,
+    "match_fields": ["name", "description", "keywords", "alias"],
+    "case_sensitive": false
+  },
+  "extract": {
+    "frontmatter_required_fields": [
+      "title",
+      "name",
+      "description",
+      "version",
+      "github_repository",
+      "target_branch",
+      "auth_config",
+      "file_mapping"
+    ],
+    "dangerous_patterns": [
+      "os.system(",
+      "subprocess.call(",
+      "eval(",
+      "exec(",
+      "__import__('os').system",
+      "rm -rf",
+      "shutil.rmtree"
+    ],
+    "summary_max_chars": 10
+  }
+}
