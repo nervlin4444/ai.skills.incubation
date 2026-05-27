@@ -58,7 +58,7 @@ class SkillUploader:
         self.token = self.cfg.get_github_token()
         self.api_base = "https://api.github.com"
         self.pending_cleanup_dir = normalize_path(
-            Path(self.cfg.user_skills_folder).parent / "logs" / "pending_cleanup"
+            Path(self.cfg.log_dir) / "pending_cleanup"
         )
         ensure_dir(self.pending_cleanup_dir)
 
