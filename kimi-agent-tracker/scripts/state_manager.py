@@ -3,22 +3,22 @@
 ---
 title: "State Manager"
 name: "kimi-agent-tracker"
-description: "State Manager，Kimi 平台專用自動化追蹤器組件。v1.0.2 hotfix: 同步版本與 auth_config。"
-version: "1.0.2"
+description: "State management for download deduplication and duplicate archiving."
+version: "v4.0.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T00:10:00+08:00"
-fixes: [24]
+updated_at: "2026-05-26T09:07:40.603+00:00"
 auth_config:
   provider: "local"
   auth_method: "none"
   token_env_var: "N/A"
-  env_file_path: "{baseDir}/.env"
+  env_file_path: "N/A"
 file_mapping:
-  local_path: "scripts/state_manager.py"
+  local_path: "{baseDir}/scripts/state_manager.py"
   github_path: "kimi-agent-tracker/scripts/state_manager.py"
 ---
 """
+
 
 # -*- coding: utf-8 -*-
 
