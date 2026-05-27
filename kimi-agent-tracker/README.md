@@ -2,10 +2,10 @@
 title: Kimi Agent Tracker Project Overview
 name: kimi-agent-tracker
 description: Playwright-based automation suite for Kimi AI platform. Extracts conversation metadata and downloads file attachments incrementally.
-version: v1.3.0
+version: "4.0.0"
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-25T16:53:00+0800
+updated_at: "2026-05-26T06:53:23.027+00:00"
 fixes: []
 auth_config:
   provider: github
@@ -17,7 +17,7 @@ file_mapping:
   github_path: "kimi-agent-tracker/README.md"
 ---
 
-# Kimi Agent Tracker v1.3.0
+# Kimi Agent Tracker v4.0.0
 
 Playwright-based automation suite for the Kimi AI platform. Extracts conversation metadata and downloads file attachments using an incremental pipeline.
 
