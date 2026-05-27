@@ -88,7 +88,8 @@ def extract_conversations(profile_name: str = None, count: int = None,
     try:
         context = driver.launch()
         page = driver.navigate(base_url)
-        page.wait_for_load_state("networkidle", timeout=10000)
+        page.wait_for_load_state("domcontentloaded", timeout=30000)
+        page.wait_for_timeout(5000)  # Wait for React/Vue hydration
 
         diagnose_data["url"] = page.url
         diagnose_data["title"] = page.title()
