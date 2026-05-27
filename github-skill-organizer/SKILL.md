@@ -2,16 +2,16 @@
 title: "GitHub Skill Organizer Execution Guide"
 name: github-skill-organizer
 description: "LLM 執行指令。管理技能包的本地目录结构、版本控制、GitHub 同步。v1.2.1 新增 change_classifier 授權機制說明：當本地文件日期比 GitHub 更新時，需主人授權才能繼續；禁止 Agent 強制上傳或繞過 approval。v1.2.0 新增 repo_issue_finder + issue_extractor 双脚本交叉检查管道。"
-version: v1.2.1
+version: v1.2.2
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-26T01:01:00+08:00
+updated_at: 2026-05-28T00:54:00+08:00
 fixes: []
 auth_config:
   provider: github
-  auth_method: personal_access_token
-  token_env_var: GITHUB_TOKEN
-  env_file_path: .env
+  auth_method: delegated
+  connector_skill: github-restful-api-connector
+  connector_module: github_restful_core
 file_mapping:
   local_path: SKILL.md
   github_path: github-skill-organizer/SKILL.md
@@ -204,7 +204,7 @@ Agent 必須理解：
 | **has_forbidden** | **SKILL.md / config/ / requirements.txt 被修改** | **不是 bug！打印 matched_files，報告主人審批** |
 | EXCLUDE_ALL_FILES | 全部文件被排除 | 检查 sync.config.json global_excludes.prefixes 是否含 "." |
 | CLI_NOT_FOUND | github_repo_sync.py 未找到 | 安装 github-restful-api-connector 依赖技能 |
-| GITHUB_AUTH_FAIL | Token 无效 | 更新 GITHUB_TOKEN |
+| GITHUB_AUTH_FAIL | Token 无效 | 检查 github-restful-api-connector 的 .env 配置 |
 | CLEAN_DIR_EMPTY | 清理后目录为空 | 确认 skill_uploader profile 的 base_path_boundary=true |
 | FRONTMATTER_MISSING | 文件缺少 frontmatter | 使用 skill_files_designer 重新生成 |
 | **409 Conflict** | **強制上傳繞過 approval 導致 SHA 不匹配** | **正確做法：等待主人批准，不是繞過 SHA** |
