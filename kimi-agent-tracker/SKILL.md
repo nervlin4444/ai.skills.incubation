@@ -1,125 +1,220 @@
 ---
-title: Kimi Agent Tracker LLM Execution Guide
+title: Kimi Agent Tracker v4.0.0
 name: kimi-agent-tracker
-description: LLM execution instructions for the Kimi file download automation suite. Covers incremental pipeline, strategy selection, and daemon integration.
-version: v1.3.0
+description: Automated file extraction from Kimi chat pages using Playwright. Supports .py/.md/.json/.zip downloads via proven selector-agnostic strategies. Includes persistent login, conversation listing, auto-download, and daemon mode.
+version: "4.0.0"
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
-updated_at: 2026-05-25T16:53:00+0800
-fixes: []
+updated_at: "2026-05-26T06:53:23.027+00:00"
 auth_config:
-  provider: github
-  auth_method: token
-  token_env_var: GITHUB_TOKEN
-  env_file_path: .env
+  provider: none
+  auth_method: none
+  token_env_var: none
+  env_file_path: none
 file_mapping:
   local_path: "{baseDir}/SKILL.md"
   github_path: "kimi-agent-tracker/SKILL.md"
 ---
 
-# Kimi Agent Tracker - LLM Execution Guide v1.3.0
+# Kimi Agent Tracker v3.6.1
 
-> This file is an LLM execution instruction, not a human manual.
-> LLM must read and execute strictly. No improvisation.
+## 1. Identity and Purpose
 
-## Identity Split
+You are the Kimi Agent Tracker skill execution engine. Your sole purpose is to automate file extraction from Kimi (kimi.com) chat conversations using Playwright browser automation.
 
-### If you are Sub-Agent (L1 / L2 / L3)
+Scope boundary:
+- In-scope: Login persistence, conversation scanning, file detection, auto-download, daemon mode.
+- Out-of-scope: GitHub upload (delegate to github-skill-organizer), file content analysis (delegate to agent-skill-improving).
 
-Stop. Close. Execute your own task. This file is not for you.
+## 2. Directory Structure
 
-### If you are Main Agent (L0)
+    kimi-agent-tracker/
+    ├── SKILL.md                          <- This file. LLM execution instructions.
+    ├── README.md                         <- Human-readable overview and quickstart.
+    ├── scripts/
+    │   ├── kimi_downloader.py            <- Main download script v3.6.1
+    │   ├── kimi_selector_probe.py        <- Diagnostic probe v1.0.8 (for selector debugging)
+    │   ├── kimi_login_persistent.py      <- Persistent browser login (7-14 day session)
+    │   ├── kimi_conversation_lister.py   <- List all conversations with file counts
+    │   └── tracker_daemon.py             <- Daemon wrapper for continuous monitoring
+    ├── config/
+    │   └── tracker_config.json           <- Daemon configuration (auto-created on first run)
+    ├── data/
+    │   └── last_processed.json           <- Tracks already-downloaded files (deduplication state)
+    ├── assets/
+    │   ├── WEB.CORRECTIONS.md            <- Browser automation anti-patterns (mandatory read before debugging)
+    │   └── USAGE.md                      <- Human usage tutorial with screenshots.
+    └── logs/
+        └── tracker.log                   <- Daemon execution log.
 
-Continue. You are the coordinator. When asked to operate kimi-agent-tracker, follow this guide.
+**Path rule:** All skill data stays under skill directory. NO files in ~/.kimi_auth/ except browser profile (managed by login script).
 
-## Core Pipeline (v1.3.0)
+## 3. Prerequisites
 
-The download system uses a 4-stage incremental pipeline:
+Before any script execution, verify these dependencies. If missing, emit installation commands and STOP.
 
-```
-DISCOVERY  ->  DEDUPLICATE  ->  DOWNLOAD  ->  RECORD
-   |                |               |             |
-Scan page     Check downloads    Apply        Update
-for links     .json + pending    strategy     state
-              .json              by type      files
-```
+    python3 --version          # Requires 3.10+
+    python3 -m pip --version
+    python3 -c "import playwright; print('playwright OK')"
+    python3 -m playwright --version
 
-## Strategy Selection Rules (MANDATORY)
+If playwright not installed:
 
-When generating or modifying download logic, you MUST classify files by extension and assign the correct strategy:
+    python3 -m pip install playwright pyperclip
+    python3 -m playwright install chromium
 
-| Extension Group | Strategy | Browser Mode | Reason |
-|---|---|---|---|
-| `.md`, `.txt`, `.json`, `.csv`, `.yml`, `.yaml`, `.html`, `.js`, `.css`, `.xml`, `.sh`, `.bash` | `anchor_injection` | Headless | Fast, reliable for text files. Creates `<a download>` element via JS. |
-| `.py` | `preview_extraction` | Headless (extended wait) | Kimi renders Python in preview panel. Extract from DOM after 10x3s retries. Fallback to visible if empty. |
-| `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.pdf`, `.doc`, `.docx`, `.xls`, `.xlsx`, `.ppt`, `.pptx`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.mp3`, `.mp4`, `.webp`, `.svg`, `.ico`, `.woff`, `.woff2`, `.ttf`, `.eot` | `visible_fallback` | Visible (off-screen) | Binary files refuse headless download. Window moved to `-10000,-10000` to avoid UI interference. |
+Persistent profile directory (auto-created by login script):
 
-**NEVER** assign the wrong strategy. `.py` files must use `preview_extraction`, not `anchor_injection`.
+    ~/.kimi_auth/browser_profile_chromium/
 
-## State File Management (MANDATORY)
+## 4. Execution Order (One-Shot Mode)
 
-All state files are JSON with `_meta` block:
+For manual single-run extraction, execute in this exact order:
 
-### downloads.json
-- Key: SHA256 hash of file content
-- Value: `{file, hash, path, conversation, conversation_id, downloaded_at}`
-- Purpose: Permanent record of successfully downloaded files
-- Rule: NEVER delete entries. Append-only.
+Step 1: Login (if session expired)
 
-### pending.json
-- Array of `{conversation_id, conversation_title, file_url, filename, file_ext, detected_at, retry_count, last_error, strategy}`
-- Purpose: Queue of discovered but not-yet-downloaded files
-- Rule: Remove item on success. Increment retry_count on failure. Max retry = daemon.max_retry_per_conversation.
+    python3 scripts/kimi_login_persistent.py
 
-### conversations.json
-- Cache from `kimi_conversation_lister.py`
-- Purpose: Avoid re-listing conversations every cycle
-- Rule: Daemon refreshes this at cycle start.
+Step 2: List conversations with files
 
-## Daemon Cycle Flow
+    python3 scripts/kimi_conversation_lister.py
 
-```
-1. List conversations (lister.py or cache)
-2. For each conversation (up to max_conversations_per_cycle):
-   a. DISCOVER: downloader.py --url URL --discover-only
-      -> New files added to pending.json
-   b. DOWNLOAD: downloader.py --url URL
-      -> Process pending files for this conversation
-   c. Log results per conversation
-3. Process remaining pending items (cross-conversation)
-4. Sleep interval_sec
-```
+Step 3: Download files from target conversation
 
-## Critical Rules
+    python3 scripts/kimi_downloader.py       --url "https://www.kimi.com/chat/CONVERSATION_ID"       --visible       --max-files 20
 
-1. **LOCK-016 Compliance**: All `.py` files must be ASCII-only. No Chinese characters or fullwidth punctuation in code, comments, log messages, or error strings. Frontmatter `title`/`name` fields are exempt.
+Output: All files saved to ~/Downloads/ with original filenames.
 
-2. **Config-Driven**: All selectors, thresholds, and timeouts must be read from `kimi_tracker_config.json`. Never hardcode values in scripts.
+## 5. Daemon Mode (Continuous Monitoring)
 
-3. **Deduplication Before Download**: Always check `downloads.json` and `pending.json` before opening a browser page. Skip if already recorded.
+Daemon monitors configured conversations and auto-downloads new files. Zero-config on first run.
 
-4. **Subprocess Isolation**: Daemon must call downloader.py as subprocess (not import). Each conversation gets independent process + timeout.
+### 5.1 Quick Start (3 Commands)
 
-5. **Error Recording**: Every failed download must update `pending.json` with `retry_count` and `last_error`. After max retries, log and skip permanently.
+    # 1. Edit config to add conversation URLs
+    vim config/tracker_config.json
 
-6. **Window Hiding**: When using `visible_fallback`, always pass `--window-position=-10000,-10000 --window-size=1,1` to keep window off-screen.
+    # 2. Start daemon
+    python3 scripts/tracker_daemon.py --start
 
-## File Naming Convention
+    # 3. Check status / stop
+    python3 scripts/tracker_daemon.py --status
+    python3 scripts/tracker_daemon.py --stop
 
-- `.py` scripts: `xxx_yyy_zzz.py` (underscore separators, exempt from dot-separation rule per agent-skill-improving v1.3.1)
-- Config: `kimi_tracker_config.json`
-- State files: `downloads.json`, `pending.json`, `conversations.json`
-- Log files: `daemon.log`
+### 5.2 Config File (Auto-Created)
 
-## Frontmatter Requirements
+First run auto-creates `config/tracker_config.json`:
 
-All files in this skill must include unified frontmatter:
-- `.md` files: YAML frontmatter at top
-- `.py` files: Docstring with `---` wrapped YAML block
-- `.json` files: `_meta` block inside JSON
+    {
+      "poll_interval_seconds": 300,
+      "conversations": [
+        {
+          "url": "https://www.kimi.com/chat/CONVERSATION_ID_1",
+          "label": "project-alpha",
+          "max_files_per_run": 10
+        }
+      ],
+      "download_dir": "~/Downloads",
+      "headless": true,
+      "deduplication": true
+    }
 
-Mandatory fields: `title`, `name`, `description`, `version`, `github_repository`, `target_branch`, `updated_at`, `fixes`, `auth_config`, `file_mapping`
+Edit the "conversations" array to add your target URLs. All other fields are optional.
 
-## Version Lock
+### 5.3 Daemon Behavior
+- Polls each conversation URL every N seconds (default 300s = 5min).
+- Detects new files not in data/last_processed.json state.
+- Auto-downloads new files to configured directory.
+- Logs all actions to logs/tracker.log.
+- Skips already-downloaded files when deduplication enabled.
 
-LOCK v1.3.0 PERMANENT - Incremental download pipeline, categorized strategies, state file management, deduplication, subprocess isolation, config-driven selectors, LOCK-016 ASCII compliance.
+### 5.4 Foreground Mode (Debugging)
+
+    python3 scripts/tracker_daemon.py --start --foreground
+
+Runs in current terminal without forking. Useful for debugging. Ctrl+C to stop.
+
+## 6. Selector Probe (Debugging)
+
+When download fails on a new Kimi UI version, run the diagnostic probe to discover working selectors:
+
+    python3 scripts/kimi_selector_probe.py       --url "https://www.kimi.com/chat/CONVERSATION_ID"       --visible       --max-per-type 2
+
+The probe outputs:
+- DOM diagnosis (iframe count, shadow hosts, right-side elements, top-right buttons).
+- Working content extraction strategy (Monaco API, innerText, download button).
+- Screenshots to ~/Downloads/probe_screenshots/ for visual verification.
+
+Before modifying kimi_downloader.py, MUST read assets/WEB.CORRECTIONS.md and follow the Trigger Table to identify the correct checklist.
+
+## 7. Critical Anti-Patterns (from WEB.CORRECTIONS.md)
+
+These mistakes have been proven to waste hours. Never repeat them.
+
+Anti-pattern 1: Using networkidle for SPA navigation
+- Wrong: page.goto(url, wait_until="networkidle")
+- Right: page.goto(url, wait_until="domcontentloaded") then asyncio.sleep(5.0)
+- Reason: Kimi uses WebSocket heartbeat. networkidle never fires.
+
+Anti-pattern 2: Assuming semantic class names
+- Wrong: div[class*="file-card-info-name"]
+- Right: Read card.text_content() then regex extract filename
+- Reason: Vue scoped styles use hash suffixes. Class names are implementation detail.
+
+Anti-pattern 3: Reading pre.innerText for Monaco Editor
+- Wrong: await page.wait_for_selector("pre").inner_text()
+- Right: window.monaco.editor.getEditors()[0].getValue() OR bounding-box innerText
+- Reason: Monaco virtual scrolling only renders visible lines. innerText returns 32 chars.
+
+Anti-pattern 4: Expecting downloads in default browser folder
+- Wrong: Assume file appears in ~/Downloads/
+- Right: shutil.copy2(temp_path, ~/Downloads/filename)
+- Reason: Playwright saves to temp UUID path under /var/folders/...
+
+Anti-pattern 5: Single click method only
+- Wrong: await el.click()
+- Right: Try force_click -> normal_click -> js_dispatch -> double_click -> child_anchor
+- Reason: pointer-events interception and synthetic event systems block standard clicks.
+
+Anti-pattern 6: Putting config/state in system user folders
+- Wrong: ~/.kimi_auth/tracker_config.json
+- Right: config/tracker_config.json under skill directory
+- Reason: System folders may be cleaned or migrated. Skill data stays with skill.
+
+## 8. File Download Strategy Matrix
+
+| File Type | Primary Strategy | Fallback Strategy |
+|-----------|-----------------|-------------------|
+| .py       | Direct download (expect_download) | Preview panel download button |
+| .json     | Direct download (expect_download) | Preview panel download button |
+| .zip      | Direct download (expect_download) | Preview panel download button |
+| .md       | Preview panel -> download icon    | JS innerText extraction       |
+| .env      | Direct download                   | JS innerText extraction       |
+
+## 9. Version History
+
+| Version | Date       | Change Summary |
+|---------|------------|--------------|
+| v1.0.0  | 2026-05-20 | Initial login + lister scripts |
+| v2.0.0  | 2026-05-22 | Persistent profile support |
+| v3.0.0  | 2026-05-23 | Auto-download with preview extraction |
+| v3.5.0  | 2026-05-25 | Retry mechanism + dual-path scanning |
+| v3.6.0  | 2026-05-25 | Proven JS content extraction (D strategy) |
+| v3.6.1  | 2026-05-26 | File copy to ~/Downloads/; daemon zero-config; paths under skill dir |
+
+## 10. Interface Boundaries
+
+- File download: This skill handles entirely.
+- GitHub upload: Delegate to github-skill-organizer/scripts/skill_validate.py or sync_engine.py.
+- File validation: Delegate to agent-skill-improving/scripts/skill_integrity_checker.py.
+- Daemon PID management: Delegate to daemon-script-connector when available.
+
+## 11. Emergency Stop Conditions
+
+STOP immediately and report to user if:
+- Browser launch fails (Chromium not installed).
+- Navigation fails after 3 retries.
+- All download strategies fail for 3 consecutive files.
+- Persistent profile directory corrupted.
+
+Do NOT attempt to fix by creating temporary scripts. Follow WEB.CORRECTIONS.md checklists instead.
