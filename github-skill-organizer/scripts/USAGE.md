@@ -2,16 +2,16 @@
 title: "GitHub Skill Organizer - Human Usage Guide"
 name: github-skill-organizer
 description: "Human-readable guide for using github-skill-organizer scripts. Covers installation, configuration, daily workflows, troubleshooting, and daemon management. v1.2.0 adds repo_issue_finder + issue_extractor pipeline."
-version: "1.2.0"
+version: "1.2.1"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-24T20:37:00+08:00"
+updated_at: "2026-05-28T00:54:00+08:00"
 fixes: []
 auth_config:
   provider: github
-  auth_method: personal_access_token
-  token_env_var: GITHUB_TOKEN
-  env_file_path: "../.env"
+  auth_method: delegated
+  connector_skill: github-restful-api-connector
+  connector_module: github_restful_core
 file_mapping:
   local_path: "scripts/USAGE.md"
   github_path: "github-skill-organizer/scripts/USAGE.md"
