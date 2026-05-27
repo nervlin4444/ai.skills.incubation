@@ -20,6 +20,3 @@
 [2026-05-25T03:12:32.638646+00:00] Starting cycle...
 [2026-05-25T03:12:42.210322+00:00] Extracted 5 conversations
 [2026-05-25T03:12:42.545817+00:00] Cycle complete: 0 success, 0 duplicates, 5 errors
-[2026-05-25T03:20:31.978773+00:00] Received signal 15, shutting down...
-[2026-05-25T03:21:39.238475+00:00] [ERROR] Daemon already running (PID 15065)
-[2026-05-25T03:27:42.544241+00:00] Daemon stopped.
