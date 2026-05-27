@@ -2,10 +2,12 @@
 ---
 title: Skill Organizer Configuration Loader
 name: github-skill-organizer
-description: Loads and validates .env and sync.config.json. GITHUB_TOKEN and GITHUB_OWNER are borrowed from dependency skill github-restful-api-connector.
-version: 1.0.0
+description: Loads and validates .env and sync.config.json. GITHUB_TOKEN and GITHUB_OWNER are borrowed from dependency skill github-restful-api-connector. v1.0.1 FIX-001: log_dir now respects sync.config.json workstation_defaults and .env LOG_DIR override.
+version: 1.0.1
 github_repository: nervlin4444/ai.skills.incubation
 target_branch: main
+updated_at: 2026-05-27T18:29:00+08:00
+fixes: [1]
 auth_config:
   provider: github
   auth_method: personal_access_token
@@ -80,11 +82,44 @@ class SkillOrganizerConfig:
         self.auto_approve_patch = os.getenv("AUTO_APPROVE_PATCH", "true").lower() == "true"
         self.patch_max_files = int(os.getenv("PATCH_MAX_FILES", "3"))
 
+        # FIX-001: .env override for log_dir
+        self.log_dir_override = os.getenv("LOG_DIR", "").strip()
+
     def _load_json_config(self):
         if not self.config_path.exists():
             raise ConfigError(f"sync.config.json not found at {self.config_path}")
         with open(self.config_path, "r", encoding="utf-8") as f:
             self.json_config = json.load(f)
+
+    def _resolve_log_dir(self):
+        """
+        FIX-001: Resolve log_dir in priority order:
+        1. .env LOG_DIR (highest priority, user override)
+        2. sync.config.json workstation_defaults.{platform}.log_dir
+        3. Fallback: user_skills_folder.parent / "logs" (legacy behavior)
+        """
+        # Priority 1: .env LOG_DIR
+        if self.log_dir_override:
+            return self._expand_path(self.log_dir_override)
+
+        # Priority 2: sync.config.json workstation_defaults
+        platform = sys.platform
+        if platform == "darwin":
+            cfg_key = "macos"
+        elif platform == "linux":
+            cfg_key = "linux"
+        else:
+            cfg_key = "windows"
+
+        ws_defaults = self.json_config.get("workstation_defaults", {})
+        platform_cfg = ws_defaults.get(cfg_key, {})
+        cfg_log_dir = platform_cfg.get("log_dir", "").strip()
+
+        if cfg_log_dir:
+            return self._expand_path(cfg_log_dir)
+
+        # Priority 3: Legacy fallback
+        return str(Path(self.user_skills_folder).parent / "logs")
 
     def _validate(self):
         missing = []
@@ -106,8 +141,11 @@ class SkillOrganizerConfig:
 
         self.state_dir = Path(self.user_skills_folder).parent / "state"
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir = Path(self.user_skills_folder).parent / "logs"
+
+        # FIX-001: Replace hardcoded log_dir with _resolve_log_dir()
+        self.log_dir = Path(self._resolve_log_dir())
         self.log_dir.mkdir(parents=True, exist_ok=True)
+
         self.pending_dir = Path(self.user_skills_folder).parent / "pending_approval"
         self.pending_dir.mkdir(parents=True, exist_ok=True)
         self.rejected_dir = self.log_dir / "rejected"
@@ -213,6 +251,8 @@ class SkillOrganizerConfig:
             "enable_web_fetcher": self.enable_web_fetcher,
             "auto_approve_patch": self.auto_approve_patch,
             "patch_max_files": self.patch_max_files,
+            "log_dir": str(self.log_dir),
+            "log_dir_source": "LOG_DIR" if self.log_dir_override else "sync.config.json or fallback",
         }
 
 
