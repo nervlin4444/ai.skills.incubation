@@ -2,10 +2,10 @@
 title: "Kimi Agent Tracker - CLI Usage Guide"
 name: "kimi-agent-tracker"
 description: "CLI 用法教程。所有參數調整通過單一 config.json，禁止編輯腳本，不使用 .env。"
-version: "1.1.0"
+version: "4.0.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T02:15:00+08:00"
+updated_at: "2026-05-26T06:53:23.027+00:00"
 auth_config:
   provider: "local"
   auth_method: "none"
@@ -18,7 +18,7 @@ file_mapping:
 
 # Kimi Agent Tracker — CLI 用法教程
 
-版本：v1.1.0 | 更新時間：2026-05-25
+版本：v4.0.0 | 更新時間：2026-05-25
 
 ## 核心原則
 
