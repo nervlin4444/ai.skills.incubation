@@ -1,158 +1,76 @@
 {
   "_meta": {
-    "record_type": "tracker_config",
-    "skill_name": "kimi-agent-tracker",
-    "version": "v1.3.0",
-    "last_updated": "2026-05-25T16:53:00+0800",
+    "title": "Kimi Tracker Unified Configuration",
+    "name": "kimi-agent-tracker",
+    "description": "Single source of truth. All tunable parameters centralized here. No .env required.",
+    "version": "1.1.0",
     "github_repository": "nervlin4444/ai.skills.incubation",
     "target_branch": "main",
-    "description": "Unified configuration for Kimi Tracker Daemon and Downloader. Controls discovery, deduplication, download strategies, and daemon scheduling."
+    "updated_at": "2026-05-25T02:15:00+08:00",
+    "auth_config": {
+      "provider": "local",
+      "auth_method": "none",
+      "token_env_var": "N/A",
+      "env_file_path": "N/A"
+    },
+    "file_mapping": {
+      "local_path": "{baseDir}/.config/kimi_tracker_config.json",
+      "github_path": "kimi-agent-tracker/.config/kimi_tracker_config.json"
+    }
+  },
+  "platform": {
+    "base_url": "https://www.kimi.com"
+  },
+  "logging": {
+    "level": "INFO",
+    "log_dir": "{baseDir}/.logs",
+    "keep_log_days": 7
   },
   "login": {
-    "timeout_sec": 30,
-    "max_retry": 3,
-    "profile_dir": "~/.kimi_auth/browser_profile_chromium",
-    "validate_selectors": [
-      ".chat-info-item",
-      "[class*='chat-list']",
-      "[class*='conversation']"
-    ],
-    "login_url": "https://www.kimi.com"
+    "stay_open_default": 300,
+    "validate_timeout_ms": 5000,
+    "login_check_interval_sec": 3,
+    "max_login_wait_sec": 600,
+    "visible_default": true,
+    "profile_name": "kimi_com",
+    "force_reauth": false
   },
   "selectors": {
     "login_indicators": [
       ".chat-info-item",
-      "[class*='chat-list']",
-      "[class*='sidebar']"
+      ".user-avatar",
+      ".user-name"
     ],
     "conversation_items": ".chat-info-item",
-    "conversation_title": "[class*='title']",
-    "conversation_url_attr": "data-url",
-    "file_link_selectors": [
-      "a[href*='sandbox://']",
-      "a[href*='.py']",
-      "a[href*='.md']",
-      "a[href*='.zip']",
-      "a[href*='.json']",
-      "a[href*='.txt']",
-      "a[href*='.csv']",
-      "a[href*='.yml']",
-      "a[href*='.yaml']",
-      "a[href*='.html']",
-      "a[href*='.js']",
-      "a[href*='.css']",
-      "a[href*='.xml']",
-      "a[href*='.sh']",
-      "a[href*='.bash']",
-      "a[href*='.pdf']",
-      "a[href*='.png']",
-      "a[href*='.jpg']",
-      "a[href*='.jpeg']",
-      "a[href*='.gif']",
-      "a[href*='.mp3']",
-      "a[href*='.mp4']",
-      "a[href*='.webp']",
-      "a[href*='.svg']",
-      "a[href*='.ico']",
-      "a[href*='.woff']",
-      "a[href*='.woff2']",
-      "a[href*='.ttf']",
-      "a[href*='.eot']",
-      "a[href*='.doc']",
-      "a[href*='.docx']",
-      "a[href*='.xls']",
-      "a[href*='.xlsx']",
-      "a[href*='.ppt']",
-      "a[href*='.pptx']",
-      "a[href*='.rar']",
-      "a[href*='.7z']",
-      "a[href*='.tar']",
-      "a[href*='.gz']"
-    ]
-  },
-  "download": {
-    "strategy": "extraction",
-    "direct_extensions": [
-      ".zip", ".rar", ".7z", ".tar", ".gz", ".pdf",
-      ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
-      ".mp3", ".mp4", ".avi", ".mov",
-      ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-      ".woff", ".woff2", ".ttf", ".eot"
-    ],
-    "preview_extensions": [
-      ".md", ".txt", ".json", ".csv", ".yml", ".yaml",
-      ".html", ".js", ".css", ".xml", ".sh", ".bash"
-    ],
-    "extraction": {
-      "preview_selectors": [
-        "[class*='preview']",
-        "[class*='panel']",
-        "[class*='drawer']",
-        "[class*='file-preview']",
-        "[class*='code-preview']",
-        "[class*='markdown-body']",
-        "pre",
-        "code",
-        ".view-lines",
-        "[class*='monaco-editor']",
-        "[class*='cm-editor']"
-      ],
-      "content_selectors": [
-        "pre code",
-        ".view-lines",
-        ".markdown-body",
-        "[class*='cm-content']",
-        "[class*='monaco-editor'] .view-lines",
-        "pre",
-        "code"
-      ],
-      "min_content_length": 100,
-      "max_wait_attempts": 10,
-      "wait_interval_sec": 3,
-      "preview_min_width": 200,
-      "preview_min_height": 200,
-      "python_syntax_validate": true
-    },
-    "anchor_injection": {
-      "timeout_sec": 20,
-      "browser_download_wait_sec": 15
-    },
-    "visible_fallback": {
-      "timeout_sec": 30,
-      "window_position_x": -10000,
-      "window_position_y": -10000,
-      "window_width": 1,
-      "window_height": 1
-    },
-    "deduplication": {
-      "enabled": true,
-      "hash_algorithm": "sha256",
-      "compare_by": ["conversation_title", "filename"]
-    }
+    "user_avatar": ".user-avatar",
+    "user_name": ".user-name",
+    "new_chat_btn": ".new-chat-btn",
+    "sidebar": ".sidebar"
   },
   "daemon": {
-    "interval_sec": 900,
+    "interval_sec": 60,
     "visible": false,
     "conversation_count": 10,
     "download_dir": "~/Downloads",
     "duplicate_dir": "~/skills_moved/.duplicate_downloads",
-    "max_retry_per_conversation": 2,
-    "max_conversations_per_cycle": 3,
-    "per_conversation_timeout_sec": 600,
-    "pending_processing_timeout_multiplier": 2
+    "max_retry_per_conversation": 2
+  },
+  "download": {
+    "direct_extensions": [".zip", ".py", ".csv", ".json", ".env"],
+    "preview_extensions": [".md", ".txt"],
+    "download_timeout_ms": 10000,
+    "retry_delay_sec": 2,
+    "max_retry": 1,
+    "unique_filename": true,
+    "deduplicate": true
   },
   "state": {
-    "downloads_record": "~/.workbuddy/skills/kimi-agent-tracker/.config/downloads.json",
-    "pending_record": "~/.workbuddy/skills/kimi-agent-tracker/.config/pending.json",
-    "conversations_cache": "~/.workbuddy/skills/kimi-agent-tracker/.config/conversations.json"
+    "state_file": "{baseDir}/.config/downloads.json",
+    "conversations_file": "{baseDir}/.config/conversations.json"
   },
   "diagnose": {
+    "diagnose_dir": "{baseDir}/.logs/diagnose",
     "auto_diagnose_on_error": true,
-    "keep_diagnose_count": 10,
-    "diagnose_dir": "~/.workbuddy/skills/kimi-agent-tracker/.logs/diagnose"
-  },
-  "file_mapping": {
-    "local_path": "{baseDir}/.config/kimi_tracker_config.json",
-    "github_path": "kimi-agent-tracker/.config/kimi_tracker_config.json"
+    "keep_diagnose_count": 20
   }
 }
