@@ -3,10 +3,10 @@
 title: "Kimi Login Manager - F001"
 name: "kimi-agent-tracker"
 description: "Kimi 平台 SMS 登入與 persistent profile 維護。config 分離，診斷增強。"
-version: "1.1.1"
+version: "4.0.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T11:00:00+08:00"
+updated_at: "2026-05-26T06:53:23.027+00:00"
 auth_config:
   provider: "local"
   auth_method: "none"
