@@ -1,406 +1,529 @@
 """
 ---
-title: Kimi Downloader v3.6.1
-name: kimi-agent-tracker
-description: Download .py/.md/.json/.zip files from Kimi chat pages. Files saved to ~/Downloads/ with original filenames.
-version: 3.6.1
-github_repository: nervlin4444/ai.skills.incubation
-target_branch: main
-updated_at: 2026-05-26T00:35:00+08:00
+title: "Kimi Conversation File Downloader"
+name: "kimi-agent-tracker"
+description: "Auto-download files from Kimi chat conversations. Physical mouse simulation to bypass event interception. Outputs JSON summary for Download Manager consumption."
+version: "v5.0.0"
+github_repository: "nervlin4444/ai.skills.incubation"
+target_branch: "main"
+updated_at: "2026-05-27T00:51:00.828+00:00"
 auth_config:
-  provider: none
-  auth_method: none
-  token_env_var: none
-  env_file_path: none
+  provider: "local"
+  auth_method: "none"
+  token_env_var: "N/A"
+  env_file_path: "N/A"
 file_mapping:
   local_path: "{baseDir}/scripts/kimi_downloader.py"
   github_path: "kimi-agent-tracker/scripts/kimi_downloader.py"
 ---
 """
 
-import asyncio
-import json
+
+import os
 import sys
+import json
 import time
-import argparse
-import re
+import hashlib
 import shutil
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+# Inject skill scripts into path for core module imports
+_SKILL_DIR = Path(__file__).resolve().parent.parent
+_SCRIPTS_DIR = _SKILL_DIR / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from core_path_utils import get_download_dir
+from core_logger import CoreLogger, get_default_logger
+
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse
 
 try:
-    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+    import nest_asyncio
+    nest_asyncio.apply()
 except ImportError:
-    print("[FATAL] playwright not installed. Run: python3 -m pip install playwright")
-    print("[FATAL] Then: python3 -m playwright install chromium")
-    sys.exit(1)
+    print("[WARN] nest_asyncio not installed. Run: python3 -m pip install nest_asyncio --user")
 
-# Configuration
-PROFILE_DIR = Path.home() / ".kimi_auth" / "browser_profile_chromium"
-DOWNLOAD_DIR = Path.home() / "Downloads"
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+import re
 
-# File card selectors
-FILE_CARD_SELECTORS = [
-    'div[class*="file-card-container"]',
-    'div[class*="file-card"]',
-    'div[data-v-][class*="file"]',
-    'div[class*="file-item"]',
-    'div[class*="attachment"]',
-    'a[class*="file"]',
-    'div[data-v-]',
-]
+def _now_iso():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
 
-# File extension pattern
-FILE_PATTERN = re.compile(
-    r'([A-Za-z0-9_.-]+[.](py|md|json|zip|env|txt|csv|yaml|yml|js|html|css|xml))',
-    re.IGNORECASE
-)
+def log_event(msg):
+    print(f"[{_now_iso()}] {msg}")
 
+def get_base_dir():
+    return Path(__file__).resolve().parent.parent
 
-def log(msg: str) -> None:
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    print(f"[{ts}] {msg}", flush=True)
+def load_config():
+    p = get_base_dir() / ".config" / "kimi_tracker_config.json"
+    if not p.exists():
+        log_event(f"[ERROR] Config not found: {p}")
+        sys.exit(1)
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
 
+def ensure_dir(path):
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
-def now_ms() -> int:
-    return int(time.time() * 1000)
+def expand_path(path_str):
+    if path_str.startswith("~/"):
+        return os.path.expanduser(path_str)
+    return path_str
 
+def compute_sha256(filepath):
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-async def safe_click(page, selector: str, timeout: int = 3000, force: bool = True) -> bool:
-    try:
-        el = await page.wait_for_selector(selector, timeout=timeout, state="visible")
-        if el:
-            if force:
-                await el.click(force=True)
-            else:
-                await el.click()
-            return True
-    except Exception:
-        pass
-    return False
+def get_profile_dir():
+    p = Path.home() / ".kimi_auth" / "browser_profile_chromium"
+    ensure_dir(p)
+    return str(p)
 
+def load_downloads_json():
+    p = get_base_dir() / ".config" / "downloads.json"
+    if p.exists():
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"downloaded": {}, "duplicates": []}
 
-async def js_click(page, selector: str) -> bool:
-    try:
-        result = await page.evaluate(f"""
-            (() => {{
-                const el = document.querySelector('{selector}');
-                if (el) {{
-                    el.dispatchEvent(new MouseEvent('click', {{ bubbles: true, cancelable: true }}));
-                    return true;
-                }}
-                return false;
-            }})()
-        """)
-        return bool(result)
-    except Exception:
-        return False
+def save_downloads_json(data):
+    p = get_base_dir() / ".config" / "downloads.json"
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-async def scan_files(page) -> List[Dict[str, Any]]:
-    log("[SCAN] Scanning for file cards...")
+class KimiDownloader:
+    def __init__(self, config):
+        self.config = config
+        self.profile_dir = get_profile_dir()
+        self.downloads_record = load_downloads_json()
+        self.dedup = config.get("download", {}).get("deduplicate", True)
+        self.unique_name = config.get("download", {}).get("unique_filename", True)
+        self.timeout = config.get("login", {}).get("timeout_sec", 30)
+        self.download_dir = expand_path(config.get("daemon", {}).get("download_dir", "~/Downloads"))
+        self.duplicate_dir = expand_path(config.get("daemon", {}).get("duplicate_dir", "~/skills_moved/.duplicate_downloads"))
+        self.browser_default_dir = Path.home() / "Downloads"
+        self.diag_dir = get_base_dir() / ".logs" / "diagnose" / "download"
+        ensure_dir(self.download_dir)
+        ensure_dir(self.duplicate_dir)
+        ensure_dir(self.diag_dir)
 
-    all_cards = []
-    used_selector = None
+    def _get_browser_context(self, p, visible=False):
+        return p.chromium.launch_persistent_context(
+            self.profile_dir, headless=not visible,
+            args=["--disable-blink-features=AutomationControlled"],
+            accept_downloads=True,
+        )
 
-    for sel in FILE_CARD_SELECTORS:
-        cards = await page.query_selector_all(sel)
-        if cards:
-            log(f"[SCAN] Selector '{sel}' matched {len(cards)} elements")
-            all_cards = cards
-            used_selector = sel
-            break
-
-    if not all_cards:
-        log("[SCAN] No file cards found")
-        return []
-
-    all_files = []
-    for idx, card in enumerate(all_cards):
+    def _capture(self, page, step_name):
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        png_path = self.diag_dir / f"{step_name}_{ts}.png"
         try:
-            full_text = await card.text_content()
-            if not full_text:
-                continue
-
-            full_text = full_text.strip()
-            match = FILE_PATTERN.search(full_text)
-            if match:
-                filename = match.group(1)
-                ext = match.group(2).lower()
-                selector = f'{used_selector}:nth-of-type({idx + 1})'
-
-                all_files.append({
-                    "filename": filename,
-                    "ext": ext,
-                    "selector": selector,
-                    "index": idx,
-                })
+            page.screenshot(path=str(png_path), full_page=True)
+            log_event(f"[DIAG] Screenshot: {png_path.name}")
         except Exception as e:
-            log(f"[WARN] Error processing card {idx}: {e}")
+            log_event(f"[DIAG] Screenshot failed: {e}")
 
-    log(f"[SCAN] Extracted {len(all_files)} valid files")
-    return all_files
-
-
-async def click_file_card(page, file_info: Dict[str, Any]) -> bool:
-    card_selector = file_info.get("selector", "")
-    if not card_selector:
-        return False
-
-    click_methods = [
-        lambda: safe_click(page, card_selector, timeout=5000, force=True),
-        lambda: safe_click(page, card_selector, timeout=5000, force=False),
-        lambda: js_click(page, card_selector),
-    ]
-
-    for method_fn in click_methods:
+    def _dismiss_overlay(self, page):
         try:
-            if await method_fn():
-                log(f"[OK] Clicked file card: {file_info['filename']}")
-                return True
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
         except Exception:
-            continue
+            pass
+        try:
+            mask = page.query_selector(".mask, [class*='mask'], .sidebar-mask")
+            if mask and mask.is_visible():
+                mask.click()
+                page.wait_for_timeout(300)
+        except Exception:
+            pass
 
-    log(f"[WARN] Failed to click file card: {file_info['filename']}")
-    return False
-
-
-async def click_download_button_in_preview(page) -> Optional[str]:
-    """Click download button inside preview panel and capture download."""
-    download_info = {"path": None}
-
-    def handle_download(download):
-        download_info["path"] = asyncio.create_task(download.path())
-
-    page.on("download", handle_download)
-
-    try:
-        # Strategy 1: Try all buttons in top-right area
-        buttons = await page.query_selector_all('button, svg, [class*="icon"]')
-        for btn in buttons:
+    # ------------------------------------------------------------------
+    # File card scanning (based on probe v1.0.8 proven pattern)
+    # ------------------------------------------------------------------
+    def _scan_file_cards(self, page):
+        # Scan for file card containers and extract filenames via regex
+        cards = []
+        selectors = [
+            'div[class*="file-card-container"]',
+            'div[class*="file-card"]',
+            'div[data-v-][class*="file"]',
+            'div[class*="file-item"]',
+            'div[class*="attachment"]',
+        ]
+        for sel in selectors:
             try:
-                box = await btn.bounding_box()
-                if box and box["x"] > 800 and box["y"] < 100 and box["width"] < 60:
-                    await btn.click(force=True)
-                    log(f"[OK] Clicked top-right button at ({box['x']}, {box['y']})")
-                    await asyncio.sleep(3.0)
-                    if download_info["path"]:
-                        path = await download_info["path"]
-                        if path and Path(path).exists():
-                            page.remove_listener("download", handle_download)
-                            return str(path)
+                elements = page.query_selector_all(sel)
+                if elements:
+                    log_event(f"[SCAN] Selector '{sel}' matched {len(elements)} elements")
+                    for idx, el in enumerate(elements):
+                        try:
+                            text = el.text_content() or ""
+                            text = text.strip()
+                            match = re.search(r'([A-Za-z0-9_.-]+[.](py|md|json|zip|env|txt|csv|yaml|yml|js|html|css|xml))', text, re.I)
+                            if match:
+                                filename = match.group(1)
+                                ext = match.group(2).lower()
+                                cards.append({
+                                    "filename": filename,
+                                    "ext": ext,
+                                    "selector": f'{sel}:nth-of-type({idx + 1})',
+                                    "index": idx,
+                                    "card_text": text[:100],
+                                })
+                        except Exception as e:
+                            log_event(f"[WARN] Error processing card {idx}: {e}")
+                    break
             except Exception:
                 continue
-    except Exception as e:
-        log(f"[WARN] Download button click failed: {e}")
-    finally:
-        page.remove_listener("download", handle_download)
+        log_event(f"[SCAN] Extracted {len(cards)} valid file cards")
+        return cards
 
-    return None
+    # ------------------------------------------------------------------
+    # Preview panel detection (bounding box - proven in probe v1.0.8)
+    # ------------------------------------------------------------------
+    def _wait_for_preview_panel(self, page, max_wait_sec=10):
+        # Poll for large right-side element (preview panel)
+        start = time.time()
+        while time.time() - start < max_wait_sec:
+            try:
+                data = page.evaluate("""
+                    () => {
+                        let best = null, bestArea = 0;
+                        document.querySelectorAll('*').forEach(el => {
+                            const rect = el.getBoundingClientRect();
+                            const area = rect.width * rect.height;
+                            if (rect.left > window.innerWidth * 0.45 && area > bestArea 
+                                && rect.width > 400 && rect.height > 300) {
+                                best = el;
+                                bestArea = area;
+                            }
+                        });
+                        return best ? {
+                            tag: best.tagName,
+                            class: (best.className || '').substring(0, 100),
+                            hasContent: (best.innerText || '').length > 50
+                        } : null;
+                    }
+                """)
+                if data and data.get("hasContent"):
+                    log_event(f"[PREVIEW] Panel detected: {data.get('class', '')[:60]}")
+                    return True
+            except Exception:
+                pass
+            time.sleep(1)
+        log_event("[PREVIEW] Panel not detected within timeout")
+        return False
 
-
-async def download_file(page, file_info: Dict[str, Any]) -> Optional[str]:
-    """Download a single file. Returns final path in ~/Downloads/."""
-    filename = file_info["filename"]
-    ext = file_info["ext"]
-
-    log(f"[DL] Processing: {filename}")
-
-    # Strategy 1: Try direct download (for .py/.json/.zip)
-    if ext in ("py", "json", "zip", "env", "txt", "csv", "yaml", "yml", "js", "html", "css", "xml"):
-        log(f"[DL] Trying direct download for {filename}")
+    # ------------------------------------------------------------------
+    # Download icon click (top-right corner - screenshot confirmed)
+    # ------------------------------------------------------------------
+    def _click_download_icon(self, page):
+        # Find download icon in top-right area of preview panel
         try:
-            async with page.expect_download(timeout=10000) as dl:
-                clicked = await safe_click(page, file_info["selector"], timeout=5000, force=True)
-                if not clicked:
-                    return None
-            download = await dl.value
-            temp_path = await download.path()
-            if temp_path and Path(temp_path).exists():
-                # Move to ~/Downloads/ with correct filename
-                final_path = DOWNLOAD_DIR / filename
-                shutil.copy2(temp_path, final_path)
-                log(f"[OK] Direct download success: {final_path}")
-                return str(final_path)
-        except PlaywrightTimeout:
-            pass
-        except Exception as e:
-            log(f"[WARN] Direct download failed: {e}")
-
-    # Strategy 2: Click card to open preview, then click download button
-    log(f"[DL] Trying preview panel download for {filename}")
-    if await click_file_card(page, file_info):
-        await asyncio.sleep(3.0)
-        temp_path = await click_download_button_in_preview(page)
-        if temp_path:
-            final_path = DOWNLOAD_DIR / filename
-            shutil.copy2(temp_path, final_path)
-            log(f"[OK] Preview download success: {final_path}")
-            return str(final_path)
-
-    # Strategy 3: JS content extraction (fallback for text files)
-    log(f"[DL] Trying JS content extraction for {filename}")
-    if await click_file_card(page, file_info):
-        await asyncio.sleep(3.0)
-        try:
-            content = await page.evaluate("""
-                (() => {
-                    let best = null;
-                    let bestArea = 0;
-                    document.querySelectorAll('*').forEach(el => {
+            icons = page.evaluate("""
+                () => {
+                    const results = [];
+                    document.querySelectorAll('button, svg, [class*="icon"], i').forEach(el => {
                         const rect = el.getBoundingClientRect();
-                        const area = rect.width * rect.height;
-                        if (rect.left > window.innerWidth * 0.45 && area > bestArea && rect.width > 400 && rect.height > 300) {
-                            best = el;
-                            bestArea = area;
+                        const cls = (el.className || '').toLowerCase();
+                        const title = (el.getAttribute('title') || '').toLowerCase();
+                        if (rect.width < 60 && rect.height < 60 
+                            && rect.left > window.innerWidth * 0.8 && rect.top < 150
+                            && (cls.includes('download') || title.includes('download') 
+                                || cls.includes('save') || title.includes('save'))) {
+                            results.push({
+                                x: rect.left + rect.width / 2,
+                                y: rect.top + rect.height / 2,
+                                class: cls.substring(0, 50)
+                            });
                         }
                     });
-                    if (!best) return null;
-                    return best.innerText || best.textContent || null;
-                })()
+                    return results;
+                }
             """)
-            if content and len(content) > 100:
-                final_path = DOWNLOAD_DIR / filename
-                final_path.write_text(content, encoding="utf-8")
-                log(f"[OK] JS extraction success: {final_path} ({len(content)} chars)")
-                return str(final_path)
-        except Exception as e:
-            log(f"[WARN] JS extraction failed: {e}")
-
-    log(f"[FAIL] All strategies failed for {filename}")
-    return None
-
-
-async def run_downloader(url: str, visible: bool = False, max_files: int = 10) -> Dict[str, Any]:
-    report = {
-        "downloader_version": "3.6.1",
-        "url": url,
-        "mode": "visible" if visible else "headless",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "files_downloaded": [],
-        "summary": {},
-        "error": None,
-    }
-
-    async with async_playwright() as p:
-        log("[MAIN] Browser launching...")
-        try:
-            if PROFILE_DIR.exists():
-                log(f"[MAIN] Using persistent profile: {PROFILE_DIR}")
-                context = await p.chromium.launch_persistent_context(
-                    user_data_dir=str(PROFILE_DIR),
-                    headless=not visible,
-                    args=["--disable-blink-features=AutomationControlled"] if visible else [],
-                    viewport={"width": 1280, "height": 900} if visible else None,
-                )
-                page = context.pages[0] if context.pages else await context.new_page()
+            if icons:
+                icon = icons[0]
+                page.mouse.move(icon["x"], icon["y"])
+                page.wait_for_timeout(300)
+                page.mouse.down()
+                page.wait_for_timeout(150)
+                page.mouse.up()
+                log_event(f"[DOWNLOAD] Clicked download icon at ({icon['x']:.0f}, {icon['y']:.0f})")
+                return True
             else:
-                log("[MAIN] No persistent profile, launching fresh browser")
-                browser = await p.chromium.launch(
-                    headless=not visible,
-                    args=["--disable-blink-features=AutomationControlled"] if visible else [],
-                )
-                context = await browser.new_context(
-                    viewport={"width": 1280, "height": 900} if visible else None,
-                )
-                page = await context.new_page()
+                log_event("[DOWNLOAD] No download icon found in top-right area")
+                return False
         except Exception as e:
-            log(f"[FATAL] Browser launch failed: {e}")
-            report["error"] = f"Browser launch failed: {e}"
-            return report
+            log_event(f"[DOWNLOAD] Error clicking download icon: {e}")
+            return False
 
-        log("[MAIN] Browser launched")
+    # ------------------------------------------------------------------
+    # MD format dialog handling
+    # ------------------------------------------------------------------
+    def _handle_md_format_dialog(self, page, max_wait_sec=5):
+        # Check if format selection dialog appears
+        start = time.time()
+        while time.time() - start < max_wait_sec:
+            try:
+                opts = page.evaluate("""
+                    () => {
+                        const results = [];
+                        document.querySelectorAll('*').forEach(el => {
+                            const text = (el.innerText || '').toLowerCase();
+                            if (text.includes('markdown') || text.includes('save as')) {
+                                const rect = el.getBoundingClientRect();
+                                if (rect.width > 0 && rect.height > 0) {
+                                    results.push({
+                                        x: rect.left + rect.width / 2,
+                                        y: rect.top + rect.height / 2,
+                                        text: text.substring(0, 30)
+                                    });
+                                }
+                            }
+                        });
+                        return results;
+                    }
+                """)
+                if opts:
+                    opt = opts[0]
+                    page.mouse.move(opt["x"], opt["y"])
+                    page.wait_for_timeout(300)
+                    page.mouse.down()
+                    page.wait_for_timeout(150)
+                    page.mouse.up()
+                    log_event(f"[MD] Selected format: {opt['text']}")
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        log_event("[MD] No format dialog detected (direct download)")
+        return False
 
+    # ------------------------------------------------------------------
+    # Unified download via preview panel (proven pattern)
+    # ------------------------------------------------------------------
+    def _download_file(self, page, card_info, conversation_title, timeout_sec=30):
+        filename = card_info["filename"]
+        ext = card_info["ext"]
+        card_selector = card_info["selector"]
+
+        log_event(f"[DOWNLOAD] Processing: {filename} (.{ext})")
+
+        # Step 1: Click file card to open preview
         try:
-            log(f"[MAIN] Navigating to {url}")
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            log("[MAIN] DOM loaded, waiting for dynamic content...")
-            await asyncio.sleep(5.0)
-        except Exception as e:
-            log(f"[FATAL] Navigation failed: {e}")
-            report["error"] = f"Navigation failed: {e}"
-            return report
+            card = page.wait_for_selector(card_selector, timeout=5000)
+            if not card:
+                return {"status": "skipped", "file": filename, "reason": "Card not found"}
 
-        files = await scan_files(page)
-        if not files:
-            log("[WARN] No files found")
-            report["error"] = "No files found"
-            return report
-
-        files = files[:max_files]
-        log(f"[MAIN] Processing {len(files)} files (max: {max_files})")
-
-        for f in files:
-            path = await download_file(page, f)
-            if path:
-                report["files_downloaded"].append({
-                    "filename": f["filename"],
-                    "ext": f["ext"],
-                    "path": path,
-                    "size": Path(path).stat().st_size if Path(path).exists() else 0,
-                })
+            # Get card position and click
+            bbox = card.bounding_box()
+            if bbox:
+                page.mouse.move(bbox["x"] + bbox["width"] / 2, bbox["y"] + bbox["height"] / 2)
+                page.wait_for_timeout(300)
+                page.mouse.down()
+                page.wait_for_timeout(150)
+                page.mouse.up()
+                log_event(f"[DOWNLOAD] Clicked card for {filename}")
             else:
-                report["files_downloaded"].append({
-                    "filename": f["filename"],
-                    "ext": f["ext"],
-                    "path": None,
-                    "error": "All download strategies failed",
-                })
+                # Fallback: force click
+                card.click(force=True)
+                log_event(f"[DOWNLOAD] Force-clicked card for {filename}")
+        except Exception as e:
+            log_event(f"[SKIP] Failed to click card for {filename}: {e}")
+            return {"status": "skipped", "file": filename, "reason": str(e)}
 
-            await asyncio.sleep(1.0)
+        # Step 2: Wait for preview panel
+        if not self._wait_for_preview_panel(page, max_wait_sec=10):
+            return {"status": "skipped", "file": filename, "reason": "Preview panel not opened"}
 
-        success_count = sum(1 for f in report["files_downloaded"] if f.get("path"))
-        report["summary"] = {
-            "total_files": len(report["files_downloaded"]),
-            "success_count": success_count,
-            "failure_count": len(report["files_downloaded"]) - success_count,
-            "success_rate": round(success_count / len(report["files_downloaded"]), 2) if report["files_downloaded"] else 0,
-        }
+        # Step 3: Click download icon
+        if not self._click_download_icon(page):
+            self._capture(page, f"no_download_icon_{filename[:30]}")
+            return {"status": "skipped", "file": filename, "reason": "Download icon not found"}
 
-        await context.close()
-        return report
+        # Step 4: For .md, handle format dialog
+        if ext == "md":
+            self._handle_md_format_dialog(page, max_wait_sec=5)
 
+        # Step 5: Poll for download completion
+        dest_path = Path(self.download_dir) / filename
+        if self.unique_name:
+            safe_title = "".join(c for c in conversation_title if c.isalnum() or c in "-_ ").replace(" ", "_")[:30]
+            dest_path = Path(self.download_dir) / f"{safe_title}_{filename}"
 
-def save_and_print_report(report: Dict[str, Any]) -> None:
-    report_path = DOWNLOAD_DIR / "kimi_download_report.json"
-    try:
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"\n[REPORT] Saved to: {report_path}")
-    except Exception as e:
-        print(f"\n[REPORT] Failed to save: {e}")
+        browser_file = self._poll_for_download(filename_hint=filename, max_wait_sec=timeout_sec)
+        if browser_file and browser_file.exists():
+            shutil.copy2(str(browser_file), str(dest_path))
+            file_hash = compute_sha256(dest_path)
+            return self._record_download(dest_path, filename, conversation_title, file_hash)
 
-    print("\n" + "=" * 60)
-    print("DOWNLOAD REPORT")
-    print("=" * 60)
-    print(f"Total: {report['summary'].get('total_files', 0)}")
-    print(f"Success: {report['summary'].get('success_count', 0)}")
-    print(f"Failure: {report['summary'].get('failure_count', 0)}")
-    print(f"Rate: {report['summary'].get('success_rate', 0)}")
-    print("=" * 60)
+        log_event(f"[SKIP] Download not captured for {filename}")
+        return {"status": "skipped", "file": filename, "reason": "Download timeout"}
 
-    for f in report.get("files_downloaded", []):
-        if f.get("path"):
-            size = f.get("size", 0)
-            print(f"  [OK] {f['filename']} -> {f['path']} ({size} bytes)")
+    # ------------------------------------------------------------------
+    # Poll for browser download
+    # ------------------------------------------------------------------
+    def _poll_for_download(self, filename_hint, max_wait_sec=30, check_interval_sec=1):
+        start = time.time()
+        while time.time() - start < max_wait_sec:
+            browser_file = self._wait_for_browser_download(filename_hint, max_wait_sec=check_interval_sec)
+            if browser_file and browser_file.exists():
+                return browser_file
+            time.sleep(check_interval_sec)
+        return None
+
+    def _wait_for_browser_download(self, filename_hint, max_wait_sec=15):
+        if not self.browser_default_dir.exists():
+            return None
+        start_time = time.time()
+        while time.time() - start_time < max_wait_sec:
+            candidates = []
+            for p in self.browser_default_dir.iterdir():
+                if p.is_file():
+                    mtime = p.stat().st_mtime
+                    if mtime > start_time - 60:
+                        candidates.append((p, mtime))
+            if candidates:
+                candidates.sort(key=lambda x: x[1], reverse=True)
+                if filename_hint:
+                    for c, m in candidates:
+                        if filename_hint.lower() in c.name.lower():
+                            return c
+                return candidates[0][0]
+            time.sleep(0.5)
+        return None
+
+    def _record_download(self, dest_path, filename, conversation_title, file_hash):
+        if self.dedup and file_hash in self.downloads_record.get("downloaded", {}):
+            dup_path = Path(self.duplicate_dir) / filename
+            shutil.move(str(dest_path), str(dup_path))
+            self.downloads_record["duplicates"].append({
+                "file": filename, "hash": file_hash, "conversation": conversation_title,
+                "time": datetime.now(timezone.utc).isoformat(),
+            })
+            log_event(f"[DEDUP] Duplicate moved to {dup_path}")
+            return {"status": "duplicate", "file": filename, "hash": file_hash}
         else:
-            print(f"  [FAIL] {f['filename']} - {f.get('error', 'Unknown error')}")
+            self.downloads_record["downloaded"][file_hash] = {
+                "file": filename, "conversation": conversation_title,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+            log_event(f"[SAVED] {dest_path}")
+            return {"status": "success", "file": filename, "hash": file_hash, "path": str(dest_path)}
 
+    # ------------------------------------------------------------------
+    # Main entry: download from conversation URL
+    # ------------------------------------------------------------------
+    def download_conversation(self, url, title="unknown", visible=False, timeout_sec=20, max_files=None):
+        log_event(f"[DOWNLOAD] Navigating to: {url}")
+        results = {"success": [], "duplicates": [], "errors": [], "skipped": []}
+        with sync_playwright() as p:
+            browser = self._get_browser_context(p, visible=visible)
+            page = browser.new_page()
+            try:
+                page.goto(url, timeout=self.timeout * 1000)
+                page.wait_for_load_state("domcontentloaded", timeout=self.timeout * 1000)
+                page.wait_for_timeout(5000)  # Wait for Vue/React hydration
 
+                # Extract title from page if unknown
+                if title == "unknown":
+                    try:
+                        title_el = page.query_selector(".chat-name, .conversation-title, h1, title")
+                        if title_el:
+                            title = (title_el.inner_text() or title).strip()[:50]
+                    except Exception:
+                        pass
+
+                # Scan file cards
+                cards = self._scan_file_cards(page)
+                log_event(f"[DOWNLOAD] Found {len(cards)} file cards in '{title}'")
+
+                # Apply max_files limit
+                file_counter = 0
+                max_limit = max_files if max_files else len(cards)
+
+                for card in cards:
+                    if file_counter >= max_limit:
+                        log_event(f"[DOWNLOAD] Max files limit ({max_limit}) reached, stopping.")
+                        break
+                    file_counter += 1
+
+                    res = self._download_file(page, card, title, timeout_sec=timeout_sec)
+                    if res.get("status") == "success":
+                        results["success"].append(res)
+                    elif res.get("status") == "duplicate":
+                        results["duplicates"].append(res)
+                    elif res.get("status") == "skipped":
+                        results["skipped"].append(res)
+                    else:
+                        results["errors"].append({"file": res.get("file", "unknown"), "error": res.get("reason", "unknown")})
+
+                    # Dismiss any overlay before next card
+                    self._dismiss_overlay(page)
+                    page.wait_for_timeout(800)
+
+            except PlaywrightTimeout:
+                log_event(f"[TIMEOUT] Navigation timeout for {url}")
+                results["errors"].append({"conversation": title, "error": "Navigation timeout"})
+            except Exception as e:
+                log_event(f"[ERROR] Unexpected error: {e}")
+                results["errors"].append({"conversation": title, "error": str(e)})
+            finally:
+                browser.close()
+        save_downloads_json(self.downloads_record)
+        log_event(f"[RESULT] {title}: {len(results['success'])} success, {len(results['duplicates'])} duplicates, {len(results['errors'])} errors, {len(results['skipped'])} skipped")
+        return results
+
+    def download_from_list(self, conversations_path, visible=False, timeout_sec=20, max_files=None):
+        with open(conversations_path, "r", encoding="utf-8") as f:
+            conversations = json.load(f)
+        all_results = {"success": [], "duplicates": [], "errors": [], "skipped": []}
+        for conv in conversations:
+            url = conv.get("url", "")
+            title = conv.get("title", "unknown")
+            if not url:
+                continue
+            res = self.download_conversation(url, title=title, visible=visible, timeout_sec=timeout_sec, max_files=max_files)
+            all_results["success"].extend(res["success"])
+            all_results["duplicates"].extend(res["duplicates"])
+            all_results["errors"].extend(res["errors"])
+            all_results["skipped"].extend(res["skipped"])
+            time.sleep(2)
+        log_event(f"[BATCH] Complete: {len(all_results['success'])} success, {len(all_results['duplicates'])} duplicates, {len(all_results['errors'])} errors, {len(all_results['skipped'])} skipped")
+        return all_results
 def main():
-    parser = argparse.ArgumentParser(description="Kimi Downloader v3.6.1")
-    parser.add_argument("--url", required=True, help="Kimi chat URL")
-    parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
-    parser.add_argument("--max-files", type=int, default=10, help="Max files to download")
+    parser = argparse.ArgumentParser(description="Kimi Conversation File Downloader v5.0.0")
+    parser.add_argument("--url", help="Single conversation URL to download from")
+    parser.add_argument("--from-list", help="Path to conversations.json for batch download")
+    parser.add_argument("--visible", action="store_true", help="Run browser in visible mode")
+    parser.add_argument("--timeout", type=int, default=20, help="Download timeout in seconds per file")
+    parser.add_argument("--max-files", type=int, default=None, help="Maximum files to download from this conversation")
     args = parser.parse_args()
-
-    log(f"[MAIN] Starting downloader for {args.url}")
-    log(f"[MAIN] Mode: {'visible' if args.visible else 'headless'}, max_files: {args.max_files}")
-
-    report = asyncio.run(run_downloader(args.url, visible=args.visible, max_files=args.max_files))
-    save_and_print_report(report)
-
+    config = load_config()
+    downloader = KimiDownloader(config)
+    if args.url:
+        results = downloader.download_conversation(args.url, visible=args.visible, timeout_sec=args.timeout, max_files=args.max_files)
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    elif args.from_list:
+        results = downloader.download_from_list(args.from_list, visible=args.visible, timeout_sec=args.timeout, max_files=args.max_files)
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        parser.print_help()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
