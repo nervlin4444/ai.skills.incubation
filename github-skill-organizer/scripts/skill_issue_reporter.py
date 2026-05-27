@@ -3,16 +3,16 @@
 title: "Skill Issue Reporter - Standard Issue Report Generator"
 name: github-skill-organizer
 description: "Mandatory standard Issue report generator per CONTRIBUTING.md v1.2.5. Interactive collection, auto-classification, word count validation, dual Markdown+JSON output. v1.3.1 adds --create-issue via github-restful-api-connector interface isolation."
-version: "1.3.1"
+version: "1.3.2"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-24T01:45:00+08:00"
+updated_at: "2026-05-28T00:54:00+08:00"
 fixes: []
 auth_config:
   provider: "github"
-  auth_method: "token"
-  token_env_var: "GITHUB_TOKEN"
-  env_file_path: ".env"
+  auth_method: "delegated"
+  connector_skill: "github-restful-api-connector"
+  connector_module: "github_restful_core"
 file_mapping:
   local_path: "scripts/skill_issue_reporter.py"
   github_path: "github-skill-organizer/scripts/skill_issue_reporter.py"
@@ -98,34 +98,17 @@ class SkillIssueReporter:
     def _resolve_github_config(
         self,
         owner: Optional[str],
-        repo: Optional[str],
-        token: Optional[str]
-    ) -> Tuple[str, str, str]:
-        # Resolve GitHub config from CLI args -> env -> .env -> frontmatter
-        #
-        # Priority order for TOKEN:
-        #   1. --github-token CLI arg
-        #   2. GITHUB_TOKEN environment variable
-        #   3. .env file (skill_dir/.env or organizer/.env)
+        repo: Optional[str]
+    ) -> Tuple[str, str]:
+        # Resolve GitHub owner/repo from CLI args -> frontmatter -> .env
         #
         # Priority order for OWNER/REPO:
         #   1. --github-owner / --github-repo CLI args
         #   2. SKILL.md frontmatter github_repository field
         #   3. .env file GITHUB_OWNER / GITHUB_REPO
-        resolved_token = token or os.getenv("GITHUB_TOKEN", "")
-        if not resolved_token:
-            for env_candidate in [
-                self.skill_dir / ".env",
-                Path(os.path.expanduser("~/.workbuddy/skills/github-skill-organizer/.env"))
-            ]:
-                if env_candidate.exists():
-                    for line in env_candidate.read_text(encoding="utf-8").splitlines():
-                        if line.startswith("GITHUB_TOKEN="):
-                            resolved_token = line.split("=", 1)[1].strip().strip(chr(34)).strip(chr(39))
-                            break
-                if resolved_token:
-                    break
-
+        #
+        # Token is managed exclusively by github-restful-api-connector.
+        # This skill MUST NOT read, store, or pass GITHUB_TOKEN.
         resolved_owner = owner or ""
         resolved_repo = repo or ""
 
@@ -152,7 +135,7 @@ class SkillIssueReporter:
                 if resolved_owner and resolved_repo:
                     break
 
-        return resolved_owner, resolved_repo, resolved_token
+        return resolved_owner, resolved_repo
 
     def _count_chinese_chars(self, text: str) -> int:
         return len(re.findall(r"[\u4e00-\u9fff]", text))
@@ -212,8 +195,7 @@ class SkillIssueReporter:
         title: str,
         body: str,
         owner: str,
-        repo: str,
-        token: str
+        repo: str
     ) -> Dict:
         # Create GitHub Issue via github-restful-api-connector.
         #
@@ -261,9 +243,7 @@ class SkillIssueReporter:
                     "reason": "[CONNECTOR-API-MISSING] github_restful_core.py missing rest_request()"
                 }
 
-            # Pass token via env for connector to pick up
-            if token:
-                os.environ["GITHUB_TOKEN"] = token
+            # Connector manages its own token. Do NOT pass token here.
             if hasattr(module, "load_env"):
                 module.load_env()
 
@@ -314,11 +294,10 @@ class SkillIssueReporter:
         file_name: str = "",
         method_name: str = "",
         dry_run: bool = False,
-        # v1.3.1: GitHub Issue creation params
+        # v1.3.2: GitHub Issue creation via connector (token delegated)
         create_issue: bool = False,
         github_owner: str = "",
         github_repo: str = "",
-        github_token: str = "",
         attach_body: bool = True,
         attach_json: bool = False,
         dry_run_create: bool = False
@@ -521,17 +500,11 @@ class SkillIssueReporter:
             ]
         }
 
-        # v1.3.1: Optional GitHub Issue creation via connector
+        # v1.3.2: Optional GitHub Issue creation via connector (token delegated to connector)
         if create_issue:
-            owner, repo, token = self._resolve_github_config(github_owner, github_repo, github_token)
+            owner, repo = self._resolve_github_config(github_owner, github_repo)
 
-            if not token:
-                result["github_issue"] = {
-                    "status": "error",
-                    "reason": "[TOKEN-MISSING] GITHUB_TOKEN not found. Provide via --github-token, GITHUB_TOKEN env, or .env file. "
-                              "Required scope: repo (read/write Issues). Without token: API returns 401 Unauthorized."
-                }
-            elif not owner or not repo:
+            if not owner or not repo:
                 result["github_issue"] = {
                     "status": "error",
                     "reason": "[REPO-MISSING] github_owner/repo not found. Provide via --github-owner/--github-repo, frontmatter, or .env file"
@@ -547,7 +520,7 @@ class SkillIssueReporter:
                         "repo": repo
                     }
                 else:
-                    issue_result = self._create_github_issue_via_connector(title, issue_body, owner, repo, token)
+                    issue_result = self._create_github_issue_via_connector(title, issue_body, owner, repo)
                     result["github_issue"] = issue_result
                     if issue_result.get("status") == "created":
                         result["next_steps"].append("5. GitHub Issue created: " + issue_result.get("issue_url", ""))
@@ -655,8 +628,7 @@ def main():
                         help="Create GitHub Issue via github-restful-api-connector (interface isolation)")
     parser.add_argument("--github-owner", help="GitHub repository owner (fallback: .env / frontmatter)")
     parser.add_argument("--github-repo", help="GitHub repository name (fallback: .env / frontmatter)")
-    parser.add_argument("--github-token",
-                        help="GitHub Personal Access Token (fallback: GITHUB_TOKEN env / .env).")
+
     parser.add_argument("--attach-body", action="store_true", default=True,
                         help="Attach Markdown content to Issue body (default: True)")
     parser.add_argument("--attach-json", action="store_true",
@@ -686,7 +658,7 @@ def main():
             create_issue=input_data.get("create_issue", args.create_issue),
             github_owner=input_data.get("github_owner", args.github_owner),
             github_repo=input_data.get("github_repo", args.github_repo),
-            github_token=input_data.get("github_token", args.github_token),
+            # github_token delegated to connector (v1.3.2)
             attach_body=input_data.get("attach_body", args.attach_body),
             attach_json=input_data.get("attach_json", args.attach_json),
             dry_run_create=input_data.get("dry_run_create", args.dry_run_create)
@@ -725,7 +697,7 @@ def main():
             create_issue=args.create_issue,
             github_owner=args.github_owner,
             github_repo=args.github_repo,
-            github_token=args.github_token,
+            # github_token delegated to connector (v1.3.2)
             attach_body=args.attach_body,
             attach_json=args.attach_json,
             dry_run_create=args.dry_run_create
