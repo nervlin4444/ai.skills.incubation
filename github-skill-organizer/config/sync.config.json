@@ -3,7 +3,7 @@
     "title": "Sync Configuration for GitHub Skill Organizer",
     "name": "github-skill-organizer",
     "description": "Unified configuration: sync rules, version bump policies, upload gate checks, workstation defaults, exclusion rules, error codes, and script profiles. v1.0.3 added repo_issue_finder + issue_extractor profiles.",
-    "version": "1.2.1",
+    "version": "1.2.0",
     "github_repository": "nervlin4444/ai.skills.incubation",
     "target_branch": "main",
     "updated_at": "2026-05-24T20:14:00+08:00",
@@ -24,17 +24,17 @@
     "linux": {
       "download_folder": "~/Downloads",
       "skills_folder": "~/.local/share/openclaw/skills",
-      "log_dir": "~/.local/share/openclaw/logs"
+      "log_dir": "~/.local/share/openclaw/skills/github-skill-organizer/logs"
     },
     "macos": {
       "download_folder": "~/Downloads",
       "skills_folder": "~/.workbuddy/skills",
-      "log_dir": "~/.workbuddy/logs"
+      "log_dir": "~/.workbuddy/skills/github-skill-organizer/logs"
     },
     "windows": {
       "download_folder": "%USERPROFILE%\\Downloads",
       "skills_folder": "%APPDATA%\\.workbuddy\\skills",
-      "log_dir": "%APPDATA%\\.workbuddy\\logs"
+      "log_dir": "%APPDATA%\\.workbuddy\\skills\\github-skill-organizer\\logs"
     }
   },
   "frontmatter_required_fields": [
