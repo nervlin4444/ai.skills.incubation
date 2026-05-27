@@ -2,10 +2,10 @@
 title: "Kimi Agent Tracker - Complete Usage Plan"
 name: "kimi-agent-tracker"
 description: "LLM Agent 執行計劃書。覆蓋 F001~F005 全部場景 + 預留擴展。Agent 必須按此計劃執行，禁止擅自修改代碼。"
-version: "1.1.0"
+version: "4.0.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-25T02:05:00+08:00"
+updated_at: "2026-05-26T06:53:23.027+00:00"
 auth_config:
   provider: "local"
   auth_method: "none"
