@@ -1,0 +1,13 @@
+{
+  "poll_interval_seconds": 120,
+  "conversations": [
+    {
+      "url": "https://www.kimi.com/chat/PLACEHOLDER_CONVERSATION_ID",
+      "label": "example-conversation",
+      "max_files_per_run": 10
+    }
+  ],
+  "download_dir": "~/Downloads",
+  "headless": true,
+  "deduplication": true
+}
