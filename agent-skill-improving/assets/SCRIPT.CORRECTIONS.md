@@ -1,12 +1,12 @@
 ---
 title: "Script Error Correction Checklist"
 name: agent-skill-improving
-description: "Script error correction checklist. v2.5.0 adds 7 new checks: key compatibility, path tilde expansion, return type consistency, rename global update, non-code file frontmatter, version consistency, incomplete download filtering."
-version: "v2.5.0"
+description: "Script error correction checklist. v2.6.0 adds 4 new checks: daemon PID residue, hardcoded --visible override, fallback removal, header capture scope."
+version: "v2.6.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-24T23:10:00+08:00"
-fixes: [20, 21, 22, 23, 24, 25, 26]
+updated_at: "2026-06-01T02:30:00+08:00"
+fixes: [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
 auth_config:
  provider: "github"
  auth_method: "token"
@@ -165,7 +165,7 @@ Condition: Script involves github.com API call, cross-skill network access, or i
  - Prohibit: Same script mixes local management and remote upload, causing unclear responsibility.
  - Must: Local management (generate files, validate format, directory structure) by `github-skill-organizer`; remote upload (GitHub API calls) by `github-restful-api-connector`.
 - [ ] **Dynamic import path**: If script needs import connector, using dynamic path detection not hardcoded?
- - Prohibit: Hardcoded `sys.path.insert(0, "/home/user/skills/...")`.
+ - Prohibit: Hardcoded `sys.path.insert(0, "~/.workbuddy/skills/...")`.
  - Must: Use relative path detection, try multiple candidate locations (`Path(__file__).parent.parent.parent / "github-restful-api-connector" / "scripts"`, `Path.home() / ".workbuddy" / "skills" / ...`).
 - [ ] **Error handling consistency**: Does GitHub API error handling match connector behavior?
  - Prohibit: Self-writing 401/403/404/422 logic, inconsistent with connector.
@@ -203,8 +203,11 @@ Historical error records for LLM reference, user traceability.
 | 24 | 2026-05-24 | LOU.YOU | USAGE.md, README.md, .env.example.md non-.py files initially lacked frontmatter ID, violating ID system. Later supplemented统一 frontmatter | Resolved |
 | 25 | 2026-05-24 | LOU.YOU | Version inconsistency in same skill bundle: README.md v1.2.0, SKILL.md v1.1.1, sync.config.json v1.0.3, scripts v1.0.0, causing Agent confusion. Later batch unified to v1.2.0 | Resolved |
 | 26 | 2026-05-24 | LOU.YOU | file_scouter.py scanning Downloads did not filter .opdownload / .crdownload / .part incomplete downloads, risk processing temp files. Later added suffix filtering | Resolved |
+| 27 | 2026-06-01 | KA.KE | kimi daemon restart: `--stop` did not kill old PID 44653. New PID 54161 started but old process survived and continued running pre-fix code. Fix: `pkill -f tracker_daemon; rm daemon.pid; --start`. Added to KA.KE checklist. | Resolved |
+| 28 | 2026-06-01 | KA.KE | kimi_download_manager.py run_lister() hardcoded `--visible` in subprocess cmd, overriding config `headless: true`. All daemon cycles opened browser windows. Fix: remove hardcoded flag, let lister use default headless=True. | Resolved |
+| 29 | 2026-06-01 | LOU.YOU | kimi_downloader.py: SimpleLogger fallback removed but `CORE_AVAILABLE=False` path still referenced `SimplePathUtils` and `self.logger.warn()`. Caused AttributeError crash when not in scripts dir. Fix: changed to `sys.exit(1)` with clear PYTHONPATH error message. | Resolved |
+| 30 | 2026-06-01 | KA.KE | kimi_downloader.py `page.on("response")` global handler for HTTP header capture — 2/3 files missed headers. Root cause: handler attached once for entire batch, events interleaved between files. Fix: per-file handler in `_download_file()` with `finally: page.remove_listener()`. | Resolved |
 
 ---
-
-*Last updated: 2026-05-24*
+*Last updated: 2026-06-01*
 *This file is LLM execution instruction set, human-readable explanation see README.md*
