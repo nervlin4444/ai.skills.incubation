@@ -152,7 +152,8 @@ class ConversationLister:
             browser = await p.chromium.launch_persistent_context(
                 user_data_dir=str(self.profile_dir),
                 headless=self.headless,
-                args=["--disable-blink-features=AutomationControlled"],
+                args=["--disable-blink-features=AutomationControlled"]
+                     + (["--headless=new"] if self.headless else []),
             )
 
             page = browser.pages[0] if browser.pages else await browser.new_page()
