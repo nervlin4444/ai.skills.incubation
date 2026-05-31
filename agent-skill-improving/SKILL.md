@@ -2,7 +2,7 @@
 title: "Agent Skill Improving - LLM Execution Directive"
 name: agent-skill-improving
 description: "Guardian Pattern v1.3.2: Framework Guard -> Self-Diagnosis -> Issue Classifier. Mandatory 3-step workflow (generate -> write -> validate). v1.3.2 adds pre-execution guide index (SCRIPT_CORRECTIONS.md / SKILL_CORRECTIONS.md) and LOCK-017."
-version: "1.3.2"
+version: "1.4.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
 updated_at: "2026-05-24T12:30:00+08:00"
