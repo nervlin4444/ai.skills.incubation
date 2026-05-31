@@ -132,7 +132,7 @@ class SkillOrganizerDaemon:
                 else:
                     self.logger.error(f"ERROR: {r.get('reason', 'unknown')}")
 
-            # Phase 2: Classify and upload approved changes
+            # Phase 2: Classify and report changes (upload DISABLED — requires manual approval)
             skill_groups = {}
             for r in installed:
                 if r["status"] == "installed":
@@ -147,8 +147,8 @@ class SkillOrganizerDaemon:
                 if classification["approval_required"]:
                     self.logger.info(f"PENDING {skill_name} requires owner approval")
                 else:
-                    result = self.uploader.upload_skill(skill_name, files, classification)
-                    self.logger.info(f"UPLOAD {skill_name}: {result['status']}")
+                    # Upload DISABLED — must be done manually via github-skill-organizer flow
+                    self.logger.info(f"SKIP {skill_name}: auto-upload disabled (requires manual approval)")
         else:
             self.logger.debug("No new files in download folder")
 
