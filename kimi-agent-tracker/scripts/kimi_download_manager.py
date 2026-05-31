@@ -224,7 +224,7 @@ def run_lister(auto_discover: bool = True, target_url: str = "") -> tuple:
     lister_script = _SCRIPTS_DIR / "kimi_conversation_lister.py"
     if not lister_script.exists():
         return [], "Lister not found: " + str(lister_script)
-    cmd = [sys.executable, str(lister_script), "--visible", "--limit", "5"]
+    cmd = [sys.executable, str(lister_script), "--limit", "5"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
@@ -442,7 +442,7 @@ def run_cycle(log: CoreLogger, poll_interval_sec: int = 300) -> dict:
         step(log, "S006-R", "Login successful. Session restored.")
 
     visible = config.get("headless", True) is False
-    if config.get("debug_mode", False):
+    if config.get("debug_mode", False) and not config.get("headless", True):
         visible = True
     step(log, "S007", "Browser visible=" + str(visible))
     metric(log, "browser_visible", str(visible))
