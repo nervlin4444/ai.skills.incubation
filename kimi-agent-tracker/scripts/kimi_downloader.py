@@ -560,7 +560,8 @@ class KimiDownloader:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=str(self.profile_dir),
                 headless=self.headless,
-                args=["--disable-blink-features=AutomationControlled"],
+                args=["--disable-blink-features=AutomationControlled"]
+                     + (["--headless=new"] if self.headless else []),
             )
             self._trace("downloader.browser.open", headless=self.headless)
             page = context.pages[0] if context.pages else await context.new_page()
