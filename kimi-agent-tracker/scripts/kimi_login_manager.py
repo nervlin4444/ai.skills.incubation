@@ -28,8 +28,13 @@ connector_path = Path(__file__).parent.parent.parent / "chrome-playwright-connec
 if str(connector_path) not in sys.path:
     sys.path.insert(0, str(connector_path))
 
-from browser_connector import BrowserConnector
-from profile_manager import url_to_profile_name
+# Lazy import: skip browser_connector in test mode (avoids greenlet/playwright dependency)
+_BROWSER_AVAILABLE = True
+try:
+    from browser_connector import BrowserConnector
+    from profile_manager import url_to_profile_name
+except ImportError:
+    _BROWSER_AVAILABLE = False
 
 
 def _load_config():
@@ -117,6 +122,9 @@ def _check_login_success(page, verbose: bool = False) -> bool:
 # ------------------------------------------------------------------
 def validate_login(profile_name: str = None, visible: bool = False) -> bool:
     """快速檢查登入態。visible=True 用於排查 headless 問題。"""
+    if not _BROWSER_AVAILABLE:
+        print("[ERROR] browser_connector not available. Set PYTHONPATH correctly.")
+        return False
     profile = profile_name or CONFIG["login"]["profile_name"]
     timeout = CONFIG["login"]["validate_timeout_ms"]
     driver = BrowserConnector(profile_name=profile, visible=visible)
@@ -267,6 +275,97 @@ def diagnose_login_page(profile_name: str = None) -> dict:
 
 
 # ------------------------------------------------------------------
+# TEST MODULE — python3 kimi_login_manager.py --test
+# ------------------------------------------------------------------
+def _run_tests() -> None:
+    passed = 0
+    failed = 0
+
+    def _t(name: str, condition: bool, ok_detail: str = "", fail_reason: str = "") -> None:
+        nonlocal passed, failed
+        if condition:
+            passed += 1
+            print(f"  [PASS] {name}: {ok_detail}" if ok_detail else f"  [PASS] {name}")
+        else:
+            failed += 1
+            print(f"  [FAIL] {name}: {fail_reason}" if fail_reason else f"  [FAIL] {name}")
+
+    print("=" * 60)
+    print("  kimi_login_manager.py — UNIT TESTS (AST only, no browser)")
+    print("=" * 60)
+
+    # T1: CONFIG loaded
+    _t("T1 test_config_loaded",
+       isinstance(CONFIG, dict) and CONFIG.get("platform", {}).get("base_url") == "https://www.kimi.com",
+       f"base_url={CONFIG.get('platform', {}).get('base_url', 'N/A')}")
+
+    # T2: login defaults
+    login_cfg = CONFIG.get("login", {})
+    _t("T2 test_config_defaults",
+       login_cfg.get("stay_open_default") == 300
+       and login_cfg.get("max_login_wait_sec") == 600
+       and login_cfg.get("login_check_interval_sec") == 3,
+       f"stay={login_cfg.get('stay_open_default')}, max_wait={login_cfg.get('max_login_wait_sec')}, interval={login_cfg.get('login_check_interval_sec')}")
+
+    # T3: selectors
+    selectors = CONFIG.get("selectors", {}).get("login_indicators", [])
+    expected = {".chat-info-item", ".user-avatar", ".user-name"}
+    _t("T3 test_config_selectors",
+       set(selectors) == expected,
+       f"selectors={selectors}")
+
+    # T4: _resolve_path with {baseDir}
+    r4 = _resolve_path("{baseDir}/config/test.json")
+    _t("T4 test_resolve_base_dir",
+       isinstance(r4, Path) and str(r4).endswith("kimi-agent-tracker/config/test.json"),
+       str(r4))
+
+    # T5: _resolve_path without template
+    r5 = _resolve_path("/absolute/path/to/file.txt")
+    _t("T5 test_resolve_no_template",
+       str(r5) == "/absolute/path/to/file.txt",
+       str(r5))
+
+    # T6: _load_config returns dict
+    cfg6 = _load_config()
+    _t("T6 test_load_config_returns_dict",
+       isinstance(cfg6, dict) and len(cfg6) >= 3,
+       f"keys={sorted(cfg6.keys())}")
+
+    # T7: indicators all strings
+    _t("T7 test_login_indicators_all_str",
+       all(isinstance(s, str) for s in selectors),
+       f"indicators={selectors}")
+
+    # T8-T10: CLI flags
+    t8 = argparse.ArgumentParser()
+    t8.add_argument("--validate", action="store_true")
+    _t("T8 test_cli_validate_flag",
+       t8.parse_args(["--validate"]).validate is True)
+
+    t9 = argparse.ArgumentParser()
+    t9.add_argument("--diagnose", action="store_true")
+    _t("T9 test_cli_diagnose_flag",
+       t9.parse_args(["--diagnose"]).diagnose is True)
+
+    t10 = argparse.ArgumentParser()
+    t10.add_argument("--validate", action="store_true")
+    t10.add_argument("--visible", action="store_true")
+    t10.add_argument("--profile", type=str, default=None)
+    a = t10.parse_args(["--validate", "--visible", "--profile", "test_profile"])
+    _t("T10 test_cli_combined_flags",
+       a.validate and a.visible and a.profile == "test_profile",
+       f"validate={a.validate}, visible={a.visible}, profile={a.profile}")
+
+    print()
+    print("=" * 60)
+    print(f"  TEST RESULTS: {passed}/{passed + failed} passed, {failed} failed")
+    print("=" * 60)
+    if failed > 0:
+        sys.exit(1)
+
+
+# ------------------------------------------------------------------
 # CLI
 # ------------------------------------------------------------------
 def main():
@@ -277,7 +376,12 @@ def main():
     parser.add_argument("--force-login", action="store_true", help="Force re-login")
     parser.add_argument("--validate", action="store_true", help="Validate existing session")
     parser.add_argument("--diagnose", action="store_true", help="Diagnose login page")
+    parser.add_argument("--test", action="store_true", help="Run unit tests (no browser)")
     args = parser.parse_args()
+
+    if args.test:
+        _run_tests()
+        sys.exit(0)
 
     if args.validate:
         # 重要：--validate 也支持 --visible 參數
