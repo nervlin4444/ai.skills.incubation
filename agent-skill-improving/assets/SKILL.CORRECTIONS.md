@@ -2,11 +2,12 @@
 title: "Skill Error Correction Checklist"
 name: "agent-skill-improving"
 description: "技能錯誤修正指令集。當技能載入失敗、工作流偏離、版本號錯誤時，LLM必須逐條執行本檢查清單。融入SOUL v5.0經驗：SOUL先注入、bootstrap不在對話開始時加載、技能改進是操作手冊。"
-version: "2.5.0"
+version: "v2.6.0"
 github_repository: "nervlin4444/ai.skills.incubation"
 target_branch: "main"
-updated_at: "2026-05-23T10:18:00+08:00"
-fixes: []
+updated_at: "2026-06-01T02:30:00+08:00"
+fixes: [27]
+description: "技能錯誤修正指令集。v2.6.0 新增「疊。代。」清單：100+ 行程式碼強制採用需求→分析→pseudo code→確認→子函數規格→core_*→pytest→USAGE.md 逐步開發，禁止 try-and-error。"
 
 auth_config:
   provider: "github"
@@ -27,6 +28,7 @@ file_mapping:
 |------|---------|---------|
 | 斷。鏈。 | use_skill報錯 / 技能找不到 / 載入順序錯亂 / 記憶未寫入 / SOUL未注入 | 執行「斷鏈檢查清單」 |
 | 偏。軌。 | 工作流階段錯亂 / 跳過步驟 / 未經確認覆蓋腳本 / 同時執行多階段 / bootstrap在對話開始時加載 | 執行「偏軌檢查清單」 |
+| 疊。代。 | 代碼超過100行 / 新技能開發 / 大範圍重構 / 多個函數同時修改 | 執行「疊代檢查清單」 |
 | 絆。腳。 | 版本號格式錯誤 / 創建臨時腳本 / frontmatter用 `>` 折疊 / 未提供可下載格式 / 名稱特化 / 擅自改進技能 | 執行「絆腳檢查清單」 |
 
 ## 斷。鏈。檢查清單
@@ -66,6 +68,83 @@ file_mapping:
 - [ ] **技能改進定位**：發現技能缺陷時，是否擅自改進？
   - 禁止：agent-skill-improving是操作手冊，不是執行指令。
   - 必須：發現缺陷 → 建議主人 → 等待確認 → 按手冊執行。
+
+## 疊。代。檢查清單（100+ 行程式碼強制執行）
+
+執行條件：代碼超過 100 行、涉及 3 個以上函數的新技能開發、大規模重構、或多個 .py 檔案同時修改。
+
+**核心原則**：禁止 try-and-error。每個階段的輸出必須與當初需求一致。先證明、再寫碼。
+
+### Phase 1: 需求與分析（禁止寫碼）
+
+- [ ] **需求確認**：是否已將用戶需求整理為結構化描述？
+  - 禁止：直接開始寫代碼。
+  - 必須：輸出需求分析報告，包含：目標、輸入/輸出、邊界條件、與現有代碼的關係。
+  - 檢查項：確認用戶已審閱需求分析。
+
+- [ ] **現有代碼審計**：是否已讀取並理解所有相關現有代碼？
+  - 禁止：憑記憶或 SKILL.md 摘要寫新代碼（SKILL.md 可能過時）。
+  - 必須：Glob 整個 scripts/ 目錄，逐個讀取核心 .py 文件。
+  - 禁止：跳過任何看起來相關的文件。
+  - 案例：kimi_download_manager.py 在 SKILL.md 中未列出，但實際是 tracker_daemon.py 的唯一調用對象。不讀取導致架構理解錯誤。
+
+- [ ] **廢棄代碼識別**：是否識別並標記了廢棄/未接入的函數？
+  - 必須：對每個 def 函數檢查調用次數。調用次數 = 1（僅定義）= 廢棄或未接入。
+  - 必須：上報主人哪些函數未接入、哪些是舊代碼殘留。
+  - 案例：state_manager.py 全部函數無人 import（功能已合併），head_pre_check 定義但從未被 run_cycle 調用。
+
+### Phase 2: Pseudo Code（確認後才繼續）
+
+- [ ] **架構 Pseudo Code**：是否輸出了完整的架構偽代碼？
+  - 必須：包含所有 Step 的順序、每個 Phase 的輸入/輸出、狀態文件結構。
+  - 必須：標明哪些是現有實現、哪些是新增。
+  - 必須：列出所有開放問題（Q1, Q2...）等待用戶確認。
+  - 禁止：用戶確認前進入 Phase 3。
+  - 案例：kimi_tracker_pseudo_v3.md → 16 步驟 + 5 個 Q&A → 用戶逐一確認後才開始改碼。
+
+- [ ] **子函數規格**：每個新增/修改的函數是否提供了完整規格？
+  - 必須：函數名稱、參數列表（名稱+類型+說明）、返回值（類型+說明）、調用位置。
+  - 必須：每個參數的輸入來源和輸出去向。
+  - 案例：`tracer_to_logger(tracer, log)` → tracer: Tracer 物件 / log: CoreLogger 物件 → 無返回值，寫入 logger.info() + logger.metric()。
+
+### Phase 3: 實作（由底向上，逐函數驗證）
+
+- [ ] **core_* 優先**：是否從 core_*.py（公用模塊）開始？
+  - 必須：先完成 core_path_utils, core_logger, core_tracer 等基礎模塊。
+  - 必須：每個 core_*.py 完成後立即加 `--test` 模塊。
+  - 檢查項：pytest 10/10 passed 後才進入下一層。
+
+- [ ] **逐函數實現**：每個函數是否單獨完成 → 測試 → 確認後才進行下一個？
+  - 禁止：一口氣寫完所有函數再測試。
+  - 必須：函數 A → AST 測試 → 函數 B → AST 測試 → ... → 整合測試。
+  - 案例：kimi_conversation_lister.py 先加 tracer 參數 + _trace() + report_to_manager() → 測試 → 再處理其他函數。
+
+- [ ] **AST + Tracer 測試**：每個 .py 是否都有 `--test` 入口？
+  - 必須：測試覆蓋：__init__、參數解析、core 模塊導入、tracer 事件、數據往返（roundtrip）。
+  - 若涉及瀏覽器：T12 必須測試 `sync_playwright` 可導入。
+  - 若涉及 tracer：必須測試 tracer 注入、事件記錄、異常安全。
+  - 檢查項：`python3 xxx.py --test` → 完整原始輸出貼入 USAGE.md。
+
+- [ ] **USAGE.md 更新**：每完成一個 .py，是否更新 USAGE.md？
+  - 必須：更新 F-00X 速查表、`pytest` 完整原始輸出、版本號。
+  - 禁止：批量完成多個 .py 後再一次性更新 USAGE.md。
+
+### Phase 4: 真實環境驗證（禁止假設）
+
+- [ ] **真實數據測試**：是否用真實數據（非 mock）執行了完整流程？
+  - 禁止：AST 測試通過就宣布完成。
+  - 必須：用真實 Kimi 對話 / GitHub API 執行至少一次完整流程。
+  - 必須：檢查輸出內容的每個字節（大小、SHA256、HTTP headers）。
+  - 案例：1186 chars 的檔案表面「下載成功」，但實際只有 frontmatter。Content-Length 對比揭露了截斷問題。
+
+- [ ] **輸出一致性驗證**：輸出是否與需求一致？
+  - 必須：對比「用戶需求」vs「實際輸出」。不一致 = 未完成。
+  - 必須：HTTP header Content-Length == 實際檔案大小，拒絕任何未驗證的數據。
+
+- [ ] **根因分析**：遇到問題時，是否用探針（probe）而非猜測？
+  - 禁止：try-and-error 修改代碼。
+  - 必須：先停頓 → 使用 tracer/probe 捕獲當時的 DOM/HTTP 狀態 → 分析根因 → 報告用户 → 確認後才修復。
+  - 案例：發現所有文件 1186 chars → tracer 探針揭示 `querySelector('pre code')` 在全頁範圍匹配了 chat history 中的代碼塊而非 panel 內容。
 
 ## 絆。腳。檢查清單
 
@@ -145,11 +224,11 @@ file_mapping:
 
 ## 版本鎖定
 
-LOCK v2.5.0 PERMANENT — 檢查清單內容禁止修改。
+LOCK v2.6.0 PERMANENT — 檢查清單內容禁止修改。
 
 如需調整，必須經用戶直接授權。LLM無權自行修改。
 
 ---
 
-*最後更新：2026-05-23*
+*最後更新：2026-06-01*
 *本文件為LLM執行指令集，人類可讀解釋請參考README.md*
