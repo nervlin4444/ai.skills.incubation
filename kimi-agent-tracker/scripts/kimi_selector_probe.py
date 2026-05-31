@@ -296,7 +296,7 @@ async def deep_diagnose(page) -> Dict[str, Any]:
                     }
                     if (cls && cls.length > 0) {
                         const keywords = ['preview', 'monaco', 'download', 'copy', 'editor', 'code', 'file', 'panel', 'drawer', 'content', 'view', 'language', 'artifact'];
-                        const classes = cls.split(/\s+/);
+                        const classes = cls.split(/\\s+/);
                         classes.forEach(c => {
                             if (c.length > 3 && keywords.some(k => c.toLowerCase().includes(k))) {
                                 result.all_classes.add(c);
@@ -318,6 +318,7 @@ async def deep_diagnose(page) -> Dict[str, Any]:
         log(f"[WARN] Main frame diagnosis failed: {e}")
 
     return diagnosis
+
 
 async def test_strategy_monaco_api(page, diagnosis: Dict[str, Any]) -> Dict[str, Any]:
     result = {"strategy": "A_monaco_api", "passed": False, "length": 0, "duration_ms": 0, "error": None}
@@ -432,6 +433,7 @@ async def test_strategy_preview_content(page, diagnosis: Dict[str, Any]) -> Dict
     result["error"] = "no content found in right-side elements"
     result["duration_ms"] = now_ms() - start
     return result
+
 
 async def test_strategy_download_button(page, diagnosis: Dict[str, Any], filename: str) -> Dict[str, Any]:
     result = {
@@ -584,6 +586,7 @@ async def test_strategy_download_button(page, diagnosis: Dict[str, Any], filenam
     result["duration_ms"] = now_ms() - start
     return result
 
+
 async def test_strategy_js_content_extract(page) -> Dict[str, Any]:
     result = {
         "strategy": "D_js_content_extract",
@@ -721,6 +724,7 @@ async def test_strategy_content_save(page, filename: str, ext: str, d_result: Di
     
     return result
 
+
 async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: int) -> Dict[str, Any]:
     filename = file_info.get("filename", "unknown")
     ext = file_info.get("ext", "")
@@ -816,3 +820,232 @@ async def test_file(page, file_info: Dict[str, Any], visible: bool, file_index: 
         },
         "strategies": strategies,
     }
+
+
+async def scan_files(page, max_per_type: int = 2) -> List[Dict[str, Any]]:
+    log("[SCAN] Scanning for file cards...")
+
+    all_cards = []
+    used_selector = None
+
+    for sel in FILE_CARD_SELECTORS:
+        cards = await page.query_selector_all(sel)
+        if cards:
+            log(f"[SCAN] Selector '{sel}' matched {len(cards)} elements")
+            all_cards = cards
+            used_selector = sel
+            break
+
+    if not all_cards:
+        log("[SCAN] No file cards found")
+        return []
+
+    log(f"[SCAN] Using selector: {used_selector}")
+
+    all_files = []
+    for idx, card in enumerate(all_cards):
+        try:
+            full_text = await card.text_content()
+            if not full_text:
+                continue
+
+            full_text = full_text.strip()
+            match = FILE_PATTERN.search(full_text)
+            if match:
+                filename = match.group(1)
+                ext = match.group(2).lower()
+                selector = f'{used_selector} >> nth={idx}'
+                
+                download_btn_selector = None
+                try:
+                    has_icon = await card.evaluate("""
+                        (card) => {
+                            const icons = card.querySelectorAll('.icon-button, [class*=\"download\"], svg');
+                            return icons.length > 0 ? icons[0].className || 'svg' : null;
+                        }
+                    """)
+                    if has_icon:
+                        download_btn_selector = f'{used_selector} >> nth={idx} .icon-button'
+                except Exception:
+                    pass
+
+                all_files.append({
+                    "filename": filename,
+                    "ext": ext,
+                    "selector": selector,
+                    "download_btn_selector": download_btn_selector,
+                    "index": idx,
+                    "card_text": full_text[:100],
+                })
+        except Exception as e:
+            log(f"[WARN] Error processing card {idx}: {e}")
+
+    log(f"[SCAN] Extracted {len(all_files)} valid files")
+
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for f in all_files:
+        ext = f["ext"]
+        if ext not in grouped:
+            grouped[ext] = []
+        grouped[ext].append(f)
+
+    selected = []
+    for ext in ("py", "md", "json", "zip"):
+        if ext in grouped:
+            count = min(max_per_type, len(grouped[ext]))
+            selected.extend(grouped[ext][:count])
+            log(f"[SELECT] {ext}: {count}/{len(grouped[ext])}")
+
+    for ext, items in grouped.items():
+        if ext not in ("py", "md", "json", "zip"):
+            count = min(max_per_type, len(items))
+            selected.extend(items[:count])
+
+    return selected
+
+
+async def run_probe(url: str, visible: bool = False, max_per_type: int = 2) -> Dict[str, Any]:
+    report = {
+        "probe_version": "1.1.1",
+        "url": url,
+        "mode": "visible" if visible else "headless",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "files_tested": [],
+        "summary": {},
+        "error": None,
+    }
+
+    async with async_playwright() as p:
+        log("[MAIN] Browser launching...")
+        try:
+            if PROFILE_DIR.exists():
+                log(f"[MAIN] Using persistent profile: {PROFILE_DIR}")
+                context = await p.chromium.launch_persistent_context(
+                    user_data_dir=str(PROFILE_DIR),
+                    headless=not visible,
+                    args=["--disable-blink-features=AutomationControlled"] if visible else [],
+                    viewport={"width": 1280, "height": 900} if visible else None,
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+            else:
+                log("[MAIN] No persistent profile, launching fresh browser")
+                browser = await p.chromium.launch(
+                    headless=not visible,
+                    args=["--disable-blink-features=AutomationControlled"] if visible else [],
+                )
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 900} if visible else None,
+                )
+                page = await context.new_page()
+        except Exception as e:
+            log(f"[FATAL] Browser launch failed: {e}")
+            report["error"] = f"Browser launch failed: {e}"
+            return report
+
+        log("[MAIN] Browser launched")
+
+        try:
+            log(f"[MAIN] Navigating to {url}")
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            log("[MAIN] DOM loaded, waiting for dynamic content...")
+            await asyncio.sleep(5.0)
+        except Exception as e:
+            log(f"[FATAL] Navigation failed: {e}")
+            report["error"] = f"Navigation failed: {e}"
+            return report
+
+        files = await scan_files(page, max_per_type=max_per_type)
+        if not files:
+            log("[WARN] No files found")
+            report["error"] = "No files found"
+            return report
+
+        for i, f in enumerate(files):
+            file_result = await test_file(page, f, visible=visible, file_index=i)
+            report["files_tested"].append(file_result)
+
+        total_strategies = 0
+        passed_strategies = 0
+        for f in report["files_tested"]:
+            for s in f.get("strategies", []):
+                total_strategies += 1
+                if s.get("passed"):
+                    passed_strategies += 1
+
+        report["summary"] = {
+            "files_tested": len(report["files_tested"]),
+            "total_strategies_attempted": total_strategies,
+            "strategies_passed": passed_strategies,
+            "success_rate": round(passed_strategies / total_strategies, 2) if total_strategies > 0 else 0,
+        }
+
+        await context.close()
+        return report
+
+
+def save_and_print_report(report: Dict[str, Any]) -> None:
+    try:
+        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"\n[REPORT] Saved to: {REPORT_PATH}")
+    except Exception as e:
+        print(f"\n[REPORT] Failed to save: {e}")
+
+    print("\n" + "=" * 60)
+    print("FULL JSON REPORT")
+    print("=" * 60)
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    print("=" * 60)
+
+    print("\n" + "=" * 60)
+    print("PROBE SUMMARY")
+    print("=" * 60)
+    print(f"Files tested: {report['summary'].get('files_tested', 0)}")
+    print(f"Strategies passed: {report['summary'].get('strategies_passed', 0)}/{report['summary'].get('total_strategies_attempted', 0)}")
+    print(f"Success rate: {report['summary'].get('success_rate', 0)}")
+    if report.get("error"):
+        print(f"Error: {report['error']}")
+    print(f"Screenshots: {SCREENSHOT_DIR}")
+    print(f"Download test dir: {DOWNLOAD_TEST_DIR}")
+    print("=" * 60)
+
+    for f in report.get("files_tested", []):
+        diag = f.get("diagnosis", {})
+        print(f"\nFile: {f['filename']} (clicked: {f.get('click_method_used', 'none')})")
+        print(f"  DOM: iframes={diag.get('iframe_count',0)} shadow={diag.get('shadow_host_count',0)} right={diag.get('right_side_count',0)} top-right={diag.get('top_right_count',0)} dl-btns={diag.get('download_button_count',0)}")
+        print(f"  Monaco: main={diag.get('monaco_main',False)} iframe={diag.get('monaco_iframe',False)}")
+        print(f"  Right-side class: {diag.get('right_side_first_class','')[:60]}")
+        print(f"  Download btn class: {diag.get('download_button_first_class','')[:60]}")
+        print(f"  Interesting classes: {', '.join(diag.get('interesting_classes', [])[:5])}")
+        for s in f.get("strategies", []):
+            status = "PASS" if s.get("passed") else "FAIL"
+            extra = ""
+            if s.get("download_triggered"):
+                extra = f" [DOWNLOADED -> {s.get('download_path', 'unknown')}]"
+            if s.get("saved_path"):
+                extra = f" [SAVED -> {s.get('saved_path', 'unknown')}]"
+            print(f"  [{status}] {s['strategy']}: len={s.get('length', 0)} duration={s.get('duration_ms', 0)}ms{extra}")
+            if s.get("error"):
+                print(f"       error: {s['error'][:80]}")
+            if s.get("candidates_tried") is not None:
+                print(f"       candidates tried: {s['candidates_tried']}")
+            if s.get("method"):
+                print(f"       method: {s['method']}, class: {s.get('element_class', 'unknown')}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Kimi Selector Probe v1.1.1")
+    parser.add_argument("--url", required=True, help="Kimi chat URL to probe")
+    parser.add_argument("--visible", action="store_true", help="Run in visible browser mode")
+    parser.add_argument("--max-per-type", type=int, default=2, help="Max files to test per extension type")
+    args = parser.parse_args()
+
+    log(f"[MAIN] Starting probe for {args.url}")
+    log(f"[MAIN] Mode: {'visible' if args.visible else 'headless'}, max_per_type: {args.max_per_type}")
+
+    report = asyncio.run(run_probe(args.url, visible=args.visible, max_per_type=args.max_per_type))
+    save_and_print_report(report)
+
+
+if __name__ == "__main__":
+    main()
