@@ -1,0 +1,42 @@
+[
+  {
+    "index": 0,
+    "title": "系统授权需求",
+    "url": "https://www.kimi.com/chat/19e6e75e-5dd2-8fad-8000-0955a90fb0a0?chat_enter_method=history",
+    "id": "19e6e75e-5dd2-8fad-8000-0955a90fb0a0",
+    "date_text": null,
+    "extracted_at": "2026-06-01T01:03:42.022522"
+  },
+  {
+    "index": 1,
+    "title": "开发需求待补充",
+    "url": "https://www.kimi.com/chat/19e6cb57-5ef2-8b21-8000-09552959e3bb?chat_enter_method=history",
+    "id": "19e6cb57-5ef2-8b21-8000-09552959e3bb",
+    "date_text": null,
+    "extracted_at": "2026-06-01T01:03:42.022542"
+  },
+  {
+    "index": 2,
+    "title": "LMS-POS 接口影响",
+    "url": "https://www.kimi.com/chat/19e72613-f1d2-8698-8000-09551c65f250?chat_enter_method=history",
+    "id": "19e72613-f1d2-8698-8000-09551c65f250",
+    "date_text": null,
+    "extracted_at": "2026-06-01T01:03:42.022548"
+  },
+  {
+    "index": 3,
+    "title": "自動下載.py需求",
+    "url": "https://www.kimi.com/chat/19e6a936-8202-87d6-8000-0955b00a377b?chat_enter_method=history",
+    "id": "19e6a936-8202-87d6-8000-0955b00a377b",
+    "date_text": null,
+    "extracted_at": "2026-06-01T01:03:42.022551"
+  },
+  {
+    "index": 4,
+    "title": "GitHub脚本方案",
+    "url": "https://www.kimi.com/chat/19e6a8ae-9822-86c5-8000-09551a918859?chat_enter_method=history",
+    "id": "19e6a8ae-9822-86c5-8000-09551a918859",
+    "date_text": null,
+    "extracted_at": "2026-06-01T01:03:42.022554"
+  }
+]
