@@ -77,7 +77,120 @@ def get_download_state_path(skill_dir: Path = None) -> Path:
     return get_data_dir(skill_dir) / "download_state.json"
 
 
+# =============================================================================
+# TEST MODULE
+# =============================================================================
+
+def _run_tests():
+    passed = 0
+    failed = 0
+
+    def _t(name, condition, ok_detail="", fail_reason=""):
+        nonlocal passed, failed
+        if condition:
+            passed += 1
+            print(f"  [PASS] {name}: {ok_detail}" if ok_detail else f"  [PASS] {name}")
+        else:
+            failed += 1
+            print(f"  [FAIL] {name}: {fail_reason}" if fail_reason else f"  [FAIL] {name}")
+
+    print("=" * 60)
+    print("  core_path_utils.py — UNIT TESTS (AST only)")
+    print("=" * 60)
+
+    # T1: get_skill_dir
+    sd = get_skill_dir()
+    _t("T1 test_get_skill_dir",
+       isinstance(sd, Path) and sd.is_dir() and sd.name == "kimi-agent-tracker",
+       str(sd))
+
+    # T2: resolve_path with {baseDir}
+    r2 = resolve_path("{baseDir}/config")
+    _t("T2 test_resolve_base_dir",
+       isinstance(r2, Path) and str(r2).endswith("kimi-agent-tracker/config"),
+       str(r2))
+
+    # T3: resolve_path with ~/
+    r3 = resolve_path("~/test_xyz_path")
+    home = str(Path.home())
+    _t("T3 test_resolve_home",
+       str(r3).startswith(home) and "test_xyz_path" in str(r3),
+       f"resolved={r3}, home={home}")
+
+    # T4: ensure_dir creates directory
+    import tempfile
+    import shutil
+    tmpdir = Path(tempfile.gettempdir()) / f"kimi_test_ensure_{int(__import__('time').time())}"
+    try:
+        ensure_dir(str(tmpdir))
+        _t("T4 test_ensure_dir_creates",
+           tmpdir.exists() and tmpdir.is_dir(),
+           str(tmpdir))
+    finally:
+        if tmpdir.exists():
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # T5: get_config_dir
+    cd = get_config_dir()
+    _t("T5 test_get_config_dir",
+       cd.name == "config" and cd.is_dir(),
+       str(cd))
+
+    # T6: get_data_dir
+    dd = get_data_dir()
+    _t("T6 test_get_data_dir",
+       dd.name == "data" and dd.is_dir(),
+       str(dd))
+
+    # T7: get_logs_dir
+    ld = get_logs_dir()
+    _t("T7 test_get_logs_dir",
+       ld.name == "logs" and ld.is_dir(),
+       str(ld))
+
+    # T8: get_download_dir
+    dld = get_download_dir()
+    _t("T8 test_get_download_dir",
+       dld.name == "Downloads" and dld.is_dir(),
+       str(dld))
+
+    # T9: get_conversations_json_path
+    cjp = get_conversations_json_path()
+    _t("T9 test_get_conversations_json",
+       cjp.name == "conversations.json" and cjp.parent.name == "config",
+       str(cjp))
+
+    # T10: get_tracker_config_path + get_download_state_path
+    tcp = get_tracker_config_path()
+    dsp = get_download_state_path()
+    t10_ok = (
+        tcp.name == "tracker_config.json"
+        and tcp.parent.name == "config"
+        and dsp.name == "download_state.json"
+        and dsp.parent.name == "data"
+    )
+    _t("T10 test_tracker_config_and_state",
+       t10_ok,
+       f"config={tcp.name}, state={dsp.name}")
+
+    print()
+    print("=" * 60)
+    print(f"  TEST RESULTS: {passed}/{passed + failed} passed, {failed} failed")
+    print("=" * 60)
+    if failed > 0:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Core Path Utils v5.0.0")
+    parser.add_argument("--test", action="store_true", help="Run unit tests")
+    args = parser.parse_args()
+
+    if args.test:
+        _run_tests()
+        sys.exit(0)
+
     sd = get_skill_dir()
     print(f"skill_dir: {sd}")
     print(f"config_dir: {get_config_dir(sd)}")
